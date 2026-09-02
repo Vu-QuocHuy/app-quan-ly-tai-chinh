@@ -1,0 +1,5 @@
+# Paddle's GPU wheel must match the CUDA runtime selected by Kaggle.
+# Install it separately by following PaddlePaddle's current installation matrix.
+paddleocr==3.7.0
+Pillow>=10.0,<13.0
+PyYAML>=6.0,<7.0

@@ -1,0 +1,2 @@
+{"document_id":"receipt-0001","image":"receipts/receipt-0001.jpg","split":"train","source":"camera","lines":[{"id":"receipt-0001-line-001","bbox":[36,48,612,112],"text":"CỬA HÀNG MINH ANH","field":"seller"},{"id":"receipt-0001-line-002","bbox":[42,820,598,888],"text":"TỔNG CỘNG 125.000 ₫","field":"total"}]}
+

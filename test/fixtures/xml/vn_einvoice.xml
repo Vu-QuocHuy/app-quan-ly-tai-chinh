@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<HDon xmlns="urn:vn:invoice:test">
+  <DLHDon>
+    <TTChung>
+      <KHHDon>C24TAA</KHHDon>
+      <SHDon>00001234</SHDon>
+      <NLap>2026-08-20</NLap>
+      <DVTTe>VND</DVTTe>
+    </TTChung>
+    <NDHDon>
+      <NBan>
+        <Ten>CÔNG TY TNHH DEMO</Ten>
+        <MST>0312345678</MST>
+      </NBan>
+      <DSHHDVu>
+        <HHDVu>
+          <THHDVu>Dịch vụ phần mềm</THHDVu>
+          <SLuong>1</SLuong>
+          <DGia>100000</DGia>
+          <TSuat>10%</TSuat>
+          <ThTien>100000</ThTien>
+        </HHDVu>
+      </DSHHDVu>
+      <TToan>
+        <TgTCThue>100000</TgTCThue>
+        <TgTThue>10000</TgTThue>
+        <TgTTTBSo>110000</TgTTTBSo>
+      </TToan>
+    </NDHDon>
+  </DLHDon>
+</HDon>
