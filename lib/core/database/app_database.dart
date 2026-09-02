@@ -212,7 +212,16 @@ class ImportJobs extends Table {
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
-    : super(executor ?? driftDatabase(name: 'hoadon_insight'));
+    : super(
+        executor ??
+            driftDatabase(
+              name: 'hoadon_insight',
+              web: DriftWebOptions(
+                sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+                driftWorker: Uri.parse('drift_worker.js'),
+              ),
+            ),
+      );
 
   @override
   int get schemaVersion => 4;
@@ -222,7 +231,7 @@ class AppDatabase extends _$AppDatabase {
     onCreate: (migrator) async {
       await migrator.createAll();
       await batch((batch) {
-        batch.insertAll(categories, _defaultCategories);
+        batch.insertAllOnConflictUpdate(categories, _defaultCategories);
       });
     },
     onUpgrade: (migrator, from, to) async {
