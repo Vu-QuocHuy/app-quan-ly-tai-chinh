@@ -49,7 +49,6 @@ ml/receipt_ocr/data/prepared/
 /.agents/
 /.codex/
 /supabase/.temp/
-firebase-debug.log
 *-debug.log
 android/key.properties
 *.jks
@@ -58,11 +57,8 @@ android/key.properties
 *.pem
 *.p8
 *.mobileprovision
-google-services.json
-GoogleService-Info.plist
 **/service-account*.json
 secrets/
-.firebase/
 
 # Symbolication related
 app.*.symbols

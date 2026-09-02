@@ -5,7 +5,7 @@ import '../errors/app_exception.dart';
 /// Small adapter around Supabase Edge Functions.
 ///
 /// Keeping this boundary in the app makes the AI clients independent from
-/// the old backend provider and keeps the Gemini key on the server-side function.
+/// provider details and keeps the Gemini key on the server-side function.
 class SupabaseFunctionClient {
   const SupabaseFunctionClient({
     required SupabaseClient client,

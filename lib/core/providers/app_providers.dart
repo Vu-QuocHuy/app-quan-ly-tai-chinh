@@ -8,14 +8,12 @@ import '../../features/chat/domain/local_chat_assistant.dart';
 import '../../features/export/data/backup_catalog_store.dart';
 import '../../features/ingestion/application/import_coordinator.dart';
 import '../../features/ingestion/data/ai_extraction_client.dart';
-import '../../features/ingestion/data/async_extraction_client.dart';
 import '../../features/ingestion/data/drift_import_job_store.dart';
 import '../../features/ingestion/data/heuristic_text_extractor.dart';
 import '../../features/ingestion/data/ocr_service.dart';
 import '../../features/ingestion/data/pdf_text_service.dart';
 import '../../features/ingestion/data/xml_invoice_extractor.dart';
 import '../../features/ingestion/domain/import_job.dart';
-import '../../features/ingestion/domain/async_extraction_job.dart';
 import '../../features/invoices/data/drift_invoice_repository.dart';
 import '../../features/invoices/domain/invoice_filters.dart';
 import '../../features/invoices/domain/invoice_models.dart';
@@ -82,23 +80,13 @@ final localChatAssistantProvider = Provider<LocalChatAssistant>((ref) {
 final chatApiClientProvider = Provider<ChatApiClient>((ref) {
   ref.watch(authUserProvider);
   final client = ref.watch(supabaseClientProvider);
-  const baseUrl = String.fromEnvironment('API_BASE_URL');
-  return ChatApiClient(baseUrl: baseUrl, supabaseClient: client);
+  return ChatApiClient(supabaseClient: client);
 });
 
 final aiExtractionClientProvider = Provider<AiExtractionClient>((ref) {
   ref.watch(authUserProvider);
   final client = ref.watch(supabaseClientProvider);
-  const baseUrl = String.fromEnvironment('API_BASE_URL');
-  return AiExtractionClient(baseUrl: baseUrl, supabaseClient: client);
-});
-
-final asyncExtractionGatewayProvider = Provider<AsyncExtractionGateway>((ref) {
-  const baseUrl = String.fromEnvironment('API_BASE_URL');
-  if (baseUrl.trim().isEmpty) {
-    return const DisabledAsyncExtractionGateway();
-  }
-  return HttpAsyncExtractionGateway(baseUrl: baseUrl);
+  return AiExtractionClient(supabaseClient: client);
 });
 
 final importCoordinatorProvider = Provider<ImportCoordinator>((ref) {

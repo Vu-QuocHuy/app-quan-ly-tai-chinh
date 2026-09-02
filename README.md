@@ -118,4 +118,4 @@ Function `ai-api` bật `verify_jwt = true`; chỉ phiên Supabase hợp lệ m�
 
 ## Chất lượng và bảo mật
 
-CI chạy format, analyze, unit/widget tests, Android debug build và TypeScript check. Xem [security baseline](docs/SECURITY.md), [implementation plan](IMPLEMENTATION_PLAN.md) và [quyết định UI](design-system/hoadon-insight/IMPLEMENTATION.md).
+CI chạy format, analyze, unit/widget tests, Android debug build và kiểm tra Supabase Edge Function. Xem [security baseline](docs/SECURITY.md), [implementation plan](IMPLEMENTATION_PLAN.md) và [quyết định UI](design-system/hoadon-insight/IMPLEMENTATION.md).

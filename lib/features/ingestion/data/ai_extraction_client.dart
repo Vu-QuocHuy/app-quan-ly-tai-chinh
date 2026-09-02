@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
@@ -12,37 +11,20 @@ import '../domain/source_hasher.dart';
 
 class AiExtractionClient implements InvoiceExtractor {
   AiExtractionClient({
-    required String baseUrl,
     SupabaseClient? supabaseClient,
-    Future<String?> Function()? appCheckTokenProvider,
-    Dio? dio,
     Uuid? uuid,
     InvoiceValidator? validator,
-  }) : _baseUrl = baseUrl,
-       _supabaseFunctions = supabaseClient == null
+  }) : _supabaseFunctions = supabaseClient == null
            ? null
            : SupabaseFunctionClient(client: supabaseClient),
-       _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               connectTimeout: const Duration(seconds: 8),
-               receiveTimeout: const Duration(seconds: 15),
-             ),
-           ),
-       _appCheckTokenProvider = appCheckTokenProvider,
        _uuid = uuid ?? const Uuid(),
        _validator = validator ?? const InvoiceValidator();
 
-  final String _baseUrl;
   final SupabaseFunctionClient? _supabaseFunctions;
-  final Dio _dio;
-  final Future<String?> Function()? _appCheckTokenProvider;
   final Uuid _uuid;
   final InvoiceValidator _validator;
 
-  bool get isConfigured =>
-      _supabaseFunctions?.isConfigured == true || _baseUrl.trim().isNotEmpty;
+  bool get isConfigured => _supabaseFunctions?.isConfigured == true;
 
   @override
   String get adapterName => 'backend-ai-structured-output';
@@ -59,75 +41,34 @@ class AiExtractionClient implements InvoiceExtractor {
     if (!isConfigured) {
       throw const NetworkException('Backend AI chưa được cấu hình.');
     }
-    try {
-      final body = {
-        'action': 'extract',
-        'requestId': _uuid.v4(),
-        'locale': 'vi-VN',
-        'text': input.ocrText,
-      };
-      final data = _supabaseFunctions != null
-          ? await _supabaseFunctions.invoke(
-              body,
-              errorMessage:
-                  'Không thể kết nối dịch vụ trích xuất. Dữ liệu OCR vẫn được giữ để thử lại.',
-            )
-          : await _invokeLegacy('v1/extractions/ocr-text', body);
-      return _fromJson(data, input);
-    } on DioException catch (error) {
-      throw NetworkException(
-        'Không thể kết nối dịch vụ trích xuất. Dữ liệu OCR vẫn được giữ để thử lại.',
-        cause: error,
-      );
-    }
+    final body = {
+      'action': 'extract',
+      'requestId': _uuid.v4(),
+      'locale': 'vi-VN',
+      'text': input.ocrText,
+    };
+    final data = await _supabaseFunctions!.invoke(
+      body,
+      errorMessage:
+          'Không thể kết nối dịch vụ trích xuất. Dữ liệu OCR vẫn được giữ để thử lại.',
+    );
+    return _fromJson(data, input);
   }
 
   Future<String?> classifyMerchant(String merchant) async {
     if (!isConfigured || merchant.trim().isEmpty) return null;
-    try {
-      final body = {
-        'action': 'classify',
-        'requestId': _uuid.v4(),
-        'locale': 'vi-VN',
-        'merchant': merchant.trim(),
-      };
-      final data = _supabaseFunctions != null
-          ? await _supabaseFunctions.invoke(
-              body,
-              errorMessage: 'Không thể phân loại merchant từ backend.',
-            )
-          : await _invokeLegacy('v1/classifications', body);
-      final categoryId = data['categoryId'];
-      return categoryId is String && categoryId.isNotEmpty ? categoryId : null;
-    } on DioException catch (error) {
-      throw NetworkException(
-        'Không thể phân loại merchant từ backend.',
-        cause: error,
-      );
-    }
-  }
-
-  Future<Map<String, dynamic>> _invokeLegacy(
-    String path,
-    Map<String, Object?> body,
-  ) async {
-    final appCheckToken = await _appCheckTokenProvider?.call();
-    final response = await _dio.post<Map<String, dynamic>>(
-      '$_baseUrl/$path',
-      data: body,
-      options: Options(
-        headers: {
-          'Content-Type': 'application/json',
-          if (appCheckToken != null && appCheckToken.isNotEmpty)
-            'X-Firebase-AppCheck': appCheckToken,
-        },
-      ),
+    final body = {
+      'action': 'classify',
+      'requestId': _uuid.v4(),
+      'locale': 'vi-VN',
+      'merchant': merchant.trim(),
+    };
+    final data = await _supabaseFunctions!.invoke(
+      body,
+      errorMessage: 'Không thể phân loại merchant từ backend.',
     );
-    final data = response.data;
-    if (data == null) {
-      throw const ExtractionException('Backend trả về dữ liệu rỗng.');
-    }
-    return data;
+    final categoryId = data['categoryId'];
+    return categoryId is String && categoryId.isNotEmpty ? categoryId : null;
   }
 
   ExtractionResult _fromJson(Map<String, dynamic> json, ExtractionInput input) {
