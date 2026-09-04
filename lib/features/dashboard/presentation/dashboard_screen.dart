@@ -23,6 +23,7 @@ import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/month_selector.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../../shared/errors/error_presenter.dart';
+import '../../../shared/widgets/section_header.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -135,17 +136,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     onDismissAnomaly: _dismissAnomaly,
                   ),
                   const SizedBox(height: 24),
-                  Text(
-                    'Chi tiêu theo ngày',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                  const SectionHeader(title: 'Chi tiêu theo ngày'),
                   const SizedBox(height: 12),
                   _DailyChart(snapshot: snapshot, month: selectedMonth),
                   const SizedBox(height: 24),
-                  Text(
-                    'Theo danh mục',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                  const SectionHeader(title: 'Theo danh mục'),
                   const SizedBox(height: 12),
                   _CategoryBreakdown(
                     snapshot: snapshot,

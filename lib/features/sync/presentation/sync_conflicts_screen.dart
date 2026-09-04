@@ -8,6 +8,7 @@ import '../../../core/utils/money_formatter.dart';
 import '../../../shared/formatting/app_date_format.dart';
 import '../../../shared/widgets/app_empty_state.dart';
 import '../../../shared/widgets/app_error_state.dart';
+import '../../../shared/widgets/labelled_row.dart';
 
 class SyncConflictsScreen extends ConsumerWidget {
   const SyncConflictsScreen({super.key});
@@ -217,29 +218,25 @@ class _ComparisonRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 84, child: Text(label, style: textTheme.bodySmall)),
-          Expanded(
-            child: Text(
-              localValue,
-              style: textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              remoteValue,
-              style: textTheme.bodyMedium,
-              textAlign: TextAlign.end,
-            ),
-          ),
-        ],
+    // Chỉ những dòng THẬT SỰ khác nhau mới được đánh dấu. Trước đây cột local
+    // được in đậm cho MỌI dòng, nên người dùng không thấy được cái họ cần
+    // thấy: hai bản khác nhau ở đâu.
+    final isDifferent = localValue != remoteValue;
+
+    return LabelledRow(
+      label: label,
+      labelWidth: 84,
+      isDifferent: isDifferent,
+      value: Text(
+        localValue,
+        style: textTheme.bodyMedium?.copyWith(
+          fontWeight: isDifferent ? FontWeight.w700 : FontWeight.w400,
+        ),
+      ),
+      secondValue: Text(
+        remoteValue,
+        style: textTheme.bodyMedium,
+        textAlign: TextAlign.end,
       ),
     );
   }
