@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
+import '../../../shared/widgets/app_skeleton.dart';
 
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
@@ -224,10 +225,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           FilledButton.icon(
             onPressed: _busy ? null : _submit,
             icon: _busy
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                ? const ButtonSpinner()
                 : Icon(
                     _registering
                         ? Icons.person_add_alt_1_outlined
@@ -266,12 +264,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         const SizedBox(height: 24),
         FilledButton.icon(
           onPressed: _busy ? null : _syncNow,
-          icon: _busy
-              ? const SizedBox.square(
-                  dimension: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.sync),
+          icon: _busy ? const ButtonSpinner() : const Icon(Icons.sync),
           label: const Text('Đồng bộ ngay'),
         ),
         const SizedBox(height: 12),

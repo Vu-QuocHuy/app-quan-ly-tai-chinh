@@ -11,6 +11,7 @@ import '../../invoices/domain/invoice_models.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
+import '../../../shared/widgets/app_skeleton.dart';
 
 class ReviewInvoiceScreen extends ConsumerStatefulWidget {
   const ReviewInvoiceScreen({required this.invoice, super.key});
@@ -263,10 +264,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                   key: const Key('confirm-invoice-button'),
                   onPressed: _saving ? null : _confirm,
                   icon: _saving
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const ButtonSpinner()
                       : const Icon(Icons.check),
                   label: Text(_saving ? 'Đang lưu' : 'Xác nhận và lưu'),
                 ),

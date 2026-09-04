@@ -16,7 +16,7 @@ class AppCard extends StatelessWidget {
     this.onTap,
     this.color,
     this.shape,
-    this.clipBehavior = Clip.antiAlias,
+    this.clipBehavior,
     this.semanticLabel,
     super.key,
   });
@@ -26,7 +26,11 @@ class AppCard extends StatelessWidget {
   final VoidCallback? onTap;
   final Color? color;
   final ShapeBorder? shape;
-  final Clip clipBehavior;
+
+  /// Mặc định: chỉ clip khi thẻ CHẠM ĐƯỢC (để splash của InkWell tôn trọng
+  /// bo góc). Thẻ tĩnh không clip — mỗi lần clip là một `saveLayer`, và với
+  /// một danh sách dài thì đó là chi phí trả cho thứ không ai nhìn thấy.
+  final Clip? clipBehavior;
   final String? semanticLabel;
 
   @override
@@ -56,7 +60,7 @@ class AppCard extends StatelessWidget {
     final card = Card(
       color: color ?? scheme.cardSurface,
       shape: effectiveShape,
-      clipBehavior: clipBehavior,
+      clipBehavior: clipBehavior ?? (interactive ? Clip.antiAlias : Clip.none),
       child: content,
     );
 

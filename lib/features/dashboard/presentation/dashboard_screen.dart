@@ -15,6 +15,7 @@ import '../../../shared/widgets/category_avatar.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_empty_state.dart';
 import '../../../shared/widgets/app_error_state.dart';
+import '../../../shared/widgets/app_skeleton.dart';
 import '../../../shared/widgets/budget_meter.dart';
 import '../../../shared/widgets/eyebrow_label.dart';
 import '../../../shared/widgets/money_text.dart';
@@ -97,9 +98,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 112),
             sliver: dashboard.when(
-              loading: () => const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(child: CircularProgressIndicator()),
+              // Skeleton khớp hình học thật thay cho spinner giữa màn hình:
+              // bố cục không nhảy khi dữ liệu về.
+              loading: () => const SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    SkeletonHero(),
+                    SizedBox(height: 16),
+                    SkeletonListRows(count: 2),
+                    SizedBox(height: 24),
+                    SkeletonChart(),
+                  ],
+                ),
               ),
               error: (error, stack) => SliverFillRemaining(
                 hasScrollBody: false,
