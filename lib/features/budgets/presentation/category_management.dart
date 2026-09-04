@@ -202,7 +202,14 @@ Future<CategoryEntity?> showCategoryDialog(
                     children: [
                       for (final item in iconNames)
                         ChoiceChip(
-                          label: Icon(categoryIconFor(item), size: 20),
+                          // Tooltip + semanticLabel: chip chỉ có icon vốn phơi
+                          // ra tên rỗng cho trình đọc màn hình.
+                          tooltip: categoryIconLabel(item),
+                          label: Icon(
+                            categoryIconFor(item),
+                            size: 20,
+                            semanticLabel: categoryIconLabel(item),
+                          ),
                           selected: iconName == item,
                           onSelected: (_) => setState(() => iconName = item),
                         ),
@@ -232,10 +239,11 @@ Future<CategoryEntity?> showCategoryDialog(
                                       Icons.check,
                                       // Dấu check phải tương phản với chính ô
                                       // màu, không mặc định trắng.
-                                      color:
-                                          Color(item).computeLuminance() > 0.45
-                                          ? const Color(0xFF000000)
-                                          : const Color(0xFFFFFFFF),
+                                      // Chọn theo TƯƠNG PHẢN thật, không theo
+                                      // ngưỡng luminance áng chừng: ngưỡng 0.45
+                                      // cho ra dấu trắng 2.94:1 trên ô amber,
+                                      // dưới mức 3:1 mà WCAG 1.4.11 đòi.
+                                      color: _checkColorOn(Color(item)),
                                     )
                                   : null,
                             ),
@@ -275,4 +283,12 @@ Future<CategoryEntity?> showCategoryDialog(
   } finally {
     nameController.dispose();
   }
+}
+
+/// Đen hay trắng — chọn cái nào tương phản tốt hơn với ô màu bên dưới.
+Color _checkColorOn(Color swatch) {
+  final luminance = swatch.computeLuminance();
+  final onWhite = 1.05 / (luminance + 0.05);
+  final onBlack = (luminance + 0.05) / 0.05;
+  return onBlack >= onWhite ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
 }

@@ -96,10 +96,16 @@ class EntityListRow extends StatelessWidget {
     );
 
     if (semanticLabel == null) return row;
+    // `button: true` chỉ đặt CỜ; hành động tap đến từ `onTap:`. Bọc InkWell
+    // trong ExcludeSemantics gỡ mất node duy nhất mang `SemanticsAction.tap`,
+    // nên nếu không truyền lại onTap thì TalkBack đọc được dòng mà không kích
+    // hoạt được nó.
     return Semantics(
       container: true,
       button: onTap != null,
       label: semanticLabel,
+      onTap: onTap,
+      onLongPress: onLongPress,
       child: ExcludeSemantics(child: row),
     );
   }

@@ -417,11 +417,17 @@ class _InvoiceRow extends StatelessWidget {
         children: [
           MoneyText(invoice.totalMinor),
           const SizedBox(width: 6),
-          // Nguồn import xuống hạng thành glyph nhỏ ở đuôi.
-          Icon(
-            _sourceIcon(invoice.sourceType),
-            size: 16,
-            color: scheme.onSurfaceVariant,
+          // Nguồn import xuống hạng thành glyph nhỏ ở đuôi — nhưng chữ của nó
+          // phải sống tiếp trong semanticLabel bên dưới, nếu không người dùng
+          // đọc màn hình mất hẳn thông tin này (EntityListRow bọc cả dòng
+          // trong ExcludeSemantics).
+          Tooltip(
+            message: _sourceLabel(invoice.sourceType),
+            child: Icon(
+              _sourceIcon(invoice.sourceType),
+              size: 16,
+              color: scheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -429,7 +435,8 @@ class _InvoiceRow extends StatelessWidget {
       // Một câu duy nhất cho TalkBack, thay vì 4 mảnh rời.
       semanticLabel:
           '$seller, $categoryName, ${AppDateFormat.shortDate(date)}, '
-          '${MoneyFormatter.format(invoice.totalMinor)}'
+          '${MoneyFormatter.format(invoice.totalMinor)}, '
+          'nguồn ${_sourceLabel(invoice.sourceType)}'
           '${needsReview ? ', cần kiểm tra' : ''}',
     );
   }

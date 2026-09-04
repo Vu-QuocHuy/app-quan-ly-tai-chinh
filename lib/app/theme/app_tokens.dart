@@ -141,4 +141,17 @@ extension AppSurfaces on ColorScheme {
 
   /// L3 — nổi lên trên thẻ.
   Color get liftedSurface => surfaceContainerHighest;
+
+  /// Điểm cuối gradient của hero Dashboard.
+  ///
+  /// PHẢI theo brightness. Các vai `*Fixed` bất biến theo brightness — đó là
+  /// mục đích của chúng — nên `onPrimaryFixedVariant` (#2A50CC) giữ nguyên ở
+  /// theme tối, trong khi `onPrimary` tối lại là #0A1B63 gần đen. Ghép hai thứ
+  /// đó cho 2.31:1, tức là chữ trên hero không đọc được ở chế độ tối.
+  ///
+  /// Đo được với `onPrimary` tương ứng:
+  ///   sáng  #FFFFFF trên #1E40AF -> #2A50CC = 8.72:1 -> 6.74:1
+  ///   tối   #0A1B63 trên #B4C4FF -> #B9C3FF = 9.10:1 -> 9.12:1
+  Color get heroGradientEnd =>
+      brightness == Brightness.dark ? primaryFixedDim : onPrimaryFixedVariant;
 }

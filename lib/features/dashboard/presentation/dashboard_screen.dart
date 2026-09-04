@@ -360,12 +360,12 @@ class _HeroSummary extends StatelessWidget {
           'Tổng chi ${MonthUtils.label(month)} ${MoneyFormatter.format(snapshot.totalMinor)}, ${snapshot.invoiceCount} hóa đơn',
       child: DecoratedBox(
         decoration: ShapeDecoration(
-          // Gradient bị GIỚI HẠN trong MỘT họ vai. Trước đây nó chạy tới
-          // `primaryContainer` (#DBE0FF) trong khi chữ vẫn là `onPrimary`
-          // trắng -> góc dưới phải chỉ còn 1.31:1, không đọc được.
-          // Nay: trắng trên #1E40AF = 8.72:1, trên #2A50CC = 6.74:1.
+          // Gradient bị GIỚI HẠN trong MỘT họ vai VÀ theo brightness — xem
+          // `ColorScheme.heroGradientEnd`. Bản đầu chạy tới `primaryContainer`
+          // (1.31:1 ở theme sáng); bản sửa dùng vai *Fixed bất biến nên lại
+          // hỏng ở theme tối (2.31:1). Nay cả hai đều >= 6.74:1.
           gradient: LinearGradient(
-            colors: [scheme.primary, scheme.onPrimaryFixedVariant],
+            colors: [scheme.primary, scheme.heroGradientEnd],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),

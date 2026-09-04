@@ -36,21 +36,49 @@ class AppErrorState extends StatelessWidget {
     final message = friendlyMessage(error);
 
     if (compact) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.error_outline,
-            color: theme.colorScheme.error,
-            size: AppIconSizes.md,
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(child: Text(message, style: theme.textTheme.bodyMedium)),
-          if (onRetry != null) ...[
-            const SizedBox(width: AppSpacing.sm),
-            TextButton(onPressed: onRetry, child: Text(retryLabel)),
+      return Semantics(
+        container: true,
+        liveRegion: true,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.error_outline,
+              color: theme.colorScheme.error,
+              size: AppIconSizes.md,
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // `title` nói CHỖ NÀO hỏng. Bỏ nó đi thì nhiều lỗi khác nhau
+                  // cùng rơi về một câu chung của `friendlyMessage`, và hai lỗi
+                  // đồng thời cho ra hai dòng giống hệt nhau từng byte.
+                  if (title.isNotEmpty)
+                    Text(
+                      title,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  Text(
+                    message,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (onRetry != null) ...[
+              const SizedBox(width: AppSpacing.sm),
+              TextButton(onPressed: onRetry, child: Text(retryLabel)),
+            ],
           ],
-        ],
+        ),
       );
     }
 

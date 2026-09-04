@@ -88,6 +88,23 @@ void main() {
         );
       });
 
+      test('$name — CẢ HAI đầu gradient hero đọc được với onPrimary', () {
+        // Bản sửa đầu tiên cho hero dùng `onPrimaryFixedVariant` cho điểm cuối.
+        // Vai *Fixed bất biến theo brightness, còn `onPrimary` thì không — nên
+        // ở theme tối nó cho 2.31:1 và chữ hero gần như biến mất. Test này
+        // khoá cả hai đầu, không chỉ đầu `primary`.
+        expect(
+          ratio(scheme.onPrimary, scheme.primary),
+          greaterThanOrEqualTo(4.5),
+          reason: '$name đầu gradient',
+        );
+        expect(
+          ratio(scheme.onPrimary, scheme.heroGradientEnd),
+          greaterThanOrEqualTo(4.5),
+          reason: '$name cuối gradient',
+        );
+      });
+
       test('$name — bậc tông thẻ so với nền phải nhìn thấy được', () {
         expect(ratio(scheme.cardSurface, scheme.surface), greaterThan(1.10));
       });

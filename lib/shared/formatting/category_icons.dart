@@ -38,3 +38,23 @@ IconData categoryIconFor(String? name) => switch (name) {
   'fitness_center' => Icons.fitness_center,
   _ => Icons.category,
 };
+
+/// Tên tiếng Việt của từng icon.
+///
+/// Cần thiết vì picker icon dùng `ChoiceChip(label: Icon(...))`: `Icon` không
+/// đóng góp semantics nếu không có `semanticLabel`, nên mỗi chip vốn phơi ra
+/// một cái tên RỖNG — người dùng TalkBack vuốt qua hàng icon chỉ nghe im lặng.
+String categoryIconLabel(String? name) => switch (name) {
+  'restaurant' => 'Ăn uống',
+  'directions_car' => 'Di chuyển',
+  'shopping_bag' => 'Mua sắm',
+  'bolt' => 'Tiện ích',
+  'health_and_safety' => 'Y tế',
+  'school' => 'Giáo dục',
+  'movie' => 'Giải trí',
+  'home' => 'Nhà cửa',
+  'pets' => 'Thú cưng',
+  'flight' => 'Du lịch',
+  'fitness_center' => 'Thể thao',
+  _ => 'Khác',
+};

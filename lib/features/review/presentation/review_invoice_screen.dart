@@ -43,6 +43,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
   // lỗi chặn, cảnh báo tư vấn, và lỗi hệ thống khi lưu.
   CalloutTone _validationTone = CalloutTone.warning;
   AutovalidateMode _autovalidate = AutovalidateMode.disabled;
+  bool _dirty = false;
 
   @override
   void initState() {
@@ -65,10 +66,18 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
         .toList(growable: true);
     _issuedAt = invoice.issuedAt;
     _categoryId = invoice.categoryId;
+    for (final controller in _watchedControllers) {
+      controller.addListener(_recomputeDirty);
+    }
   }
 
   @override
   void dispose() {
+    // Gỡ listener TRƯỚC khi dispose: gọi removeListener trên một controller đã
+    // dispose sẽ ném.
+    for (final controller in _watchedControllers) {
+      controller.removeListener(_recomputeDirty);
+    }
     _sellerController.dispose();
     _taxCodeController.dispose();
     _numberController.dispose();
@@ -94,7 +103,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
     return PopScope(
       // Form này là nơi người dùng sửa kết quả OCR — mất nó là mất công sức
       // thật. Trước đây vuốt back là mất trắng, không hỏi gì.
-      canPop: !_isDirty,
+      canPop: !_dirty,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _confirmDiscard();
       },
@@ -326,17 +335,46 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
   }
 
   /// So khớp với bản gốc để biết người dùng đã sửa gì chưa.
-  bool get _isDirty {
+  /// Mọi controller đang được theo dõi, để gắn/gỡ listener ở một chỗ.
+  Iterable<TextEditingController> get _watchedControllers sync* {
+    yield _sellerController;
+    yield _taxCodeController;
+    yield _numberController;
+    yield _subtotalController;
+    yield _taxController;
+    yield _totalController;
+    yield _notesController;
+    yield _tagsController;
+    for (final draft in _lineDrafts) {
+      yield draft.descriptionController;
+      yield draft.totalController;
+    }
+  }
+
+  /// `PopScope.canPop` được đọc lúc BUILD, mà gõ chữ vào `TextEditingController`
+  /// không tự gây rebuild. Không có listener này thì cờ bẩn bị đóng băng ở giá
+  /// trị của lần build gần nhất và người dùng mất bài mà không được hỏi.
+  void _recomputeDirty() {
+    final next = _computeDirty();
+    if (next != _dirty && mounted) setState(() => _dirty = next);
+  }
+
+  bool _computeDirty() {
     final invoice = widget.invoice;
-    if (_sellerController.text != invoice.sellerName) return true;
-    if (_taxCodeController.text != invoice.sellerTaxCode) return true;
-    if (_numberController.text != invoice.invoiceNumber) return true;
+    // Các trường model là String? nhưng controller không bao giờ trả null.
+    // So thẳng '' với null làm form LUÔN bẩn ngay khi mở, nên hộp thoại "bỏ
+    // thay đổi?" bật lên kể cả khi người dùng chưa gõ gì.
+    String norm(String? value) => value ?? '';
+
+    if (_sellerController.text != norm(invoice.sellerName)) return true;
+    if (_taxCodeController.text != norm(invoice.sellerTaxCode)) return true;
+    if (_numberController.text != norm(invoice.invoiceNumber)) return true;
     if (_subtotalController.text != invoice.subtotalMinor.toString()) {
       return true;
     }
     if (_taxController.text != invoice.taxMinor.toString()) return true;
     if (_totalController.text != invoice.totalMinor.toString()) return true;
-    if (_notesController.text != invoice.notes) return true;
+    if (_notesController.text != norm(invoice.notes)) return true;
     if (_tagsController.text != invoice.tags.join(', ')) return true;
     if (_issuedAt != invoice.issuedAt) return true;
     if (_categoryId != invoice.categoryId) return true;
@@ -344,7 +382,9 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
     for (var i = 0; i < _lineDrafts.length; i++) {
       final draft = _lineDrafts[i];
       final line = invoice.lines[i];
-      if (draft.descriptionController.text != line.description) return true;
+      if (draft.descriptionController.text != norm(line.description)) {
+        return true;
+      }
       if (draft.totalController.text != line.totalMinor.toString()) return true;
     }
     return false;
@@ -614,13 +654,22 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
   }
 
   void _addLine() {
-    setState(() => _lineDrafts.add(_InvoiceLineDraft.empty()));
+    final draft = _InvoiceLineDraft.empty();
+    // Draft mới cũng phải theo dõi được, nếu không thì sửa dòng vừa thêm sẽ
+    // không tính là bẩn.
+    draft.descriptionController.addListener(_recomputeDirty);
+    draft.totalController.addListener(_recomputeDirty);
+    setState(() => _lineDrafts.add(draft));
+    _recomputeDirty();
   }
 
   void _removeLine(int index) {
     final draft = _lineDrafts.removeAt(index);
+    draft.descriptionController.removeListener(_recomputeDirty);
+    draft.totalController.removeListener(_recomputeDirty);
     draft.dispose();
     setState(() {});
+    _recomputeDirty();
   }
 
   InvoiceLineEntity _toInvoiceLine(_InvoiceLineDraft draft) {

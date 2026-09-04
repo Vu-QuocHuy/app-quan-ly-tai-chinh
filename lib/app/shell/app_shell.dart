@@ -409,7 +409,10 @@ class _AppShellState extends ConsumerState<AppShell>
         onOutcome: (_, outcome) => _openImportOutcome(outcome),
         onFailure: (failure) {
           if (mounted) {
-            _showMessage('${failure.job.fileName}: ${failure.error}');
+            _showMessage(
+              '${failure.job.fileName}: ${friendlyMessage(failure.error)}',
+              isError: true,
+            );
           }
         },
       );

@@ -13,6 +13,7 @@ import '../../invoices/domain/invoice_models.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/widgets/app_error_state.dart';
+import '../../../app/theme/theme_mode_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -76,6 +77,50 @@ class SettingsScreen extends ConsumerWidget {
                         'Xóa hóa đơn, ngân sách và quy tắc phân loại trên thiết bị.',
                       ),
                       onTap: () => _confirmDelete(context, ref),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _Section(
+                  title: 'Giao diện',
+                  children: [
+                    // ThemeModeNotifier.set trước đây không được gọi ở đâu cả,
+                    // nên tuỳ chọn đã lưu không bao giờ ghi được và app luôn
+                    // theo hệ thống.
+                    ListTile(
+                      leading: const Icon(Icons.brightness_6_outlined),
+                      title: const Text('Chế độ sáng/tối'),
+                      subtitle: Text(switch (ref.watch(themeModeProvider)) {
+                        ThemeMode.light => 'Luôn dùng giao diện sáng',
+                        ThemeMode.dark => 'Luôn dùng giao diện tối',
+                        ThemeMode.system => 'Theo cài đặt hệ thống',
+                      }),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: SegmentedButton<ThemeMode>(
+                        segments: const [
+                          ButtonSegment(
+                            value: ThemeMode.system,
+                            icon: Icon(Icons.brightness_auto_outlined),
+                            label: Text('Hệ thống'),
+                          ),
+                          ButtonSegment(
+                            value: ThemeMode.light,
+                            icon: Icon(Icons.light_mode_outlined),
+                            label: Text('Sáng'),
+                          ),
+                          ButtonSegment(
+                            value: ThemeMode.dark,
+                            icon: Icon(Icons.dark_mode_outlined),
+                            label: Text('Tối'),
+                          ),
+                        ],
+                        selected: {ref.watch(themeModeProvider)},
+                        onSelectionChanged: (selection) => ref
+                            .read(themeModeProvider.notifier)
+                            .set(selection.first),
+                      ),
                     ),
                   ],
                 ),
