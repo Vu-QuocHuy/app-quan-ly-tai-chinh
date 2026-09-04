@@ -8,8 +8,20 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
+import '../../../app/theme/app_tokens.dart';
+import '../../../app/theme/finance_colors.dart';
+import '../../../shared/widgets/app_callout.dart';
+import '../../../shared/widgets/category_avatar.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_empty_state.dart';
+import '../../../shared/widgets/app_error_state.dart';
+import '../../../shared/widgets/budget_meter.dart';
+import '../../../shared/widgets/eyebrow_label.dart';
+import '../../../shared/widgets/money_text.dart';
+import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/month_selector.dart';
 import '../../invoices/domain/invoice_models.dart';
+import '../../../shared/errors/error_presenter.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -59,7 +71,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverAppBar.large(
+          SliverAppBar.medium(
+            pinned: true,
             title: const Text('Tổng quan'),
             actions: [
               IconButton(
@@ -90,8 +103,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               error: (error, stack) => SliverFillRemaining(
                 hasScrollBody: false,
-                child: _ErrorState(
-                  message: error.toString(),
+                child: AppErrorState(
+                  error: error,
+                  stackTrace: stack,
                   onRetry: () => ref.invalidate(dashboardProvider),
                 ),
               ),
@@ -102,6 +116,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   _BudgetCard(
                     snapshot: snapshot,
                     alertsEnabled: budgetAlertsEnabled,
+                    month: selectedMonth,
                   ),
                   const SizedBox(height: 16),
                   _InsightsCard(
@@ -172,7 +187,9 @@ class _InsightsCard extends StatelessWidget {
                 color: Theme.of(context).colorScheme.error,
               ),
               const SizedBox(width: 12),
-              Expanded(child: Text('Chưa thể tạo dự báo: $error')),
+              Expanded(
+                child: Text('Chưa thể tạo dự báo: ${friendlyMessage(error)}'),
+              ),
             ],
           ),
           data: (data) {
@@ -336,50 +353,63 @@ class _HeroSummary extends StatelessWidget {
       container: true,
       label:
           'Tổng chi ${MonthUtils.label(month)} ${MoneyFormatter.format(snapshot.totalMinor)}, ${snapshot.invoiceCount} hóa đơn',
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          // Gradient bị GIỚI HẠN trong MỘT họ vai. Trước đây nó chạy tới
+          // `primaryContainer` (#DBE0FF) trong khi chữ vẫn là `onPrimary`
+          // trắng -> góc dưới phải chỉ còn 1.31:1, không đọc được.
+          // Nay: trắng trên #1E40AF = 8.72:1, trên #2A50CC = 6.74:1.
           gradient: LinearGradient(
-            colors: [scheme.primary, scheme.primaryContainer],
+            colors: [scheme.primary, scheme.onPrimaryFixedVariant],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(24),
+          // Hình khối biểu cảm DUY NHẤT của app.
+          shape: AppShapes.hero,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'TỔNG CHI ${MonthUtils.label(month).toUpperCase()}',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // CÂU THƯỜNG. Bỏ .toUpperCase() + letterSpacing: 1 — viết hoa đẩy
+              // dấu chồng tiếng Việt vào vùng ascender và rộng hơn ~30%.
+              EyebrowLabel(
+                'Tổng chi ${MonthUtils.label(month)}',
                 color: scheme.onPrimary,
-                letterSpacing: 1,
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              MoneyFormatter.format(snapshot.totalMinor),
-              style: Theme.of(
-                context,
-              ).textTheme.displaySmall?.copyWith(color: scheme.onPrimary),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '${snapshot.invoiceCount} hóa đơn đã xác nhận',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: scheme.onPrimary.withValues(alpha: 0.88),
-              ),
-            ),
-            if (snapshot.monthOverMonthChange case final change?) ...[
-              const SizedBox(height: 8),
-              Text(
-                '${change >= 0 ? 'Tăng' : 'Giảm'} ${(change.abs() * 100).round()}% so với tháng trước',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: scheme.onPrimary.withValues(alpha: 0.88),
+              const SizedBox(height: AppSpacing.sm),
+              // fitToWidth: "1.234.567.890 ₫" ở 36sp trong ~280dp trước đây
+              // xuống dòng chỉ còn ký hiệu ₫.
+              MoneyText(
+                snapshot.totalMinor,
+                emphasis: MoneyEmphasis.display,
+                fitToWidth: true,
+                tone: FinanceTone(
+                  color: scheme.onPrimary,
+                  onColor: scheme.primary,
+                  container: scheme.primaryContainer,
+                  onContainer: scheme.onPrimaryContainer,
                 ),
               ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                '${snapshot.invoiceCount} hóa đơn đã xác nhận',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: scheme.onPrimary),
+              ),
+              if (snapshot.monthOverMonthChange case final change?) ...[
+                const SizedBox(height: AppSpacing.md),
+                StatusPill(
+                  icon: change >= 0 ? Icons.trending_up : Icons.trending_down,
+                  label:
+                      '${change >= 0 ? 'Tăng' : 'Giảm'} ${(change.abs() * 100).round()}% so với tháng trước',
+                  tone: change >= 0 ? StatusTone.warn : StatusTone.safe,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -387,112 +417,74 @@ class _HeroSummary extends StatelessWidget {
 }
 
 class _BudgetCard extends StatelessWidget {
-  const _BudgetCard({required this.snapshot, required this.alertsEnabled});
+  const _BudgetCard({
+    required this.snapshot,
+    required this.alertsEnabled,
+    required this.month,
+  });
 
   final DashboardSnapshot snapshot;
   final bool alertsEnabled;
+  final DateTime month;
 
   @override
   Widget build(BuildContext context) {
-    final progress = snapshot.budgetProgress.clamp(0.0, 1.0);
     final hasBudget = snapshot.budgetLimitMinor > 0;
-    final exceeded = snapshot.budgetProgress > 1;
     final scheme = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.savings_outlined, color: scheme.tertiary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Ngân sách',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+    // Vạch nhịp "hôm nay": chỉ có nghĩa khi đang xem tháng hiện tại.
+    final now = DateTime.now();
+    final isCurrentMonth = now.year == month.year && now.month == month.month;
+    final paceRatio = isCurrentMonth
+        ? now.day / DateUtils.getDaysInMonth(month.year, month.month)
+        : null;
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.savings_outlined, color: scheme.onSurfaceVariant),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  'Ngân sách',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-                if (hasBudget)
-                  Text(
-                    '${(snapshot.budgetProgress * 100).round()}%',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: exceeded ? scheme.error : scheme.tertiary,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            LinearProgressIndicator(
-              value: hasBudget ? progress : 0,
-              minHeight: 10,
-              borderRadius: BorderRadius.circular(999),
-              color: exceeded ? scheme.error : scheme.tertiary,
-            ),
-            const SizedBox(height: 10),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          if (hasBudget)
+            // BudgetMeter lo cả ba tầng (an toàn / sắp chạm 80% / đã vượt),
+            // đuôi tràn và vạch nhịp. Trước đây `clamp(0, 1)` làm 110% và 400%
+            // trông y hệt nhau, và tầng 80% mà BudgetAlertPolicy dùng để bắn
+            // thông báo thì không màn hình nào render.
+            BudgetMeter(
+              spentMinor: snapshot.totalMinor,
+              limitMinor: snapshot.budgetLimitMinor,
+              paceRatio: paceRatio,
+            )
+          else
             Text(
-              hasBudget
-                  ? exceeded
-                        ? 'Đã vượt ${MoneyFormatter.format(snapshot.totalMinor - snapshot.budgetLimitMinor)} · ${MoneyFormatter.format(snapshot.totalMinor)} / ${MoneyFormatter.format(snapshot.budgetLimitMinor)}'
-                        : '${MoneyFormatter.format(snapshot.totalMinor)} / ${MoneyFormatter.format(snapshot.budgetLimitMinor)}'
-                  : 'Chưa thiết lập ngân sách tháng này.',
+              'Chưa thiết lập ngân sách tháng này.',
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
-            if (alertsEnabled &&
-                hasBudget &&
-                snapshot.budgetProgress >= 0.8) ...[
-              const SizedBox(height: 12),
-              Semantics(
-                liveRegion: true,
-                container: true,
-                label: exceeded
-                    ? 'Cảnh báo: đã vượt ngân sách tháng.'
-                    : 'Cảnh báo: đã sử dụng từ 80 phần trăm ngân sách tháng.',
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: exceeded
-                        ? scheme.errorContainer
-                        : scheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          exceeded
-                              ? Icons.warning_amber_rounded
-                              : Icons.notifications_active_outlined,
-                          color: exceeded
-                              ? scheme.onErrorContainer
-                              : scheme.onSecondaryContainer,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            exceeded
-                                ? 'Bạn đã vượt ngân sách tháng này.'
-                                : 'Bạn đã dùng ${(snapshot.budgetProgress * 100).round()}% ngân sách tháng này.',
-                            style: TextStyle(
-                              color: exceeded
-                                  ? scheme.onErrorContainer
-                                  : scheme.onSecondaryContainer,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          if (alertsEnabled && hasBudget && snapshot.budgetProgress >= 0.8) ...[
+            const SizedBox(height: AppSpacing.lg),
+            AppCallout(
+              liveRegion: true,
+              tone: snapshot.budgetProgress > 1
+                  ? CalloutTone.danger
+                  : CalloutTone.warning,
+              message: snapshot.budgetProgress > 1
+                  ? 'Bạn đã vượt ngân sách tháng này.'
+                  : 'Bạn đã dùng ${(snapshot.budgetProgress * 100).round()}% ngân sách tháng này.',
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -506,9 +498,12 @@ class _DailyChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (snapshot.dailyTotals.isEmpty) {
-      return const _EmptyCard(
-        icon: Icons.bar_chart,
-        message: 'Biểu đồ sẽ xuất hiện sau khi bạn xác nhận hóa đơn.',
+      return const AppCard(
+        child: AppEmptyState(
+          icon: Icons.bar_chart,
+          title: 'Chưa có dữ liệu chi tiêu',
+          message: 'Biểu đồ sẽ xuất hiện sau khi bạn xác nhận hóa đơn.',
+        ),
       );
     }
     final entries = snapshot.dailyTotals.entries.toList()
@@ -590,9 +585,12 @@ class _CategoryBreakdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (snapshot.categoryTotals.isEmpty) {
-      return const _EmptyCard(
-        icon: Icons.category_outlined,
-        message: 'Chưa có dữ liệu danh mục trong tháng này.',
+      return const AppCard(
+        child: AppEmptyState(
+          icon: Icons.category_outlined,
+          title: 'Chưa có danh mục nào',
+          message: 'Chưa có dữ liệu danh mục trong tháng này.',
+        ),
       );
     }
     final entries = snapshot.categoryTotals.entries.toList()
@@ -610,90 +608,14 @@ class _CategoryBreakdown extends StatelessWidget {
               .where((item) => item.id == entry.key)
               .firstOrNull;
           return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Color(
-                category?.colorValue ?? 0xFF64748B,
-              ).withValues(alpha: 0.14),
-              child: Icon(
-                _categoryIcon(category?.iconName),
-                color: Color(category?.colorValue ?? 0xFF64748B),
-              ),
-            ),
+            // CategoryAvatar suy dẫn màu theo brightness và bảo đảm glyph
+            // >= 4.5:1 trên cả nền thẻ lẫn tint. Bản tint 14% + glyph nguyên
+            // màu trước đây chỉ đạt 2.32:1 và mù theme.
+            leading: CategoryAvatar(category: category),
             title: Text(category?.name ?? 'Khác'),
-            trailing: Text(
-              MoneyFormatter.format(entry.value),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            trailing: MoneyText(entry.value),
           );
         },
-      ),
-    );
-  }
-}
-
-IconData _categoryIcon(String? name) => switch (name) {
-  'restaurant' => Icons.restaurant,
-  'directions_car' => Icons.directions_car,
-  'shopping_bag' => Icons.shopping_bag,
-  'bolt' => Icons.bolt,
-  'health_and_safety' => Icons.health_and_safety,
-  'school' => Icons.school,
-  'movie' => Icons.movie,
-  _ => Icons.category,
-};
-
-class _EmptyCard extends StatelessWidget {
-  const _EmptyCard({required this.icon, required this.message});
-
-  final IconData icon;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Row(
-          children: [
-            Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.error_outline,
-            size: 48,
-            color: Theme.of(context).colorScheme.error,
-          ),
-          const SizedBox(height: 16),
-          const Text('Không thể tải tổng quan.'),
-          const SizedBox(height: 8),
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Thử lại'),
-          ),
-        ],
       ),
     );
   }

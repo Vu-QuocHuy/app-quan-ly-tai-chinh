@@ -8,6 +8,8 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../ingestion/domain/invoice_validator.dart';
 import '../../invoices/domain/invoice_models.dart';
+import '../../../shared/errors/error_presenter.dart';
+import '../../../shared/widgets/app_callout.dart';
 
 class ReviewInvoiceScreen extends ConsumerStatefulWidget {
   const ReviewInvoiceScreen({required this.invoice, super.key});
@@ -35,6 +37,9 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
   late String? _categoryId;
   bool _saving = false;
   List<String> _validationMessages = const [];
+  // Ba thứ khác nhau về ngữ nghĩa từng bị nhét chung một khối đỏ:
+  // lỗi chặn, cảnh báo tư vấn, và lỗi hệ thống khi lưu.
+  CalloutTone _validationTone = CalloutTone.warning;
 
   @override
   void initState() {
@@ -96,6 +101,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
               if (_validationMessages.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _ValidationSummary(
+                  tone: _validationTone,
                   messages: _validationMessages,
                   focusNode: _validationSummaryFocusNode,
                 ),
@@ -317,12 +323,17 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
     );
     final validation = const InvoiceValidator().validate(updated);
     if (!validation.isValid) {
-      setState(() => _validationMessages = validation.errors);
+      setState(() {
+        _validationMessages = validation.errors;
+        _validationTone = CalloutTone.danger;
+      });
       return;
     }
     setState(() {
       _saving = true;
       _validationMessages = validation.warnings;
+      // Cảnh báo tư vấn KHÔNG phải lỗi -> không dùng màu phá hủy.
+      _validationTone = CalloutTone.warning;
     });
     try {
       final repository = ref.read(invoiceRepositoryProvider);
@@ -333,7 +344,10 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       if (mounted) context.go('/invoices');
     } on Object catch (error) {
       if (mounted) {
-        setState(() => _validationMessages = ['Không thể lưu: $error']);
+        setState(() {
+          _validationMessages = ['Không thể lưu: ${friendlyMessage(error)}'];
+          _validationTone = CalloutTone.danger;
+        });
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -652,49 +666,26 @@ class _ReviewNotice extends StatelessWidget {
 }
 
 class _ValidationSummary extends StatelessWidget {
-  const _ValidationSummary({required this.messages, required this.focusNode});
+  const _ValidationSummary({
+    required this.messages,
+    required this.focusNode,
+    required this.tone,
+  });
 
   final List<String> messages;
   final FocusNode focusNode;
+  final CalloutTone tone;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final isBlocking = tone == CalloutTone.danger;
     return Focus(
       focusNode: focusNode,
-      child: Semantics(
+      child: AppCallout(
         liveRegion: true,
-        container: true,
-        label: 'Có ${messages.length} nội dung cần kiểm tra',
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: scheme.errorContainer,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Cần kiểm tra',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: scheme.onErrorContainer,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                for (final message in messages)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      '• $message',
-                      style: TextStyle(color: scheme.onErrorContainer),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
+        tone: tone,
+        title: isBlocking ? 'Cần sửa trước khi lưu' : 'Nên kiểm tra lại',
+        message: messages.map((message) => '• $message').join('\n'),
       ),
     );
   }

@@ -8,6 +8,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../domain/chat_models.dart';
+import '../../../shared/errors/error_presenter.dart';
+import '../../../shared/widgets/app_callout.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -65,17 +67,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         child: Column(
           children: [
             if (!api.isConfigured)
-              const _InfoBanner(
-                icon: Icons.offline_bolt_outlined,
-                message:
-                    'Chế độ local: câu hỏi về dữ liệu đã lưu vẫn hoạt động. '
-                    'Đăng nhập Supabase để bật Gemini và dữ liệu bên ngoài.',
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: AppCallout(
+                  icon: Icons.offline_bolt_outlined,
+                  message:
+                      'Chế độ local: câu hỏi về dữ liệu đã lưu vẫn hoạt động. '
+                      'Đăng nhập Supabase để bật Gemini và dữ liệu bên ngoài.',
+                ),
               ),
             if (_connectionNote != null)
-              _InfoBanner(
-                icon: Icons.cloud_off_outlined,
-                message: _connectionNote!,
-                color: Theme.of(context).colorScheme.errorContainer,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                // warning, không phải danger: mất kết nối làm giảm chức năng
+                // chứ không hỏng — chế độ local vẫn trả lời được.
+                child: AppCallout(
+                  icon: Icons.cloud_off_outlined,
+                  tone: CalloutTone.warning,
+                  message: _connectionNote!,
+                  liveRegion: true,
+                ),
               ),
             Expanded(child: _buildMessages(context)),
             _buildSuggestions(context),
@@ -261,7 +272,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ChatMessage(
             id: _uuid.v4(),
             role: ChatMessageRole.assistant,
-            text: 'Không thể đọc dữ liệu local lúc này: $error',
+            text:
+                'Không thể đọc dữ liệu local lúc này: ${friendlyMessage(error)}',
             createdAt: DateTime.now(),
           ),
         ];
@@ -313,30 +325,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         curve: Curves.easeOut,
       );
     });
-  }
-}
-
-class _InfoBanner extends StatelessWidget {
-  const _InfoBanner({required this.icon, required this.message, this.color});
-
-  final IconData icon;
-  final String message;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: color ?? Theme.of(context).colorScheme.surfaceContainerHighest,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          Icon(icon, size: 20),
-          const SizedBox(width: 10),
-          Expanded(child: Text(message)),
-        ],
-      ),
-    );
   }
 }
 

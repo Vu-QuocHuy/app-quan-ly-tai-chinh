@@ -3,7 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/providers/app_providers.dart';
+import '../../../shared/formatting/category_icons.dart';
+import '../../../shared/widgets/category_avatar.dart';
 import '../../invoices/domain/invoice_models.dart';
+import '../../../shared/errors/error_presenter.dart';
+import '../../../shared/dialogs/confirm_dialog.dart';
 
 class CategoryManagement extends ConsumerWidget {
   const CategoryManagement({required this.categories, super.key});
@@ -92,9 +96,11 @@ class CategoryManagement extends ConsumerWidget {
       );
     } on Object catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Không thể lưu danh mục: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Không thể lưu danh mục: ${friendlyMessage(error)}'),
+        ),
+      );
     }
   }
 
@@ -103,27 +109,16 @@ class CategoryManagement extends ConsumerWidget {
     WidgetRef ref,
     CategoryEntity category,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.delete_outline),
-        title: Text('Xóa “${category.name}”?'),
-        content: const Text(
-          'Hóa đơn đang dùng danh mục này sẽ chuyển về “Khác”. Ngân sách và quy tắc merchant của danh mục sẽ bị xóa.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Xóa danh mục'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Xóa “${category.name}”?',
+      message:
+          'Hóa đơn đang dùng danh mục này sẽ chuyển về “Khác”. Ngân sách và '
+          'quy tắc merchant của danh mục sẽ bị xóa.',
+      confirmLabel: 'Xóa danh mục',
+      destructive: true,
     );
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
     try {
       await ref.read(invoiceRepositoryProvider).deleteCategory(category.id);
       if (!context.mounted) return;
@@ -132,9 +127,11 @@ class CategoryManagement extends ConsumerWidget {
       ).showSnackBar(const SnackBar(content: Text('Đã xóa danh mục.')));
     } on Object catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Không thể xóa danh mục: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Không thể xóa danh mục: ${friendlyMessage(error)}'),
+        ),
+      );
     }
   }
 }
@@ -148,20 +145,7 @@ Future<CategoryEntity?> showCategoryDialog(
   final formKey = GlobalKey<FormState>();
   var iconName = editing?.iconName ?? 'category';
   var colorValue = editing?.colorValue ?? 0xFF0F766E;
-  const iconNames = [
-    'category',
-    'restaurant',
-    'directions_car',
-    'shopping_bag',
-    'bolt',
-    'health_and_safety',
-    'school',
-    'movie',
-    'home',
-    'pets',
-    'flight',
-    'fitness_center',
-  ];
+  const iconNames = kCategoryIconNames;
   const colorValues = [
     0xFF0F766E,
     0xFF2563EB,
@@ -218,7 +202,7 @@ Future<CategoryEntity?> showCategoryDialog(
                     children: [
                       for (final item in iconNames)
                         ChoiceChip(
-                          label: Icon(categoryIcon(item), size: 20),
+                          label: Icon(categoryIconFor(item), size: 20),
                           selected: iconName == item,
                           onSelected: (_) => setState(() => iconName = item),
                         ),
@@ -244,7 +228,15 @@ Future<CategoryEntity?> showCategoryDialog(
                               radius: 20,
                               backgroundColor: Color(item),
                               child: colorValue == item
-                                  ? const Icon(Icons.check, color: Colors.white)
+                                  ? Icon(
+                                      Icons.check,
+                                      // Dấu check phải tương phản với chính ô
+                                      // màu, không mặc định trắng.
+                                      color:
+                                          Color(item).computeLuminance() > 0.45
+                                          ? const Color(0xFF000000)
+                                          : const Color(0xFFFFFFFF),
+                                    )
                                   : null,
                             ),
                           ),
@@ -284,32 +276,3 @@ Future<CategoryEntity?> showCategoryDialog(
     nameController.dispose();
   }
 }
-
-class CategoryAvatar extends StatelessWidget {
-  const CategoryAvatar({required this.category, super.key});
-
-  final CategoryEntity category;
-
-  @override
-  Widget build(BuildContext context) {
-    return CircleAvatar(
-      backgroundColor: Color(category.colorValue),
-      child: Icon(categoryIcon(category.iconName), color: Colors.white),
-    );
-  }
-}
-
-IconData categoryIcon(String iconName) => switch (iconName) {
-  'restaurant' => Icons.restaurant,
-  'directions_car' => Icons.directions_car,
-  'shopping_bag' => Icons.shopping_bag,
-  'bolt' => Icons.bolt,
-  'health_and_safety' => Icons.health_and_safety,
-  'school' => Icons.school,
-  'movie' => Icons.movie,
-  'home' => Icons.home,
-  'pets' => Icons.pets,
-  'flight' => Icons.flight,
-  'fitness_center' => Icons.fitness_center,
-  _ => Icons.category,
-};

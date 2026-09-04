@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/core/database/app_database.dart';
 import 'package:hoadon_insight/core/providers/app_providers.dart';
+import 'package:hoadon_insight/core/utils/money_formatter.dart';
 import 'package:hoadon_insight/features/invoices/data/drift_invoice_repository.dart';
 import 'package:hoadon_insight/features/invoices/domain/invoice_models.dart';
 import 'package:hoadon_insight/features/sync/presentation/sync_conflicts_screen.dart';
@@ -36,7 +37,13 @@ void main() {
     await tester.pump();
 
     expect(find.text('Local Store'), findsAtLeastNWidgets(1));
-    expect(find.text('120000 VND'), findsOneWidget);
+    // Trước đây assertion này ghim đúng một bug: màn hình in nguyên
+    // `'$value $currency'` -> "120000 VND". Nay số tiền đi qua
+    // MoneyFormatter nên hiện "120.000 ₫".
+    expect(
+      find.text(MoneyFormatter.format(120000, currencyCode: 'VND')),
+      findsOneWidget,
+    );
     expect(find.text('Dùng bản cloud'), findsOneWidget);
     expect(find.text('Giữ bản trên máy'), findsOneWidget);
     expect(tester.takeException(), isNull);

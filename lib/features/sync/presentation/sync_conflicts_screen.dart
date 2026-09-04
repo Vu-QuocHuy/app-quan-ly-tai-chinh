@@ -3,6 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../invoices/domain/invoice_models.dart';
+import '../../../shared/errors/error_presenter.dart';
+import '../../../core/utils/money_formatter.dart';
+import '../../../shared/formatting/app_date_format.dart';
+import '../../../shared/widgets/app_empty_state.dart';
+import '../../../shared/widgets/app_error_state.dart';
 
 class SyncConflictsScreen extends ConsumerWidget {
   const SyncConflictsScreen({super.key});
@@ -15,7 +20,13 @@ class SyncConflictsScreen extends ConsumerWidget {
       body: SafeArea(
         child: conflicts.when(
           data: (items) => items.isEmpty
-              ? const _EmptyConflicts()
+              ? const AppEmptyState(
+                  icon: Icons.cloud_done_outlined,
+                  title: 'Dữ liệu đã nhất quán',
+                  message:
+                      'Khi hai thiết bị cùng sửa một hóa đơn, bạn có thể chọn '
+                      'bản muốn giữ tại đây.',
+                )
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                   itemCount: items.length,
@@ -37,11 +48,11 @@ class SyncConflictsScreen extends ConsumerWidget {
                   ),
                 ),
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('Không đọc được xung đột: $error'),
-            ),
+          error: (error, stack) => AppErrorState(
+            error: error,
+            stackTrace: stack,
+            title: 'Không đọc được xung đột',
+            onRetry: () => ref.invalidate(invoiceConflictsProvider),
           ),
         ),
       ),
@@ -74,7 +85,9 @@ class SyncConflictsScreen extends ConsumerWidget {
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không thể xử lý xung đột: $error')),
+        SnackBar(
+          content: Text('Không thể xử lý xung đột: ${friendlyMessage(error)}'),
+        ),
       );
     }
   }
@@ -162,15 +175,11 @@ class _ConflictCard extends StatelessWidget {
     );
   }
 
-  static String _money(int value, String currency) => '$value $currency';
+  static String _money(int value, String currency) =>
+      MoneyFormatter.format(value, currencyCode: currency);
 
-  static String _formatDate(DateTime date) {
-    final local = date.toLocal();
-    return '${local.day.toString().padLeft(2, '0')}/'
-        '${local.month.toString().padLeft(2, '0')}/'
-        '${local.year} ${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}';
-  }
+  static String _formatDate(DateTime date) =>
+      AppDateFormat.dateTime(date.toLocal());
 }
 
 class _ComparisonHeader extends StatelessWidget {
@@ -231,39 +240,6 @@ class _ComparisonRow extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _EmptyConflicts extends StatelessWidget {
-  const _EmptyConflicts();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cloud_done_outlined,
-              size: 48,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Dữ liệu đã nhất quán',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Khi hai thiết bị cùng sửa một hóa đơn, bạn có thể chọn bản muốn giữ tại đây.',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
       ),
     );
   }

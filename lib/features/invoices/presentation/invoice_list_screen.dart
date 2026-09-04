@@ -3,11 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
+import '../../../shared/formatting/app_date_format.dart';
+import '../../../shared/formatting/category_lookup.dart';
+import '../../../shared/widgets/app_error_state.dart';
+import '../../../shared/widgets/app_list_section.dart';
+import '../../../shared/widgets/app_skeleton.dart';
+import '../../../shared/widgets/category_avatar.dart';
+import '../../../shared/widgets/entity_list_row.dart';
+import '../../../shared/widgets/money_text.dart';
+import '../../../shared/widgets/status_pill.dart';
 import '../domain/invoice_filters.dart';
 import '../domain/invoice_models.dart';
 
@@ -77,13 +85,24 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
             ),
           ),
           invoices.when(
-            loading: () => const SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: CircularProgressIndicator()),
+            loading: () => const SliverPadding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 112),
+              sliver: SliverToBoxAdapter(child: SkeletonListRows(count: 6)),
             ),
+            // Trước đây nhánh này là ngõ cụt hoàn toàn: một câu có nội suy
+            // exception, không nút nào.
             error: (error, stack) => SliverFillRemaining(
               hasScrollBody: false,
-              child: Center(child: Text('Không thể tải hóa đơn: $error')),
+              child: AppErrorState(
+                error: error,
+                stackTrace: stack,
+                title: 'Không tải được danh sách hóa đơn',
+                onRetry: () => ref.invalidate(
+                  filteredInvoiceSummariesProvider(
+                    InvoiceListQuery(filter: filter, limit: _limit + 1),
+                  ),
+                ),
+              ),
             ),
             data: (items) {
               final hasMore = items.length > _limit;
@@ -102,21 +121,34 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
               }
               return SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 112),
-                sliver: SliverList.separated(
-                  itemCount: visible.length + (hasMore ? 1 : 0),
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    if (index == visible.length) {
-                      return Center(
-                        child: OutlinedButton.icon(
-                          onPressed: () => setState(() => _limit += 50),
-                          icon: const Icon(Icons.expand_more),
-                          label: const Text('Tải thêm hóa đơn'),
+                sliver: SliverMainAxisGroup(
+                  slivers: [
+                    // MỘT thẻ với các dòng có kẻ tóc, thay vì 50 thẻ chồng lên
+                    // nhau — xoá 49 viền khỏi cuộn dài nhất của app.
+                    SliverAppListSection(
+                      itemCount: visible.length,
+                      itemBuilder: (context, index) => _InvoiceRow(
+                        invoice: visible[index],
+                        category: findCategory(
+                          categories,
+                          visible[index].categoryId,
                         ),
-                      );
-                    }
-                    return _InvoiceCard(invoice: visible[index]);
-                  },
+                      ),
+                    ),
+                    if (hasMore)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: Center(
+                            child: OutlinedButton.icon(
+                              onPressed: () => setState(() => _limit += 50),
+                              icon: const Icon(Icons.expand_more),
+                              label: const Text('Tải thêm hóa đơn'),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               );
             },
@@ -348,91 +380,57 @@ class _FilterHeader extends StatelessWidget {
   }
 }
 
-class _InvoiceCard extends StatelessWidget {
-  const _InvoiceCard({required this.invoice});
+class _InvoiceRow extends StatelessWidget {
+  const _InvoiceRow({required this.invoice, required this.category});
 
   final InvoiceEntity invoice;
-
-  @override
-  Widget build(BuildContext context) {
-    final date = invoice.issuedAt ?? invoice.createdAt;
-    final needsReview = invoice.status == InvoiceStatus.needsReview;
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => context.push('/invoices/${invoice.id}'),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                child: Icon(_sourceIcon(invoice.sourceType)),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      invoice.sellerName.isEmpty
-                          ? 'Chưa có tên người bán'
-                          : invoice.sellerName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${DateFormat('dd/MM/yyyy').format(date)} · ${_sourceLabel(invoice.sourceType)}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    if (needsReview) ...[
-                      const SizedBox(height: 8),
-                      const _ReviewBadge(),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                MoneyFormatter.format(invoice.totalMinor),
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ReviewBadge extends StatelessWidget {
-  const _ReviewBadge();
+  final CategoryEntity? category;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Semantics(
-      label: 'Hóa đơn cần kiểm tra',
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: scheme.errorContainer,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          child: Text(
-            'Cần kiểm tra',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: scheme.onErrorContainer,
-              fontWeight: FontWeight.w700,
-            ),
+    final date = invoice.issuedAt ?? invoice.createdAt;
+    final needsReview = invoice.status == InvoiceStatus.needsReview;
+    final seller = invoice.sellerName.isEmpty
+        ? 'Chưa có tên người bán'
+        : invoice.sellerName;
+    final categoryName = category?.name ?? 'Chưa phân loại';
+
+    return EntityListRow(
+      // Danh mục dẫn đầu, không phải phương thức import. Danh mục là trục tổ
+      // chức của cả ngân sách lẫn dashboard; trước đây nó không xuất hiện ở
+      // đây, trong khi nguồn import chiếm avatar 48dp.
+      leading: CategoryAvatar(category: category),
+      title: seller,
+      subtitle: '$categoryName · ${AppDateFormat.shortDate(date)}',
+      badge: needsReview
+          // tone warn, KHÔNG phải danger: cần kiểm tra không phải là lỗi.
+          ? const StatusPill(
+              icon: Icons.fact_check_outlined,
+              label: 'Cần kiểm tra',
+              tone: StatusTone.warn,
+              dense: true,
+            )
+          : null,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          MoneyText(invoice.totalMinor),
+          const SizedBox(width: 6),
+          // Nguồn import xuống hạng thành glyph nhỏ ở đuôi.
+          Icon(
+            _sourceIcon(invoice.sourceType),
+            size: 16,
+            color: scheme.onSurfaceVariant,
           ),
-        ),
+        ],
       ),
+      onTap: () => context.push('/invoices/${invoice.id}'),
+      // Một câu duy nhất cho TalkBack, thay vì 4 mảnh rời.
+      semanticLabel:
+          '$seller, $categoryName, ${AppDateFormat.shortDate(date)}, '
+          '${MoneyFormatter.format(invoice.totalMinor)}'
+          '${needsReview ? ', cần kiểm tra' : ''}',
     );
   }
 }

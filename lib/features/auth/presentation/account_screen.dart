@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/app_providers.dart';
+import '../../../shared/errors/error_presenter.dart';
 
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
@@ -59,7 +60,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     error: (error, _) => _StatusCard(
                       icon: Icons.cloud_off_outlined,
                       title: 'Không đọc được phiên đăng nhập',
-                      message: '$error',
+                      message: friendlyMessage(error),
                       isError: true,
                     ),
                   ),
@@ -332,7 +333,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
-        _message = 'Không thể kết nối Supabase: $error';
+        _message = 'Không thể kết nối Supabase: ${friendlyMessage(error)}';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -443,7 +444,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
-        _message = 'Không thể đăng xuất: $error';
+        _message = 'Không thể đăng xuất: ${friendlyMessage(error)}';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
