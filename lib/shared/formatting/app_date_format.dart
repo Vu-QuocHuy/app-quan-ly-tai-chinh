@@ -5,8 +5,17 @@ import 'package:intl/intl.dart';
 /// Thay hai formatter viết tay bằng nội suy chuỗi và bốn literal
 /// `DateFormat('dd/MM/yyyy')` rời rạc nằm rải trong các màn hình.
 abstract final class AppDateFormat {
-  static final DateFormat _short = DateFormat('dd/MM/yyyy', 'vi_VN');
-  static final DateFormat _dateTime = DateFormat('dd/MM/yyyy HH:mm', 'vi_VN');
+  // KHÔNG truyền locale tường minh. `DateFormat` với locale không mặc định ném
+  // `LocaleDataException` nếu chưa gọi `initializeDateFormatting(...)` — khác
+  // với `NumberFormat`, vốn có sẵn ký hiệu số nên không cần khởi tạo. Trong app
+  // thì `GlobalMaterialLocalizations` lo việc đó, nhưng bất kỳ chỗ nào dựng
+  // widget mà không có delegate (widget test, hoặc gọi sớm trước khi delegate
+  // load xong) sẽ crash.
+  //
+  // An toàn vì cả hai pattern đều THUẦN SỐ: không tên tháng, không tên thứ,
+  // nên locale không làm đổi kết quả.
+  static final DateFormat _short = DateFormat('dd/MM/yyyy');
+  static final DateFormat _dateTime = DateFormat('dd/MM/yyyy HH:mm');
 
   /// `04/09/2026`
   static String shortDate(DateTime value) => _short.format(value);
