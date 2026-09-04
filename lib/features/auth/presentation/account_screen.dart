@@ -91,7 +91,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'OCR và dữ liệu local vẫn hoạt động khi mất mạng. Tài khoản dùng để sao lưu và đồng bộ hóa đơn.',
+            'Đăng nhập hoặc tạo tài khoản để sử dụng ứng dụng và đồng bộ dữ liệu an toàn.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),

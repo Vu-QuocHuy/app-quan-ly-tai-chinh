@@ -138,12 +138,12 @@ class _AppShellState extends ConsumerState<AppShell>
         onPressed: _isImporting ? _cancelImport : _showImportSources,
         tooltip: _isImporting && _importFileName != null
             ? 'Đang xử lý $_importFileName · Nhấn để hủy'
-            : 'Thêm hóa đơn',
+            : 'Thêm giao dịch',
         icon: _isImporting
             ? const Icon(Icons.stop_circle_outlined)
             : const Icon(Icons.add_a_photo_outlined),
         label: Text(
-          _isImporting ? 'Hủy $_importIndex/$_importTotal' : 'Thêm hóa đơn',
+          _isImporting ? 'Hủy $_importIndex/$_importTotal' : 'Thêm giao dịch',
         ),
       ),
     );

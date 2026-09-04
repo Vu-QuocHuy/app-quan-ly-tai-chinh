@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../core/config/app_environment.dart';
 import '../../../core/providers/app_providers.dart';
@@ -97,25 +96,6 @@ class SettingsScreen extends ConsumerWidget {
                       loading: () => const _LoadingTile(),
                       error: (error, _) => _ErrorTile(
                         message: 'Không đọc được cài đặt thông báo: $error',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _Section(
-                  title: 'Danh mục',
-                  children: [
-                    categoriesAsync.when(
-                      data: (items) => _CategoryManagement(
-                        categories: items,
-                        onEdit: (category) =>
-                            _editCategory(context, ref, items, category),
-                        onDelete: (category) =>
-                            _confirmDeleteCategory(context, ref, category),
-                      ),
-                      loading: () => const _LoadingTile(),
-                      error: (error, _) => _ErrorTile(
-                        message: 'Không tải được danh mục: $error',
                       ),
                     ),
                   ],
@@ -294,82 +274,6 @@ class SettingsScreen extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  Future<void> _editCategory(
-    BuildContext context,
-    WidgetRef ref,
-    List<CategoryEntity> categories,
-    CategoryEntity? editing,
-  ) async {
-    final category = await _showCategoryDialog(
-      context,
-      categories: categories,
-      editing: editing,
-    );
-    if (category == null || !context.mounted) return;
-
-    try {
-      await ref.read(invoiceRepositoryProvider).saveCategory(category);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            editing == null ? 'Đã thêm danh mục.' : 'Đã cập nhật danh mục.',
-          ),
-        ),
-      );
-    } on Object catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Không thể lưu danh mục: $error')));
-    }
-  }
-
-  Future<void> _confirmDeleteCategory(
-    BuildContext context,
-    WidgetRef ref,
-    CategoryEntity category,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.delete_outline),
-        title: Text('Xóa “${category.name}”?'),
-        content: const Text(
-          'Hóa đơn đang dùng danh mục này sẽ chuyển về “Khác”. Ngân sách và quy tắc merchant của danh mục sẽ bị xóa.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(dialogContext).colorScheme.error,
-              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Xóa danh mục'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-
-    try {
-      await ref.read(invoiceRepositoryProvider).deleteCategory(category.id);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Đã xóa danh mục.')));
-    } on Object catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Không thể xóa danh mục: $error')));
-    }
   }
 
   Future<void> _confirmDeleteRule(
@@ -1076,129 +980,6 @@ class _RestoreStat extends StatelessWidget {
   }
 }
 
-Future<CategoryEntity?> _showCategoryDialog(
-  BuildContext context, {
-  required List<CategoryEntity> categories,
-  CategoryEntity? editing,
-}) async {
-  final controller = TextEditingController(text: editing?.name);
-  final formKey = GlobalKey<FormState>();
-  try {
-    return await showDialog<CategoryEntity>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(editing == null ? 'Thêm danh mục' : 'Đổi tên danh mục'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'Tên danh mục',
-              hintText: 'Ví dụ: Văn phòng phẩm',
-              prefixIcon: Icon(Icons.category_outlined),
-            ),
-            validator: (value) {
-              final name = value?.trim() ?? '';
-              if (name.isEmpty) return 'Hãy nhập tên danh mục.';
-              final duplicate = categories.any(
-                (item) =>
-                    item.id != editing?.id &&
-                    item.name.trim().toLowerCase() == name.toLowerCase(),
-              );
-              if (duplicate) return 'Tên danh mục đã tồn tại.';
-              return null;
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (!(formKey.currentState?.validate() ?? false)) return;
-              Navigator.pop(
-                dialogContext,
-                CategoryEntity(
-                  id: editing?.id ?? 'custom-${const Uuid().v4()}',
-                  name: controller.text.trim(),
-                  iconName: editing?.iconName ?? 'category',
-                  colorValue: editing?.colorValue ?? 0xFF0F766E,
-                  isSystem: false,
-                ),
-              );
-            },
-            child: const Text('Lưu'),
-          ),
-        ],
-      ),
-    );
-  } finally {
-    controller.dispose();
-  }
-}
-
-class _CategoryManagement extends StatelessWidget {
-  const _CategoryManagement({
-    required this.categories,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  final List<CategoryEntity> categories;
-  final ValueChanged<CategoryEntity?> onEdit;
-  final ValueChanged<CategoryEntity> onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.icon(
-              onPressed: () => onEdit(null),
-              icon: const Icon(Icons.add),
-              label: const Text('Thêm danh mục'),
-              style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-            ),
-          ),
-        ),
-        ...categories.map(
-          (category) => ListTile(
-            leading: _CategoryAvatar(category: category),
-            title: Text(category.name),
-            subtitle: Text(
-              category.isSystem ? 'Danh mục mặc định' : 'Danh mục tùy chỉnh',
-            ),
-            trailing: category.isSystem
-                ? const Icon(Icons.lock_outline, size: 18)
-                : Wrap(
-                    spacing: 0,
-                    children: [
-                      IconButton(
-                        tooltip: 'Đổi tên',
-                        onPressed: () => onEdit(category),
-                        icon: const Icon(Icons.edit_outlined),
-                      ),
-                      IconButton(
-                        tooltip: 'Xóa danh mục',
-                        onPressed: () => onDelete(category),
-                        icon: const Icon(Icons.delete_outline),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _MerchantRuleManagement extends StatelessWidget {
   const _MerchantRuleManagement({
     required this.rules,
@@ -1379,20 +1160,6 @@ class _ExportManagement extends StatelessWidget {
   }
 }
 
-class _CategoryAvatar extends StatelessWidget {
-  const _CategoryAvatar({required this.category});
-
-  final CategoryEntity category;
-
-  @override
-  Widget build(BuildContext context) {
-    return CircleAvatar(
-      backgroundColor: Color(category.colorValue),
-      child: Icon(_categoryIcon(category.iconName), color: Colors.white),
-    );
-  }
-}
-
 class _LoadingTile extends StatelessWidget {
   const _LoadingTile();
 
@@ -1456,14 +1223,3 @@ CategoryEntity? _findCategory(
   }
   return null;
 }
-
-IconData _categoryIcon(String iconName) => switch (iconName) {
-  'restaurant' => Icons.restaurant,
-  'directions_car' => Icons.directions_car,
-  'shopping_bag' => Icons.shopping_bag,
-  'bolt' => Icons.bolt,
-  'health_and_safety' => Icons.health_and_safety,
-  'school' => Icons.school,
-  'movie' => Icons.movie,
-  _ => Icons.category,
-};

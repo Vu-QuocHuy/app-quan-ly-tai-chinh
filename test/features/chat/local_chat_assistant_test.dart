@@ -55,6 +55,9 @@ void main() {
     );
     final recent = await assistant.answer('Liệt kê hóa đơn gần đây');
     final search = await assistant.answer('Tìm hóa đơn của Cửa hàng A');
+    final spendingSearch = await assistant.answer(
+      'Tôi đã chi ở Cửa hàng A bao nhiêu?',
+    );
     final amountSearch = await assistant.answer('Tìm hóa đơn trên 500000');
     final combinedSearch = await assistant.answer(
       'Tìm hóa đơn của Cửa hàng A từ 500000 đến 900000',
@@ -66,6 +69,7 @@ void main() {
     expect(budget.text, contains('80.0%'));
     expect(recent.text, contains('Cửa hàng A'));
     expect(search.text, contains('Cửa hàng A'));
+    expect(spendingSearch.text, contains('Cửa hàng A'));
     expect(
       search.citations.where((item) => item.sourceType == 'invoice'),
       hasLength(1),

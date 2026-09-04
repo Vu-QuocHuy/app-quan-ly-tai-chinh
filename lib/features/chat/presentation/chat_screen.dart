@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
@@ -366,6 +367,28 @@ class _MessageBubble extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(message.text),
+                  if (!isUser) ...[
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        tooltip: 'Sao chép câu trả lời',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () async {
+                          await Clipboard.setData(
+                            ClipboardData(text: message.text),
+                          );
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Đã sao chép câu trả lời.'),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.copy_outlined, size: 18),
+                      ),
+                    ),
+                  ],
                   if (message.citations.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     const Divider(height: 1),

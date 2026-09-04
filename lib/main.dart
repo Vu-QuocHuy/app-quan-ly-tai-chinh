@@ -9,6 +9,7 @@ import 'features/notifications/data/budget_notification_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SupabaseBootstrap.initialize();
+  authRouterRefresh.attach(SupabaseBootstrap.clientOrNull);
   final launchPayload = await BudgetNotificationService.instance.initialize(
     onTap: _handleNotificationTap,
   );

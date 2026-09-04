@@ -440,24 +440,39 @@ class LocalChatAssistant {
 
   String? _merchantQuery(String value) {
     final normalized = _normalize(value);
-    if (!normalized.contains('hoa don') ||
-        (!normalized.contains('tim ') &&
-            !normalized.contains('loc ') &&
-            !normalized.contains('hoa don cua'))) {
+    final hasInvoiceSearch =
+        normalized.contains('hoa don') &&
+        (normalized.contains('tim ') ||
+            normalized.contains('loc ') ||
+            normalized.contains('hoa don cua'));
+    final hasSpendingSearch = RegExp(
+      r'(chi|mua|giao dich)\s+(tai|o|cho)\s+',
+    ).hasMatch(normalized);
+    if (!hasInvoiceSearch && !hasSpendingSearch) {
       return null;
     }
     var query = value;
-    query = query.replaceFirst(
-      RegExp(
-        r'.*?(?:tìm|tim|lọc|loc)\s+hóa đơn(?:\s+của|\s+cua)?\s*',
-        caseSensitive: false,
-      ),
-      '',
-    );
-    query = query.replaceFirst(
-      RegExp(r'.*?hóa đơn\s+của\s*', caseSensitive: false),
-      '',
-    );
+    if (hasInvoiceSearch) {
+      query = query.replaceFirst(
+        RegExp(
+          r'.*?(?:tìm|tim|lọc|loc)\s+hóa đơn(?:\s+của|\s+cua)?\s*',
+          caseSensitive: false,
+        ),
+        '',
+      );
+      query = query.replaceFirst(
+        RegExp(r'.*?hóa đơn\s+của\s*', caseSensitive: false),
+        '',
+      );
+    } else {
+      query = query.replaceFirst(
+        RegExp(
+          r'.*?(?:chi|mua|giao dịch)\s+(?:tại|tai|ở|o|cho)\s+',
+          caseSensitive: false,
+        ),
+        '',
+      );
+    }
     query = query.replaceFirst(
       RegExp(
         r'\s+(trong|tháng|thang|trên|tren|dưới|duoi|từ|tu)(?:\s|$).*',

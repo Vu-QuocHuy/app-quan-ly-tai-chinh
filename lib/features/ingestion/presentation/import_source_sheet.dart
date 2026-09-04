@@ -15,7 +15,7 @@ class ImportSourceSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Thêm hóa đơn', style: theme.textTheme.headlineSmall),
+            Text('Thêm giao dịch', style: theme.textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(
               'Ưu tiên XML để có dữ liệu chính xác nhất. Bạn luôn được kiểm tra trước khi lưu.',

@@ -471,7 +471,7 @@ class _InvoiceEmptyState extends StatelessWidget {
                 ? (query.trim().isEmpty
                       ? 'Thử bỏ bớt bộ lọc để xem thêm kết quả.'
                       : 'Không có kết quả cho “${query.trim()}”. Hãy thử từ khóa khác.')
-                : 'Nhấn “Thêm hóa đơn” để nhập XML, chụp ảnh hoặc nhập thủ công.',
+                : 'Nhấn “Thêm giao dịch” để nhập XML, chụp ảnh hoặc nhập thủ công.',
             textAlign: TextAlign.center,
           ),
           if (filtered && onClear != null) ...[

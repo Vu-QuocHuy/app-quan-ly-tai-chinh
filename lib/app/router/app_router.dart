@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/budgets/presentation/budget_screen.dart';
 import '../../features/auth/presentation/account_screen.dart';
@@ -13,13 +16,24 @@ import '../../features/review/presentation/review_invoice_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/sync/presentation/sync_conflicts_screen.dart';
 import '../shell/app_shell.dart';
+import '../../core/security/supabase_bootstrap.dart';
 
 final _rootKey = GlobalKey<NavigatorState>();
+final authRouterRefresh = _AuthRouterRefresh();
 
 final appRouter = GoRouter(
   navigatorKey: _rootKey,
+  refreshListenable: authRouterRefresh,
   initialLocation: '/',
+  redirect: (context, state) {
+    final isAuthRoute = state.matchedLocation == '/auth';
+    final isSignedIn = SupabaseBootstrap.clientOrNull?.auth.currentUser != null;
+    if (!isSignedIn && !isAuthRoute) return '/auth';
+    if (isSignedIn && isAuthRoute) return '/';
+    return null;
+  },
   routes: [
+    GoRoute(path: '/auth', builder: (context, state) => const AccountScreen()),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) =>
           AppShell(navigationShell: navigationShell),
@@ -108,3 +122,21 @@ final appRouter = GoRouter(
     ),
   ],
 );
+
+class _AuthRouterRefresh extends ChangeNotifier {
+  StreamSubscription<AuthState>? _subscription;
+
+  void attach(SupabaseClient? client) {
+    _subscription?.cancel();
+    _subscription = client?.auth.onAuthStateChange.listen(
+      (_) => notifyListeners(),
+    );
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+}
