@@ -13,6 +13,8 @@ import '../../features/ingestion/data/pending_import_store.dart';
 import '../../features/ingestion/data/qr_scanner_service.dart';
 import '../../features/ingestion/presentation/import_source_sheet.dart';
 import '../../shared/errors/error_presenter.dart';
+import '../../shared/widgets/reading_pane.dart';
+import '../theme/app_tokens.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({required this.navigationShell, super.key});
@@ -96,7 +98,7 @@ class _AppShellState extends ConsumerState<AppShell>
       if (!_isImporting) unawaited(_resumePendingImports());
     });
     final width = MediaQuery.sizeOf(context).width;
-    final useRail = width >= 840;
+    final useRail = AppBreakpoints.useRail(width);
     final content = widget.navigationShell;
     return Scaffold(
       body: SafeArea(
@@ -124,7 +126,9 @@ class _AppShellState extends ConsumerState<AppShell>
                     )
                     .toList(growable: false),
               ),
-            Expanded(child: content),
+            // Khi rail xuất hiện, nội dung được ràng vào bề rộng đọc và canh
+            // giữa thay vì kéo dài hết cửa sổ.
+            Expanded(child: useRail ? ReadingPane(child: content) : content),
           ],
         ),
       ),

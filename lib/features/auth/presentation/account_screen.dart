@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../../shared/errors/error_presenter.dart';
+import '../../../shared/widgets/app_callout.dart';
 
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
@@ -457,12 +459,23 @@ class _ConfigurationMissingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const _StatusCard(
-      icon: Icons.settings_ethernet_outlined,
-      title: 'Supabase chưa được cấu hình khi build',
+    // Không phải LỖI: đây là một build hợp lệ, chỉ là không có cloud. App vẫn
+    // chạy đủ chức năng local, nên giọng điệu và lối ra phải phản ánh điều đó.
+    return AppCallout(
+      icon: Icons.cloud_off_outlined,
+      tone: CalloutTone.info,
+      title: 'Bản build này không có đồng bộ cloud',
       message:
-          'Chạy app với --dart-define-from-file=config/supabase.local.json để bật tài khoản và đồng bộ.',
-      isError: true,
+          'Nhập hóa đơn, OCR, ngân sách và toàn bộ thống kê vẫn hoạt động và '
+          'dữ liệu được lưu trên máy. Tài khoản và đồng bộ cần cấu hình '
+          'Supabase khi build.',
+      actions: [
+        FilledButton.icon(
+          onPressed: () => context.go('/'),
+          icon: const Icon(Icons.arrow_forward),
+          label: const Text('Tiếp tục dùng offline'),
+        ),
+      ],
     );
   }
 }

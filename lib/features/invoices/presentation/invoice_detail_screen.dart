@@ -9,6 +9,8 @@ import '../../../shared/formatting/category_icons.dart';
 import '../domain/invoice_models.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
+import '../../../shared/widgets/app_error_state.dart';
+import '../../../shared/widgets/app_empty_state.dart';
 
 class InvoiceDetailScreen extends ConsumerWidget {
   const InvoiceDetailScreen({required this.invoiceId, super.key});
@@ -18,41 +20,51 @@ class InvoiceDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final categories = ref.watch(categoriesProvider).value ?? const [];
-    return FutureBuilder<InvoiceEntity?>(
-      future: ref.read(invoiceRepositoryProvider).findById(invoiceId),
-      builder: (context, snapshot) {
-        final invoice = snapshot.data;
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Chi tiết hóa đơn'),
-            actions: [
-              if (invoice != null)
-                IconButton(
-                  tooltip: 'Chỉnh sửa',
-                  onPressed: () => context.push('/review', extra: invoice),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              if (invoice != null)
-                IconButton(
-                  tooltip: 'Xóa hóa đơn',
-                  onPressed: () => _deleteInvoice(context, ref, invoice),
-                  icon: const Icon(Icons.delete_outline),
-                ),
-            ],
+    final detail = ref.watch(invoiceDetailProvider(invoiceId));
+    final invoice = detail.valueOrNull;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Chi tiết hóa đơn'),
+        actions: [
+          if (invoice != null) ...[
+            IconButton(
+              tooltip: 'Chỉnh sửa',
+              onPressed: () => context.push('/review', extra: invoice),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+            IconButton(
+              tooltip: 'Xóa hóa đơn',
+              onPressed: () => _deleteInvoice(context, ref, invoice),
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
+        ],
+      ),
+      // Ba trạng thái KHÁC NHAU, không còn gộp thành một câu sai:
+      // đang tải / lỗi đọc được kèm retry / hóa đơn không còn tồn tại.
+      body: switch (detail) {
+        AsyncError(:final error, :final stackTrace) => AppErrorState(
+          error: error,
+          stackTrace: stackTrace,
+          title: 'Không đọc được hóa đơn',
+          onRetry: () => ref.invalidate(invoiceDetailProvider(invoiceId)),
+        ),
+        AsyncLoading() => const Center(child: CircularProgressIndicator()),
+        _ when invoice == null => AppEmptyState(
+          icon: Icons.receipt_long_outlined,
+          title: 'Hóa đơn không còn tồn tại',
+          message: 'Hóa đơn này có thể đã bị xóa trên thiết bị khác.',
+          action: FilledButton.icon(
+            onPressed: () => context.go('/invoices'),
+            icon: const Icon(Icons.list_alt_outlined),
+            label: const Text('Quay lại danh sách'),
           ),
-          body: switch (snapshot.connectionState) {
-            ConnectionState.waiting => const Center(
-              child: CircularProgressIndicator(),
-            ),
-            _ when invoice == null => const Center(
-              child: Text('Không tìm thấy hóa đơn.'),
-            ),
-            _ => _InvoiceDetail(
-              invoice: invoice,
-              category: _findCategory(categories, invoice.categoryId),
-            ),
-          },
-        );
+        ),
+        _ => _InvoiceDetail(
+          invoice: invoice,
+          category: _findCategory(categories, invoice.categoryId),
+        ),
       },
     );
   }

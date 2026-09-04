@@ -207,11 +207,27 @@ final invoiceSummariesProvider = StreamProvider<List<InvoiceEntity>>((ref) {
   return ref.watch(invoiceRepositoryProvider).watchInvoiceSummaries();
 });
 
-final filteredInvoiceSummariesProvider =
-    StreamProvider.family<List<InvoiceEntity>, InvoiceListQuery>((ref, query) {
+// autoDispose: family này được key theo (filter, limit). Mỗi lần người dùng gõ
+// vào ô tìm kiếm hoặc bấm "Tải thêm" là một key mới, và không có autoDispose
+// thì mọi stream cũ vẫn sống — giữ nguyên subscription drift cho từng tổ hợp
+// bộ lọc trong suốt phiên.
+final filteredInvoiceSummariesProvider = StreamProvider.autoDispose
+    .family<List<InvoiceEntity>, InvoiceListQuery>((ref, query) {
       return ref
           .watch(invoiceRepositoryProvider)
           .watchInvoiceSummaries(filter: query.filter, limit: query.limit);
+    });
+
+/// Chi tiết một hóa đơn theo id.
+///
+/// Trước đây màn Chi tiết gọi `findById` trong `FutureBuilder` dựng ngay trong
+/// `build()`: mỗi lần `categoriesProvider` phát là một Future MỚI, nên
+/// `connectionState` về `waiting` và cả trang nháy về spinner. Nó cũng không có
+/// nhánh lỗi, nên lỗi DB tạm thời bị trình bày thành "Không tìm thấy hóa đơn"
+/// — tức là báo mất dữ liệu.
+final invoiceDetailProvider = FutureProvider.autoDispose
+    .family<InvoiceEntity?, String>((ref, id) {
+      return ref.watch(invoiceRepositoryProvider).findById(id);
     });
 
 final categoriesProvider = StreamProvider<List<CategoryEntity>>((ref) {

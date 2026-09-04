@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/theme/app_tokens.dart';
 import '../../app/theme/finance_colors.dart';
 import '../../core/utils/money_formatter.dart';
 
@@ -18,6 +19,7 @@ class MoneyText extends StatelessWidget {
     this.compact = false,
     this.fitToWidth = false,
     this.textAlign,
+    this.animate = false,
     super.key,
   });
 
@@ -37,8 +39,27 @@ class MoneyText extends StatelessWidget {
 
   final TextAlign? textAlign;
 
+  /// Đếm lên tới giá trị mới thay vì nhảy cóc.
+  ///
+  /// Chỉ dùng được vì các style tiền đều mang `tabularFigures`: chữ số
+  /// không đổi bề ngang trong lúc đếm nên chuỗi không bị dồn qua lại.
+  /// Dành cho hero Dashboard; KHÔNG dùng trong dòng danh sách.
+  final bool animate;
+
   @override
   Widget build(BuildContext context) {
+    if (!animate || AppMotion.isReduced(context)) {
+      return _render(context, minor);
+    }
+    return TweenAnimationBuilder<int>(
+      tween: IntTween(begin: minor, end: minor),
+      duration: AppMotion.slow,
+      curve: AppMotion.enter,
+      builder: (context, value, _) => _render(context, value),
+    );
+  }
+
+  Widget _render(BuildContext context, int value) {
     final finance = context.finance;
 
     final style = switch (emphasis) {
@@ -50,8 +71,8 @@ class MoneyText extends StatelessWidget {
 
     final color = tone?.color ?? finance.expense.color;
     final text = compact && currencyCode == 'VND'
-        ? MoneyFormatter.compact(minor)
-        : MoneyFormatter.format(minor, currencyCode: currencyCode);
+        ? MoneyFormatter.compact(value)
+        : MoneyFormatter.format(value, currencyCode: currencyCode);
 
     final label = Text(
       text,

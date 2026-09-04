@@ -130,7 +130,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 12),
-                  _DailyChart(snapshot: snapshot),
+                  _DailyChart(snapshot: snapshot, month: selectedMonth),
                   const SizedBox(height: 24),
                   Text(
                     'Theo danh mục',
@@ -385,6 +385,7 @@ class _HeroSummary extends StatelessWidget {
                 snapshot.totalMinor,
                 emphasis: MoneyEmphasis.display,
                 fitToWidth: true,
+                animate: true,
                 tone: FinanceTone(
                   color: scheme.onPrimary,
                   onColor: scheme.primary,
@@ -491,83 +492,153 @@ class _BudgetCard extends StatelessWidget {
 }
 
 class _DailyChart extends StatelessWidget {
-  const _DailyChart({required this.snapshot});
+  const _DailyChart({required this.snapshot, required this.month});
 
   final DashboardSnapshot snapshot;
+  final DateTime month;
 
   @override
   Widget build(BuildContext context) {
     if (snapshot.dailyTotals.isEmpty) {
       return const AppCard(
         child: AppEmptyState(
-          icon: Icons.bar_chart,
+          icon: Icons.show_chart,
           title: 'Chưa có dữ liệu chi tiêu',
           message: 'Biểu đồ sẽ xuất hiện sau khi bạn xác nhận hóa đơn.',
         ),
       );
     }
-    final entries = snapshot.dailyTotals.entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
-    final visible = entries.length > 12
-        ? entries.sublist(entries.length - 12)
-        : entries;
-    final maxValue = visible.fold<int>(
-      0,
-      (max, item) => math.max(max, item.value),
-    );
-    final scheme = Theme.of(context).colorScheme;
+
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final days = DateUtils.getDaysInMonth(month.year, month.month);
+
+    // LÀM DÀY chuỗi dữ liệu: một điểm cho MỌI ngày trong tháng, 0 cho ngày
+    // không chi. Trước đây biểu đồ chỉ vẽ những ngày CÓ hóa đơn và âm thầm bỏ
+    // tất cả trừ 12 điểm cuối, nên trục hoành không tương ứng với thời gian.
+    var running = 0;
+    final spots = <FlSpot>[];
+    for (var day = 1; day <= days; day++) {
+      running += snapshot.dailyTotals[day] ?? 0;
+      spots.add(FlSpot(day.toDouble(), running.toDouble()));
+    }
+
+    // Nhịp của tháng trước, vẽ tuyến tính. Phân biệt bằng KIỂU NÉT (đứt) chứ
+    // không bằng màu, nên an toàn với người mù màu ngay từ cấu trúc.
+    final previous = snapshot.previousMonthTotalMinor;
+    final paceSpots = previous > 0
+        ? [FlSpot(1, 0), FlSpot(days.toDouble(), previous.toDouble())]
+        : const <FlSpot>[];
+
+    final maxY = math.max(running, previous).toDouble();
+
     return Semantics(
       label:
-          'Biểu đồ cột chi tiêu theo ngày. Có ${visible.length} ngày có chi tiêu.',
-      child: Card(
-        child: SizedBox(
-          height: 240,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 24, 20, 12),
-            child: BarChart(
-              BarChartData(
-                maxY: maxValue == 0 ? 1 : maxValue * 1.2,
-                alignment: BarChartAlignment.spaceAround,
-                gridData: const FlGridData(show: false),
-                borderData: FlBorderData(show: false),
-                barTouchData: BarTouchData(enabled: true),
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  leftTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) => Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text('${visible[value.toInt()].key}'),
+          'Biểu đồ chi tiêu cộng dồn theo ngày. '
+          'Tổng cuối kỳ ${MoneyFormatter.format(running)}.'
+          '${previous > 0 ? ' Tháng trước ${MoneyFormatter.format(previous)}.' : ''}',
+      child: AppCard(
+        child: AspectRatio(
+          aspectRatio: 16 / 10,
+          child: LineChart(
+            LineChartData(
+              minX: 1,
+              maxX: days.toDouble(),
+              minY: 0,
+              maxY: maxY <= 0 ? 1 : maxY * 1.12,
+              // Trước đây mọi tham chiếu định lượng đều bị tắt: không lưới,
+              // không nhãn trục tung. Biểu đồ chỉ còn là trang trí.
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: maxY <= 0 ? 1 : maxY / 3,
+                getDrawingHorizontalLine: (value) => FlLine(
+                  color: scheme.outlineVariant.withValues(alpha: 0.5),
+                  strokeWidth: 1,
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              titlesData: FlTitlesData(
+                topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 56,
+                    interval: maxY <= 0 ? 1 : maxY / 3,
+                    getTitlesWidget: (value, meta) => Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Text(
+                        MoneyFormatter.compact(value.round()),
+                        style: theme.textTheme.bodySmall,
+                        textAlign: TextAlign.right,
                       ),
                     ),
                   ),
                 ),
-                barGroups: [
-                  for (var index = 0; index < visible.length; index++)
-                    BarChartGroupData(
-                      x: index,
-                      barRods: [
-                        BarChartRodData(
-                          toY: visible[index].value.toDouble(),
-                          width: 14,
-                          color: scheme.primary,
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(6),
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    interval: 5,
+                    // Mặc định 22dp không đủ cho bodySmall ở textScale lớn.
+                    reservedSize: 28,
+                    getTitlesWidget: (value, meta) {
+                      final day = value.round();
+                      if (day < 1 || day > days) {
+                        return const SizedBox.shrink();
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text('$day', style: theme.textTheme.bodySmall),
+                      );
+                    },
+                  ),
+                ),
               ),
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipColor: (_) => scheme.inverseSurface,
+                  getTooltipItems: (touched) => touched
+                      .map((spot) {
+                        final day = spot.x.round();
+                        final label = spot.barIndex == 0
+                            ? 'Cộng dồn tới ${day.toString().padLeft(2, '0')}/'
+                                  '${month.month.toString().padLeft(2, '0')}'
+                            : 'Nhịp tháng trước';
+                        return LineTooltipItem(
+                          '$label\n${MoneyFormatter.format(spot.y.round())}',
+                          TextStyle(color: scheme.onInverseSurface),
+                        );
+                      })
+                      .toList(growable: false),
+                ),
+              ),
+              lineBarsData: [
+                LineChartBarData(
+                  spots: spots,
+                  isCurved: false,
+                  color: scheme.primary,
+                  barWidth: 2,
+                  dotData: const FlDotData(show: false),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    color: scheme.primary.withValues(alpha: 0.06),
+                  ),
+                ),
+                if (paceSpots.isNotEmpty)
+                  LineChartBarData(
+                    spots: paceSpots,
+                    isCurved: false,
+                    color: scheme.outline,
+                    barWidth: 1.5,
+                    dashArray: const [3, 4],
+                    dotData: const FlDotData(show: false),
+                  ),
+              ],
             ),
           ),
         ),
