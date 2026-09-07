@@ -5,8 +5,10 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
 import '../../../shared/widgets/month_selector.dart';
+import '../../../shared/widgets/category_avatar.dart';
 import '../../invoices/domain/invoice_models.dart';
 import 'category_management.dart';
+import '../../../shared/errors/error_presenter.dart';
 
 class BudgetScreen extends ConsumerWidget {
   const BudgetScreen({super.key});
@@ -60,7 +62,11 @@ class BudgetScreen extends ConsumerWidget {
               (AsyncError(error: final error), _) ||
               (_, AsyncError(error: final error)) => SliverFillRemaining(
                 hasScrollBody: false,
-                child: Center(child: Text('Không thể tải ngân sách: $error')),
+                child: Center(
+                  child: Text(
+                    'Không thể tải ngân sách: ${friendlyMessage(error)}',
+                  ),
+                ),
               ),
               _ => const SliverFillRemaining(
                 hasScrollBody: false,
@@ -171,14 +177,10 @@ class _BudgetTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(category.colorValue);
     return Card(
       child: ListTile(
         minTileHeight: 72,
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.14),
-          child: Icon(categoryIcon(category.iconName), color: color),
-        ),
+        leading: CategoryAvatar(category: category),
         title: Text(category.name),
         subtitle: Text(
           budget == null
@@ -217,7 +219,11 @@ class _BudgetSummary extends StatelessWidget {
                 color: Theme.of(context).colorScheme.error,
               ),
               const SizedBox(width: 12),
-              Expanded(child: Text('Chưa thể tải tổng quan: $error')),
+              Expanded(
+                child: Text(
+                  'Chưa thể tải tổng quan: ${friendlyMessage(error)}',
+                ),
+              ),
             ],
           ),
           data: (data) {

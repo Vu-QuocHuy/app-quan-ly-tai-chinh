@@ -5,7 +5,12 @@ import 'package:intl/intl.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
+import '../../../shared/formatting/category_icons.dart';
 import '../domain/invoice_models.dart';
+import '../../../shared/errors/error_presenter.dart';
+import '../../../shared/dialogs/confirm_dialog.dart';
+import '../../../shared/widgets/app_error_state.dart';
+import '../../../shared/widgets/app_empty_state.dart';
 
 class InvoiceDetailScreen extends ConsumerWidget {
   const InvoiceDetailScreen({required this.invoiceId, super.key});
@@ -15,41 +20,51 @@ class InvoiceDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final categories = ref.watch(categoriesProvider).value ?? const [];
-    return FutureBuilder<InvoiceEntity?>(
-      future: ref.read(invoiceRepositoryProvider).findById(invoiceId),
-      builder: (context, snapshot) {
-        final invoice = snapshot.data;
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Chi tiết hóa đơn'),
-            actions: [
-              if (invoice != null)
-                IconButton(
-                  tooltip: 'Chỉnh sửa',
-                  onPressed: () => context.push('/review', extra: invoice),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              if (invoice != null)
-                IconButton(
-                  tooltip: 'Xóa hóa đơn',
-                  onPressed: () => _deleteInvoice(context, ref, invoice),
-                  icon: const Icon(Icons.delete_outline),
-                ),
-            ],
+    final detail = ref.watch(invoiceDetailProvider(invoiceId));
+    final invoice = detail.valueOrNull;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Chi tiết hóa đơn'),
+        actions: [
+          if (invoice != null) ...[
+            IconButton(
+              tooltip: 'Chỉnh sửa',
+              onPressed: () => context.push('/review', extra: invoice),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+            IconButton(
+              tooltip: 'Xóa hóa đơn',
+              onPressed: () => _deleteInvoice(context, ref, invoice),
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
+        ],
+      ),
+      // Ba trạng thái KHÁC NHAU, không còn gộp thành một câu sai:
+      // đang tải / lỗi đọc được kèm retry / hóa đơn không còn tồn tại.
+      body: switch (detail) {
+        AsyncError(:final error, :final stackTrace) => AppErrorState(
+          error: error,
+          stackTrace: stackTrace,
+          title: 'Không đọc được hóa đơn',
+          onRetry: () => ref.invalidate(invoiceDetailProvider(invoiceId)),
+        ),
+        AsyncLoading() => const Center(child: CircularProgressIndicator()),
+        _ when invoice == null => AppEmptyState(
+          icon: Icons.receipt_long_outlined,
+          title: 'Hóa đơn không còn tồn tại',
+          message: 'Hóa đơn này có thể đã bị xóa trên thiết bị khác.',
+          action: FilledButton.icon(
+            onPressed: () => context.go('/invoices'),
+            icon: const Icon(Icons.list_alt_outlined),
+            label: const Text('Quay lại danh sách'),
           ),
-          body: switch (snapshot.connectionState) {
-            ConnectionState.waiting => const Center(
-              child: CircularProgressIndicator(),
-            ),
-            _ when invoice == null => const Center(
-              child: Text('Không tìm thấy hóa đơn.'),
-            ),
-            _ => _InvoiceDetail(
-              invoice: invoice,
-              category: _findCategory(categories, invoice.categoryId),
-            ),
-          },
-        );
+        ),
+        _ => _InvoiceDetail(
+          invoice: invoice,
+          category: _findCategory(categories, invoice.categoryId),
+        ),
       },
     );
   }
@@ -59,38 +74,26 @@ class InvoiceDetailScreen extends ConsumerWidget {
     WidgetRef ref,
     InvoiceEntity invoice,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Xóa hóa đơn?'),
-        content: Text(
-          'Hóa đơn của ${invoice.sellerName} sẽ bị xóa khỏi thiết bị. Thao tác này không thể hoàn tác.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(dialogContext).colorScheme.error,
-              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Xóa'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Xóa hóa đơn?',
+      message:
+          'Hóa đơn của ${invoice.sellerName} sẽ bị xóa khỏi thiết bị. '
+          'Thao tác này không thể hoàn tác.',
+      confirmLabel: 'Xóa',
+      destructive: true,
     );
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
     try {
       await ref.read(invoiceRepositoryProvider).deleteInvoice(invoice.id);
       if (context.mounted) context.go('/invoices');
     } on Object catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Không thể xóa hóa đơn: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Không thể xóa hóa đơn: ${friendlyMessage(error)}'),
+        ),
+      );
     }
   }
 }
@@ -129,7 +132,7 @@ class _InvoiceDetail extends StatelessWidget {
                   const SizedBox(height: 12),
                   Chip(
                     avatar: Icon(
-                      _categoryIcon(category!.iconName),
+                      categoryIconFor(category!.iconName),
                       size: 18,
                       color: Color(category!.colorValue),
                     ),
@@ -248,17 +251,6 @@ CategoryEntity? _findCategory(
   }
   return null;
 }
-
-IconData _categoryIcon(String iconName) => switch (iconName) {
-  'restaurant' => Icons.restaurant,
-  'directions_car' => Icons.directions_car,
-  'shopping_bag' => Icons.shopping_bag,
-  'bolt' => Icons.bolt,
-  'health_and_safety' => Icons.health_and_safety,
-  'school' => Icons.school,
-  'movie' => Icons.movie,
-  _ => Icons.category,
-};
 
 class _MoneyRow extends StatelessWidget {
   const _MoneyRow({

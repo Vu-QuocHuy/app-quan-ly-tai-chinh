@@ -15,8 +15,30 @@ import '../../features/ingestion/presentation/import_job_history_screen.dart';
 import '../../features/review/presentation/review_invoice_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/sync/presentation/sync_conflicts_screen.dart';
+import '../../shared/widgets/app_empty_state.dart';
 import '../shell/app_shell.dart';
+import '../theme/app_tokens.dart';
+import 'auth_redirect.dart';
 import '../../core/security/supabase_bootstrap.dart';
+
+/// Trang tab có crossfade nhẹ.
+///
+/// Bốn tab trước đây dùng `NoTransitionPage`, nên đổi tab là một cú nhảy cứng.
+/// Fade cực ngắn cho não biết nội dung đã đổi mà không làm chậm thao tác.
+/// Đi qua `AppMotion.of` nên khi hệ thống bật "giảm chuyển động" thì nó về 0ms
+/// và hành vi giống hệt trước đây.
+CustomTransitionPage<void> _tabPage(BuildContext context, Widget child) {
+  return CustomTransitionPage<void>(
+    child: child,
+    transitionDuration: AppMotion.of(context, AppMotion.base),
+    reverseTransitionDuration: AppMotion.of(context, AppMotion.base),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+        FadeTransition(
+          opacity: CurveTween(curve: AppMotion.standard).animate(animation),
+          child: child,
+        ),
+  );
+}
 
 final _rootKey = GlobalKey<NavigatorState>();
 final authRouterRefresh = _AuthRouterRefresh();
@@ -25,13 +47,26 @@ final appRouter = GoRouter(
   navigatorKey: _rootKey,
   refreshListenable: authRouterRefresh,
   initialLocation: '/',
-  redirect: (context, state) {
-    final isAuthRoute = state.matchedLocation == '/auth';
-    final isSignedIn = SupabaseBootstrap.clientOrNull?.auth.currentUser != null;
-    if (!isSignedIn && !isAuthRoute) return '/auth';
-    if (isSignedIn && isAuthRoute) return '/';
-    return null;
-  },
+  redirect: (context, state) => authRedirect(
+    location: state.matchedLocation,
+    isConfigured: SupabaseBootstrap.isConfigured,
+    isSignedIn: SupabaseBootstrap.clientOrNull?.auth.currentUser != null,
+  ),
+  // go_router không có errorBuilder -> deep link không khớp cho ra trang lỗi
+  // tiếng Anh mặc định, trong một app thuần Việt.
+  errorBuilder: (context, state) => Scaffold(
+    appBar: AppBar(title: const Text('Không mở được trang')),
+    body: AppEmptyState(
+      icon: Icons.link_off,
+      title: 'Không mở được trang này',
+      message: 'Đường dẫn “${state.uri}” không tồn tại trong ứng dụng.',
+      action: FilledButton.icon(
+        onPressed: () => context.go('/'),
+        icon: const Icon(Icons.home_outlined),
+        label: const Text('Về trang Tổng quan'),
+      ),
+    ),
+  ),
   routes: [
     GoRoute(path: '/auth', builder: (context, state) => const AccountScreen()),
     StatefulShellRoute.indexedStack(
@@ -43,7 +78,7 @@ final appRouter = GoRouter(
             GoRoute(
               path: '/',
               pageBuilder: (context, state) =>
-                  const NoTransitionPage(child: DashboardScreen()),
+                  _tabPage(context, const DashboardScreen()),
             ),
           ],
         ),
@@ -52,7 +87,7 @@ final appRouter = GoRouter(
             GoRoute(
               path: '/invoices',
               pageBuilder: (context, state) =>
-                  const NoTransitionPage(child: InvoiceListScreen()),
+                  _tabPage(context, const InvoiceListScreen()),
               routes: [
                 GoRoute(
                   path: ':id',
@@ -70,7 +105,7 @@ final appRouter = GoRouter(
             GoRoute(
               path: '/budgets',
               pageBuilder: (context, state) =>
-                  const NoTransitionPage(child: BudgetScreen()),
+                  _tabPage(context, const BudgetScreen()),
             ),
           ],
         ),
@@ -79,7 +114,7 @@ final appRouter = GoRouter(
             GoRoute(
               path: '/settings',
               pageBuilder: (context, state) =>
-                  const NoTransitionPage(child: SettingsScreen()),
+                  _tabPage(context, const SettingsScreen()),
               routes: [
                 GoRoute(
                   path: 'account',
@@ -113,8 +148,22 @@ final appRouter = GoRouter(
       builder: (context, state) {
         final invoice = state.extra;
         if (invoice is! InvoiceEntity) {
-          return const Scaffold(
-            body: Center(child: Text('Không có dữ liệu hóa đơn.')),
+          // Trước đây fallback là một Scaffold KHÔNG AppBar -> không nút quay
+          // lại, người dùng mắc kẹt (iOS không có phím back cứng).
+          return Scaffold(
+            appBar: AppBar(title: const Text('Kiểm tra hóa đơn')),
+            body: AppEmptyState(
+              icon: Icons.receipt_long_outlined,
+              title: 'Không có dữ liệu hóa đơn',
+              message:
+                  'Phiên kiểm tra đã kết thúc hoặc ứng dụng vừa được mở lại. '
+                  'Hãy chọn hóa đơn từ danh sách để xem và sửa.',
+              action: FilledButton.icon(
+                onPressed: () => context.go('/invoices'),
+                icon: const Icon(Icons.list_alt_outlined),
+                label: const Text('Quay lại danh sách'),
+              ),
+            ),
           );
         }
         return ReviewInvoiceScreen(invoice: invoice);

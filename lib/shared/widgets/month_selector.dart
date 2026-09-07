@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/utils/month_utils.dart';
+import 'month_picker_sheet.dart';
 
 class MonthSelector extends ConsumerWidget {
   const MonthSelector({super.key});
@@ -55,13 +56,9 @@ class MonthSelector extends ConsumerWidget {
     WidgetRef ref,
     DateTime month,
   ) async {
-    final result = await showDatePicker(
-      context: context,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-      initialDate: month,
-      helpText: 'Chọn tháng cần xem',
-    );
+    // Lưới 12 tháng thay cho showDatePicker chi tiết tới NGÀY — sai đơn vị và
+    // tốn nhiều thao tác hơn để chọn đúng một tháng.
+    final result = await showMonthPickerSheet(context, selected: month);
     if (result != null) _setMonth(ref, result);
   }
 }

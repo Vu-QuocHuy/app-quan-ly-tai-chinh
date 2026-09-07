@@ -10,6 +10,10 @@ import '../../export/application/invoice_restore_service.dart';
 import '../../export/data/backup_catalog_store.dart';
 import '../../export/data/supabase_backup_provider.dart';
 import '../../invoices/domain/invoice_models.dart';
+import '../../../shared/errors/error_presenter.dart';
+import '../../../shared/dialogs/confirm_dialog.dart';
+import '../../../shared/widgets/app_error_state.dart';
+import '../../../app/theme/theme_mode_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -78,6 +82,50 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 _Section(
+                  title: 'Giao diện',
+                  children: [
+                    // ThemeModeNotifier.set trước đây không được gọi ở đâu cả,
+                    // nên tuỳ chọn đã lưu không bao giờ ghi được và app luôn
+                    // theo hệ thống.
+                    ListTile(
+                      leading: const Icon(Icons.brightness_6_outlined),
+                      title: const Text('Chế độ sáng/tối'),
+                      subtitle: Text(switch (ref.watch(themeModeProvider)) {
+                        ThemeMode.light => 'Luôn dùng giao diện sáng',
+                        ThemeMode.dark => 'Luôn dùng giao diện tối',
+                        ThemeMode.system => 'Theo cài đặt hệ thống',
+                      }),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: SegmentedButton<ThemeMode>(
+                        segments: const [
+                          ButtonSegment(
+                            value: ThemeMode.system,
+                            icon: Icon(Icons.brightness_auto_outlined),
+                            label: Text('Hệ thống'),
+                          ),
+                          ButtonSegment(
+                            value: ThemeMode.light,
+                            icon: Icon(Icons.light_mode_outlined),
+                            label: Text('Sáng'),
+                          ),
+                          ButtonSegment(
+                            value: ThemeMode.dark,
+                            icon: Icon(Icons.dark_mode_outlined),
+                            label: Text('Tối'),
+                          ),
+                        ],
+                        selected: {ref.watch(themeModeProvider)},
+                        onSelectionChanged: (selection) => ref
+                            .read(themeModeProvider.notifier)
+                            .set(selection.first),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _Section(
                   title: 'Thông báo',
                   children: [
                     budgetAlerts.when(
@@ -95,7 +143,10 @@ class SettingsScreen extends ConsumerWidget {
                       ),
                       loading: () => const _LoadingTile(),
                       error: (error, _) => _ErrorTile(
-                        message: 'Không đọc được cài đặt thông báo: $error',
+                        error: error,
+                        label: 'Không đọc được cài đặt thông báo',
+                        onRetry: () =>
+                            ref.invalidate(budgetAlertsEnabledProvider),
                       ),
                     ),
                   ],
@@ -112,8 +163,11 @@ class SettingsScreen extends ConsumerWidget {
                             _confirmDeleteRule(context, ref, rule),
                       ),
                       loading: () => const _LoadingTile(),
-                      error: (error, _) =>
-                          _ErrorTile(message: 'Không tải được quy tắc: $error'),
+                      error: (error, _) => _ErrorTile(
+                        error: error,
+                        label: 'Không tải được quy tắc phân loại',
+                        onRetry: () => ref.invalidate(merchantRulesProvider),
+                      ),
                     ),
                   ],
                 ),
@@ -125,7 +179,9 @@ class SettingsScreen extends ConsumerWidget {
                       data: (records) => _BackupStatusTile(records: records),
                       loading: () => const _LoadingTile(),
                       error: (error, _) => _ErrorTile(
-                        message: 'Không đọc được lịch sử backup: $error',
+                        error: error,
+                        label: 'Không đọc được lịch sử backup',
+                        onRetry: () => ref.invalidate(backupRecordsProvider),
                       ),
                     ),
                     _ExportManagement(
@@ -217,7 +273,9 @@ class SettingsScreen extends ConsumerWidget {
                       ),
                       loading: () => const _LoadingTile(),
                       error: (error, _) => _ErrorTile(
-                        message: 'Không đọc được trạng thái đồng bộ: $error',
+                        error: error,
+                        label: 'Không đọc được trạng thái đồng bộ',
+                        onRetry: () => ref.invalidate(syncHealthProvider),
                       ),
                     ),
                     ref
@@ -247,7 +305,10 @@ class SettingsScreen extends ConsumerWidget {
                           ),
                           loading: () => const _LoadingTile(),
                           error: (error, _) => _ErrorTile(
-                            message: 'Không đọc được xung đột: $error',
+                            error: error,
+                            label: 'Không đọc được xung đột',
+                            onRetry: () =>
+                                ref.invalidate(invoiceConflictsProvider),
                           ),
                         ),
                   ],
@@ -281,26 +342,16 @@ class SettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     MerchantRuleEntity rule,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Xóa quy tắc phân loại?'),
-        content: Text(
-          'Lần sau hóa đơn từ “${rule.normalizedMerchant}” sẽ không được tự động gán danh mục.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Xóa quy tắc'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Xóa quy tắc phân loại?',
+      message:
+          'Lần sau hóa đơn từ “${rule.normalizedMerchant}” sẽ không được tự '
+          'động gán danh mục.',
+      confirmLabel: 'Xóa quy tắc',
+      destructive: true,
     );
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
 
     try {
       await ref
@@ -312,38 +363,24 @@ class SettingsScreen extends ConsumerWidget {
       );
     } on Object catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Không thể xóa quy tắc: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Không thể xóa quy tắc: ${friendlyMessage(error)}'),
+        ),
+      );
     }
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.warning_amber_rounded),
-        title: const Text('Xóa toàn bộ dữ liệu?'),
-        content: const Text(
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Xóa toàn bộ dữ liệu?',
+      message:
           'Thao tác này không thể hoàn tác. Danh mục mặc định vẫn được giữ lại.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(dialogContext).colorScheme.error,
-              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Xóa dữ liệu'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Xóa dữ liệu',
+      destructive: true,
     );
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
 
     try {
       await ref.read(invoiceRepositoryProvider).deleteAllUserData();
@@ -353,9 +390,11 @@ class SettingsScreen extends ConsumerWidget {
       );
     } on Object catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Không thể xóa dữ liệu: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Không thể xóa dữ liệu: ${friendlyMessage(error)}'),
+        ),
+      );
     }
   }
 
@@ -384,9 +423,11 @@ class SettingsScreen extends ConsumerWidget {
       );
     } on Object catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Không thể xuất dữ liệu: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Không thể xuất dữ liệu: ${friendlyMessage(error)}'),
+        ),
+      );
     }
   }
 
@@ -417,7 +458,11 @@ class SettingsScreen extends ConsumerWidget {
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không thể xuất backup mã hóa: $error')),
+        SnackBar(
+          content: Text(
+            'Không thể xuất backup mã hóa: ${friendlyMessage(error)}',
+          ),
+        ),
       );
     }
   }
@@ -458,7 +503,9 @@ class SettingsScreen extends ConsumerWidget {
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không thể sao lưu cloud: $error')),
+        SnackBar(
+          content: Text('Không thể sao lưu cloud: ${friendlyMessage(error)}'),
+        ),
       );
     }
   }
@@ -524,7 +571,11 @@ class SettingsScreen extends ConsumerWidget {
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không thể quản lý backup cloud: $error')),
+        SnackBar(
+          content: Text(
+            'Không thể quản lý backup cloud: ${friendlyMessage(error)}',
+          ),
+        ),
       );
     }
   }
@@ -552,7 +603,9 @@ class SettingsScreen extends ConsumerWidget {
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không thể tạo báo cáo PDF: $error')),
+        SnackBar(
+          content: Text('Không thể tạo báo cáo PDF: ${friendlyMessage(error)}'),
+        ),
       );
     }
   }
@@ -624,7 +677,11 @@ class SettingsScreen extends ConsumerWidget {
         Navigator.of(context, rootNavigator: true).pop();
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không thể khôi phục dữ liệu: $error')),
+        SnackBar(
+          content: Text(
+            'Không thể khôi phục dữ liệu: ${friendlyMessage(error)}',
+          ),
+        ),
       );
     }
   }
@@ -644,9 +701,9 @@ class SettingsScreen extends ConsumerWidget {
       ).showSnackBar(SnackBar(content: Text(message)));
     } on Object catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Không thể đồng bộ: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể đồng bộ: ${friendlyMessage(error)}')),
+      );
     }
   }
 
@@ -1177,18 +1234,24 @@ class _LoadingTile extends StatelessWidget {
 }
 
 class _ErrorTile extends StatelessWidget {
-  const _ErrorTile({required this.message});
+  const _ErrorTile({required this.error, required this.label, this.onRetry});
 
-  final String message;
+  final Object error;
+  final String label;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(
-        Icons.error_outline,
-        color: Theme.of(context).colorScheme.error,
+    // Trước đây tile này chỉ in một câu và KHÔNG có hành động nào — năm ngõ cụt
+    // trong màn Cài đặt.
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: AppErrorState(
+        error: error,
+        title: label,
+        compact: true,
+        onRetry: onRetry,
       ),
-      title: Text(message),
     );
   }
 }

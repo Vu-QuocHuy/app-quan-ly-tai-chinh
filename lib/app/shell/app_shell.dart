@@ -12,6 +12,9 @@ import '../../features/ingestion/application/import_queue.dart';
 import '../../features/ingestion/data/pending_import_store.dart';
 import '../../features/ingestion/data/qr_scanner_service.dart';
 import '../../features/ingestion/presentation/import_source_sheet.dart';
+import '../../shared/errors/error_presenter.dart';
+import '../../shared/widgets/reading_pane.dart';
+import '../theme/app_tokens.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({required this.navigationShell, super.key});
@@ -95,7 +98,7 @@ class _AppShellState extends ConsumerState<AppShell>
       if (!_isImporting) unawaited(_resumePendingImports());
     });
     final width = MediaQuery.sizeOf(context).width;
-    final useRail = width >= 840;
+    final useRail = AppBreakpoints.useRail(width);
     final content = widget.navigationShell;
     return Scaffold(
       body: SafeArea(
@@ -123,7 +126,9 @@ class _AppShellState extends ConsumerState<AppShell>
                     )
                     .toList(growable: false),
               ),
-            Expanded(child: content),
+            // Khi rail xuất hiện, nội dung được ràng vào bề rộng đọc và canh
+            // giữa thay vì kéo dài hết cửa sổ.
+            Expanded(child: useRail ? ReadingPane(child: content) : content),
           ],
         ),
       ),
@@ -249,9 +254,9 @@ class _AppShellState extends ConsumerState<AppShell>
       }
       await _showQrResult(payload);
     } on FormatException catch (error) {
-      if (mounted) _showMessage(error.message.toString());
+      if (mounted) _showMessage(friendlyMessage(error));
     } on Object catch (error) {
-      if (mounted) _showMessage('Không thể đọc QR: $error');
+      if (mounted) _showMessage('Không thể đọc QR: ${friendlyMessage(error)}');
     }
   }
 
@@ -355,7 +360,9 @@ class _AppShellState extends ConsumerState<AppShell>
       );
       _schedulePendingResume();
     } on Object catch (error) {
-      if (mounted) _showMessage('Không thể tiếp tục import: $error');
+      if (mounted) {
+        _showMessage('Không thể tiếp tục import: ${friendlyMessage(error)}');
+      }
     }
   }
 
@@ -402,7 +409,10 @@ class _AppShellState extends ConsumerState<AppShell>
         onOutcome: (_, outcome) => _openImportOutcome(outcome),
         onFailure: (failure) {
           if (mounted) {
-            _showMessage('${failure.job.fileName}: ${failure.error}');
+            _showMessage(
+              '${failure.job.fileName}: ${friendlyMessage(failure.error)}',
+              isError: true,
+            );
           }
         },
       );
@@ -418,7 +428,7 @@ class _AppShellState extends ConsumerState<AppShell>
         );
       }
     } on Object catch (error) {
-      if (mounted) _showMessage(error.toString());
+      if (mounted) _showMessage(friendlyMessage(error));
     } finally {
       if (mounted) {
         setState(() {
@@ -452,9 +462,25 @@ class _AppShellState extends ConsumerState<AppShell>
     await context.push('/review', extra: outcome.result.invoice);
   }
 
-  void _showMessage(String message) {
+  void _showMessage(String message, {bool isError = false}) {
+    final scheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                isError ? Icons.error_outline : Icons.info_outline,
+                size: 18,
+                color: isError ? scheme.onError : scheme.onInverseSurface,
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(message)),
+            ],
+          ),
+          backgroundColor: isError ? scheme.error : null,
+        ),
+      );
   }
 }

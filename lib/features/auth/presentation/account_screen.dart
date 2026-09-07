@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/providers/app_providers.dart';
+import '../../../shared/errors/error_presenter.dart';
+import '../../../shared/widgets/app_callout.dart';
+import '../../../shared/widgets/app_skeleton.dart';
 
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
@@ -59,7 +63,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     error: (error, _) => _StatusCard(
                       icon: Icons.cloud_off_outlined,
                       title: 'Không đọc được phiên đăng nhập',
-                      message: '$error',
+                      message: friendlyMessage(error),
                       isError: true,
                     ),
                   ),
@@ -221,10 +225,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           FilledButton.icon(
             onPressed: _busy ? null : _submit,
             icon: _busy
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                ? const ButtonSpinner()
                 : Icon(
                     _registering
                         ? Icons.person_add_alt_1_outlined
@@ -263,12 +264,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         const SizedBox(height: 24),
         FilledButton.icon(
           onPressed: _busy ? null : _syncNow,
-          icon: _busy
-              ? const SizedBox.square(
-                  dimension: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.sync),
+          icon: _busy ? const ButtonSpinner() : const Icon(Icons.sync),
           label: const Text('Đồng bộ ngay'),
         ),
         const SizedBox(height: 12),
@@ -332,7 +328,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
-        _message = 'Không thể kết nối Supabase: $error';
+        _message = 'Không thể kết nối Supabase: ${friendlyMessage(error)}';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -443,7 +439,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
-        _message = 'Không thể đăng xuất: $error';
+        _message = 'Không thể đăng xuất: ${friendlyMessage(error)}';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -456,12 +452,23 @@ class _ConfigurationMissingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const _StatusCard(
-      icon: Icons.settings_ethernet_outlined,
-      title: 'Supabase chưa được cấu hình khi build',
+    // Không phải LỖI: đây là một build hợp lệ, chỉ là không có cloud. App vẫn
+    // chạy đủ chức năng local, nên giọng điệu và lối ra phải phản ánh điều đó.
+    return AppCallout(
+      icon: Icons.cloud_off_outlined,
+      tone: CalloutTone.info,
+      title: 'Bản build này không có đồng bộ cloud',
       message:
-          'Chạy app với --dart-define-from-file=config/supabase.local.json để bật tài khoản và đồng bộ.',
-      isError: true,
+          'Nhập hóa đơn, OCR, ngân sách và toàn bộ thống kê vẫn hoạt động và '
+          'dữ liệu được lưu trên máy. Tài khoản và đồng bộ cần cấu hình '
+          'Supabase khi build.',
+      actions: [
+        FilledButton.icon(
+          onPressed: () => context.go('/'),
+          icon: const Icon(Icons.arrow_forward),
+          label: const Text('Tiếp tục dùng offline'),
+        ),
+      ],
     );
   }
 }

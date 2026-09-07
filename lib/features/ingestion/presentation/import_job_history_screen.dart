@@ -4,6 +4,11 @@ import 'package:intl/intl.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../domain/import_job.dart';
+import '../../../shared/errors/error_presenter.dart';
+import '../../../app/theme/finance_colors.dart';
+import '../../../shared/widgets/status_pill.dart';
+import '../../../shared/widgets/app_empty_state.dart';
+import '../../../shared/widgets/app_error_state.dart';
 
 class ImportJobHistoryScreen extends ConsumerWidget {
   const ImportJobHistoryScreen({super.key});
@@ -42,12 +47,23 @@ class ImportJobHistoryScreen extends ConsumerWidget {
       ),
       body: jobs.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _ImportJobError(
-          message: error.toString(),
+        error: (error, stack) => AppErrorState(
+          error: error,
+          stackTrace: stack,
+          title: 'Không tải được lịch sử',
+          retryLabel: 'Tải lại',
           onRetry: () => ref.invalidate(importJobsProvider),
         ),
         data: (items) {
-          if (items.isEmpty) return const _ImportJobEmpty();
+          if (items.isEmpty) {
+            return const AppEmptyState(
+              icon: Icons.history,
+              title: 'Chưa có tác vụ nhập hóa đơn',
+              message:
+                  'Khi bạn nhập hóa đơn từ file, ảnh hoặc camera, tiến độ và '
+                  'các lần thử lại sẽ xuất hiện ở đây.',
+            );
+          }
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(importJobsProvider),
             child: ListView.separated(
@@ -79,9 +95,9 @@ class ImportJobHistoryScreen extends ConsumerWidget {
       );
     } on Object catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Không thể thử lại: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể thử lại: ${friendlyMessage(error)}')),
+      );
     }
   }
 
@@ -102,7 +118,11 @@ class ImportJobHistoryScreen extends ConsumerWidget {
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không thể thử lại hàng loạt: $error')),
+        SnackBar(
+          content: Text(
+            'Không thể thử lại hàng loạt: ${friendlyMessage(error)}',
+          ),
+        ),
       );
     }
   }
@@ -116,9 +136,11 @@ class ImportJobHistoryScreen extends ConsumerWidget {
       );
     } on Object catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Không thể dọn lịch sử: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Không thể dọn lịch sử: ${friendlyMessage(error)}'),
+        ),
+      );
     }
   }
 }
@@ -205,67 +227,14 @@ class _StateBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Trạng thái ${presentation.label}',
-      child: Chip(
-        visualDensity: VisualDensity.compact,
-        avatar: Icon(presentation.icon, size: 16),
-        label: Text(presentation.label),
-      ),
-    );
-  }
-}
-
-class _ImportJobEmpty extends StatelessWidget {
-  const _ImportJobEmpty();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.history, size: 64),
-            SizedBox(height: 16),
-            Text('Chưa có tác vụ nhập hóa đơn.'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ImportJobError extends StatelessWidget {
-  const _ImportJobError({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 48),
-            const SizedBox(height: 12),
-            Text(
-              'Không thể tải lịch sử: $message',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Tải lại'),
-            ),
-          ],
-        ),
-      ),
+    // StatusPill ép icon + label là bắt buộc, nên trạng thái không bao giờ chỉ
+    // được truyền đạt bằng màu. Trước đây Chip tính `presentation.color` rồi
+    // vứt đi — màu không tới được đâu cả.
+    return StatusPill(
+      icon: presentation.icon,
+      label: presentation.label,
+      tone: jobStatusTone(job.state),
+      semanticsLabel: 'Trạng thái ${presentation.label}',
     );
   }
 }
@@ -278,30 +247,41 @@ class _JobPresentation {
   final Color Function(BuildContext context) color;
 }
 
+/// Tone lấy từ AppFinanceColors nên nó theo theme. Trước đây trạng thái
+/// "Hoàn tất" dùng `Colors.green` cứng — mù theme và tương phản kém trên nền
+/// tối.
 _JobPresentation _presentation(ImportJobState state) => switch (state) {
   ImportJobState.queued => _JobPresentation(
     'Đang chờ',
     Icons.schedule,
-    (context) => Theme.of(context).colorScheme.primary,
+    (context) => context.finance.syncPending.color,
   ),
   ImportJobState.running => _JobPresentation(
     'Đang chạy',
     Icons.sync,
-    (context) => Theme.of(context).colorScheme.primary,
+    (context) => context.finance.syncPending.color,
   ),
   ImportJobState.succeeded => _JobPresentation(
     'Hoàn tất',
     Icons.check_circle_outline,
-    (context) => Colors.green,
+    (context) => context.finance.syncOk.color,
   ),
   ImportJobState.retryScheduled => _JobPresentation(
     'Chờ thử lại',
     Icons.update,
-    (context) => Theme.of(context).colorScheme.tertiary,
+    (context) => context.finance.syncConflict.color,
   ),
   ImportJobState.failed => _JobPresentation(
     'Thất bại',
     Icons.error_outline,
     (context) => Theme.of(context).colorScheme.error,
   ),
+};
+
+/// Tone tương ứng cho `StatusPill` — icon + chữ luôn đi kèm màu.
+StatusTone jobStatusTone(ImportJobState state) => switch (state) {
+  ImportJobState.queued || ImportJobState.running => StatusTone.info,
+  ImportJobState.succeeded => StatusTone.safe,
+  ImportJobState.retryScheduled => StatusTone.warn,
+  ImportJobState.failed => StatusTone.danger,
 };
