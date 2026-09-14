@@ -6,6 +6,11 @@
 - `extract`: chuyển OCR text thành hóa đơn có cấu trúc.
 - `classify`: phân loại merchant bằng bộ rule nhẹ, không tốn lượt Gemini.
 
+Chat chỉ nhận facts tổng hợp đã whitelist. Facts chứa merchant, invoice ID, dòng
+hóa đơn, kết quả tìm kiếm hoặc danh mục tùy chỉnh sẽ bị loại bỏ tại Edge Function;
+lịch sử chỉ giữ tối đa 4 câu hỏi gần nhất và ẩn email, số điện thoại, mã số dài.
+Các truy vấn dữ liệu local được trả lời ở thiết bị và không gọi function.
+
 ## Deploy
 
 Không ghi API key vào file hoặc Git:

@@ -4,6 +4,7 @@ import '../../invoices/domain/invoice_filters.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../invoices/domain/invoice_repository.dart';
 import 'chat_models.dart';
+import 'local_chat_tools.dart';
 
 class LocalChatAssistant {
   const LocalChatAssistant(this._repository);
@@ -11,84 +12,62 @@ class LocalChatAssistant {
   final InvoiceRepository _repository;
 
   Future<ChatReply> answer(String question, {DateTime? now}) async {
+    final tools = LocalChatTools(_repository);
     final reference = now ?? DateTime.now();
     final normalized = _normalize(question);
     final month = _monthFromQuestion(normalized, reference);
     final monthKey = MonthUtils.key(month);
-    final dashboard = await _repository.watchDashboard(monthKey).first;
-    final insights = await _repository.watchSpendingInsights(monthKey).first;
-    final budgets = await _repository.watchBudgets(monthKey).first;
-    final categories = await _repository.watchCategories().first;
-    final categoryNames = {
-      for (final category in categories) category.id: category.name,
-    };
-    final recentInvoices = await _repository.fetchInvoicePage(limit: 10);
     final merchantQuery = _merchantQuery(question);
     final amountBounds = _amountBounds(question);
-    final categoryId = _categoryQuery(normalized, categoryNames);
-    final hasSearch =
-        merchantQuery != null || amountBounds != null || categoryId != null;
-    final searchedInvoices = !hasSearch
-        ? const <InvoiceEntity>[]
-        : (await _repository.fetchInvoicePage(
-            filter: InvoiceFilter(
-              query: merchantQuery ?? '',
-              monthKey: normalized.contains('thang') ? monthKey : null,
-              categoryId: categoryId,
-              minTotalMinor: amountBounds?.$1,
-              maxTotalMinor: amountBounds?.$2,
-            ),
-            limit: 10,
-          )).items;
     final citation = ChatCitation(
       label: 'Dữ liệu hóa đơn ${MonthUtils.label(month)}',
       sourceType: 'local',
       sourceId: monthKey,
       capturedAt: DateTime.now(),
     );
-    final facts = _facts(
-      dashboard,
-      insights,
-      budgets,
-      categoryNames,
-      month,
-      recentInvoices.items,
-      searchedInvoices,
-    );
 
     if (_isBudgetQuestion(normalized)) {
+      final result = await tools.budgetStatus(monthKey);
       return ChatReply(
-        text: _budgetAnswer(dashboard, budgets, month),
+        text: _budgetAnswer(result.dashboard, result.budgets, month),
         citations: [citation],
-        facts: facts,
+        facts: _budgetFacts(result.dashboard, result.budgets, month),
       );
     }
     if (_isRecurringQuestion(normalized)) {
+      final insights = await tools.spendingInsights(monthKey);
       return ChatReply(
         text: _recurringAnswer(insights),
         citations: [citation],
-        facts: facts,
+        facts: _insightFacts(insights),
       );
     }
     if (_isForecastQuestion(normalized)) {
+      final insights = await tools.spendingInsights(monthKey);
       return ChatReply(
         text:
             'Dự báo tổng chi ${MonthUtils.label(month)} là '
             '${MoneyFormatter.format(insights.forecastTotalMinor)} '
             '(đã ghi nhận ${MoneyFormatter.format(insights.currentTotalMinor)}).',
         citations: [citation],
-        facts: facts,
+        facts: _insightFacts(insights),
       );
     }
     if (_isAnomalyQuestion(normalized)) {
+      final insights = await tools.spendingInsights(monthKey);
       return ChatReply(
         text: _anomalyAnswer(insights),
         citations: _anomalyCitations(citation, insights.anomalies),
-        facts: facts,
+        facts: _insightFacts(insights),
       );
     }
-    if (!hasSearch &&
-        (_isCategoryQuestion(normalized) || _isRankingQuestion(normalized))) {
+    if ((_isCategoryQuestion(normalized) || _isRankingQuestion(normalized)) &&
+        !normalized.contains('tim hoa don')) {
+      final dashboard = await tools.monthSummary(monthKey);
+      final categories = await tools.categories();
+      final categoryNames = {
+        for (final category in categories) category.id: category.name,
+      };
       return ChatReply(
         text: _categoryAnswer(
           dashboard,
@@ -97,27 +76,46 @@ class LocalChatAssistant {
           ranking: _isRankingQuestion(normalized),
         ),
         citations: [citation],
-        facts: facts,
+        facts: _summaryFacts(dashboard),
       );
     }
     if (_isComparisonQuestion(normalized)) {
+      final dashboard = await tools.monthSummary(monthKey);
       return ChatReply(
         text: _comparisonAnswer(dashboard, month),
         citations: [citation],
-        facts: facts,
+        facts: _summaryFacts(dashboard),
       );
     }
     if (_isRecentInvoiceQuestion(normalized)) {
+      final recentInvoices = await tools.recentTransactions();
       return ChatReply(
         text: _recentInvoiceAnswer(recentInvoices.items),
         citations: _invoiceCitations(citation, recentInvoices.items),
-        facts: facts,
       );
     }
+    final categories = normalized.contains('danh muc')
+        ? await tools.categories()
+        : const <CategoryEntity>[];
+    final categoryNames = {
+      for (final category in categories) category.id: category.name,
+    };
+    final categoryId = _categoryQuery(normalized, categoryNames);
+    final hasSearch =
+        merchantQuery != null || amountBounds != null || categoryId != null;
     if (hasSearch) {
+      final searchedInvoices = await tools.searchTransactions(
+        filter: InvoiceFilter(
+          query: merchantQuery ?? '',
+          monthKey: normalized.contains('thang') ? monthKey : null,
+          categoryId: categoryId,
+          minTotalMinor: amountBounds?.$1,
+          maxTotalMinor: amountBounds?.$2,
+        ),
+      );
       return ChatReply(
         text: _searchAnswer(
-          searchedInvoices,
+          searchedInvoices.items,
           _searchLabel(
             merchantQuery: merchantQuery,
             amountBounds: amountBounds,
@@ -127,18 +125,18 @@ class LocalChatAssistant {
             includeMonth: normalized.contains('thang'),
           ),
         ),
-        citations: _invoiceCitations(citation, searchedInvoices),
-        facts: facts,
+        citations: _invoiceCitations(citation, searchedInvoices.items),
       );
     }
     if (_isTotalQuestion(normalized)) {
+      final dashboard = await tools.monthSummary(monthKey);
       return ChatReply(
         text:
             '${MonthUtils.label(month)} bạn đã ghi nhận '
             '${dashboard.invoiceCount} hóa đơn, tổng chi '
             '${MoneyFormatter.format(dashboard.totalMinor)}.',
         citations: [citation],
-        facts: facts,
+        facts: _summaryFacts(dashboard),
       );
     }
 
@@ -146,70 +144,39 @@ class LocalChatAssistant {
       text:
           'Mình có thể trả lời về tổng chi, ngân sách, danh mục, so sánh '
           'tháng, dự báo và khoản chi định kỳ. Bạn có thể hỏi cụ thể hơn.',
-      citations: [citation],
-      facts: facts,
+      citations: const [],
     );
   }
 
-  List<ChatFact> _facts(
-    DashboardSnapshot dashboard,
-    SpendingInsights insights,
-    List<BudgetEntity> budgets,
-    Map<String, String> categoryNames,
-    DateTime month,
-    List<InvoiceEntity> recentInvoices,
-    List<InvoiceEntity> searchedInvoices,
-  ) {
-    final categorySummary = dashboard.categoryTotals.entries
-        .map(
-          (entry) =>
-              '${categoryNames[entry.key] ?? entry.key}: '
-              '${MoneyFormatter.format(entry.value)}',
-        )
-        .join('; ');
+  List<ChatFact> _summaryFacts(DashboardSnapshot dashboard) {
     return [
-      ChatFact('period', MonthUtils.label(month)),
       ChatFact('invoice_count', '${dashboard.invoiceCount}'),
       ChatFact('total_minor_vnd', '${dashboard.totalMinor}'),
       ChatFact(
         'previous_total_minor_vnd',
         '${dashboard.previousMonthTotalMinor}',
       ),
-      ChatFact('category_totals', categorySummary),
+    ];
+  }
+
+  List<ChatFact> _budgetFacts(
+    DashboardSnapshot dashboard,
+    List<BudgetEntity> budgets,
+    DateTime month,
+  ) {
+    return [
+      ChatFact('period', MonthUtils.label(month)),
+      ..._summaryFacts(dashboard),
       ChatFact('budget_count', '${budgets.length}'),
       ChatFact('budget_limit_minor_vnd', '${dashboard.budgetLimitMinor}'),
+    ];
+  }
+
+  List<ChatFact> _insightFacts(SpendingInsights insights) {
+    return [
       ChatFact('forecast_total_minor_vnd', '${insights.forecastTotalMinor}'),
       ChatFact('recurring_count', '${insights.recurringExpenses.length}'),
       ChatFact('anomaly_count', '${insights.anomalies.length}'),
-      ChatFact(
-        'anomalies',
-        insights.anomalies
-            .map(
-              (item) =>
-                  '${item.merchant}|${item.amountMinor}|${item.baselineMinor}|${item.ratio.toStringAsFixed(1)}x',
-            )
-            .join('; '),
-      ),
-      ChatFact(
-        'recent_invoices',
-        recentInvoices
-            .take(10)
-            .map(
-              (invoice) =>
-                  '${invoice.id}|${invoice.sellerName}|${invoice.invoiceNumber ?? ''}|${invoice.totalMinor}',
-            )
-            .join('; '),
-      ),
-      ChatFact(
-        'search_results',
-        searchedInvoices
-            .take(10)
-            .map(
-              (invoice) =>
-                  '${invoice.id}|${invoice.sellerName}|${invoice.invoiceNumber ?? ''}|${invoice.totalMinor}',
-            )
-            .join('; '),
-      ),
     ];
   }
 

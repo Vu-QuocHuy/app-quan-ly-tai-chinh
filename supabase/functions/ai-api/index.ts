@@ -17,6 +17,13 @@ type ChatRequest = {
   history: ChatHistoryMessage[];
 };
 
+const externalFactKeys = new Set([
+  "period", "invoice_count", "total_minor_vnd", "previous_total_minor_vnd",
+  "budget_count", "budget_limit_minor_vnd", "forecast_total_minor_vnd",
+  "recurring_count", "anomaly_count", "external_exchange_rate",
+  "external_exchange_updated_at",
+]);
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -287,7 +294,7 @@ function parseClassification(body: JsonObject) {
 }
 
 function parseChat(body: JsonObject): ChatRequest {
-  const question = requiredString(body, "question", 2_000).trim();
+  const question = redactPersonalData(requiredString(body, "question", 2_000).trim());
   if (question.length < 2) throw new FunctionError(400, "EMPTY_QUESTION", "Câu hỏi không được rỗng.");
   const facts = parseFacts(body.facts);
   const history = parseHistory(body.history);
@@ -301,7 +308,10 @@ function parseFacts(value: unknown): ChatFact[] {
     if (!isObject(item) || typeof item.key !== "string" || typeof item.value !== "string") throw new FunctionError(400, "INVALID_FACT", "Một fact chatbot không hợp lệ.");
     if (item.key.length > 100 || item.value.length > 2_000) throw new FunctionError(413, "FACT_TOO_LARGE", "Fact chatbot vượt giới hạn.");
     return {key: item.key, value: item.value};
-  });
+  }).filter((fact) => externalFactKeys.has(fact.key)).map((fact) => ({
+    key: fact.key,
+    value: cleanFact(fact.value),
+  }));
 }
 
 function parseHistory(value: unknown): ChatHistoryMessage[] {
@@ -310,8 +320,20 @@ function parseHistory(value: unknown): ChatHistoryMessage[] {
   return value.map((item) => {
     if (!isObject(item) || (item.role !== "user" && item.role !== "assistant") || typeof item.text !== "string") throw new FunctionError(400, "INVALID_HISTORY_MESSAGE", "Một tin nhắn không hợp lệ.");
     if (item.text.trim().length === 0 || item.text.length > 4_000) throw new FunctionError(413, "HISTORY_MESSAGE_TOO_LARGE", "Tin nhắn vượt giới hạn.");
-    return {role: item.role, text: item.text.trim()};
-  });
+    return {role: item.role, text: redactPersonalData(item.text.trim())};
+  }).filter((message) => message.role === "user").slice(-4);
+}
+
+function cleanFact(value: string): string {
+  const singleLine = value.replace(/[\u0000-\u001F]/g, " ").trim();
+  return singleLine.length <= 500 ? singleLine : `${singleLine.slice(0, 500)}…`;
+}
+
+function redactPersonalData(value: string): string {
+  return value
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[email đã ẩn]")
+    .replace(/(?<!\d)(?:\+?84|0)\d{8,10}(?!\d)/g, "[số điện thoại đã ẩn]")
+    .replace(/(?<!\d)\d{10,14}(?!\d)/g, "[mã số đã ẩn]");
 }
 
 function requestId(body: JsonObject): string {
@@ -338,12 +360,6 @@ function validateInvoice(value: JsonObject): void {
     if (typeof amount !== "number" || !Number.isSafeInteger(amount) || amount < 0) throw new FunctionError(502, "INVALID_AMOUNT", `Trường ${key} không hợp lệ.`);
   }
   if (typeof value.sellerName !== "string") throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Dữ liệu model sai schema.");
-}
-
-function sourceInvoiceIds(facts: ChatFact[]): string[] {
-  const result = facts.find((fact) => fact.key === "search_results")?.value;
-  if (!result) return [];
-  return result.split(";").map((item) => item.split("|")[0]?.trim()).filter((item): item is string => Boolean(item)).slice(0, 5);
 }
 
 function modelText(payload: unknown): string {

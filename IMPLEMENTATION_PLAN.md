@@ -370,8 +370,8 @@ Decision gate cuối tuần 6:
 - [~] `AI-JOB-001 P1` Async extraction API: submit/status/result/cancel với idempotency key (đã có mobile contract/client scaffold; backend endpoint còn pending).
 - [ ] `AI-JOB-002 P1` Worker queue, timeout budget, dead-letter queue và replay tool phía backend.
 - [ ] `AI-JOB-003 P1` Model/prompt version, evaluation gate và cost budget theo môi trường/người dùng.
-- [~] `SEARCH-001 P2` Hỏi đáp chi tiêu có citation về hóa đơn nguồn, không tự suy diễn số liệu (đã có chat UI, local query offline, Supabase Edge Function `ai-api`, lịch sử local và connector tỷ giá; tool calling mở rộng và test thiết bị còn pending).
-- [~] `SEARCH-002 P2` Bộ tool read-only cho chatbot: đã có merchant, khoảng tiền, danh mục, tháng, hóa đơn gần đây, ngân sách, recurring, anomaly và citation mở màn hình detail; action nâng cao còn pending.
+- [x] `SEARCH-001 P2` Hỏi đáp chi tiêu có citation về hóa đơn nguồn, không tự suy diễn số liệu (chat UI, local query offline, Supabase Edge Function `ai-api`, lịch sử local và connector tỷ giá; câu hỏi local không gọi AI).
+- [x] `SEARCH-002 P2` Bộ tool read-only cho chatbot: tool được tách theo summary, budget, insights, categories, recent và search; chỉ tool phù hợp được gọi, facts invoice-level bị chặn trước khi ra ngoài.
 - [~] `SEARCH-003 P2` Quản lý nguồn bên ngoài: đã có allowlist tiền tệ, attribution, timeout, cache TTL và feature flag cho connector tỷ giá; quota/audit nhiều provider còn pending.
 - [ ] `OPS-001 P1` Crash/performance monitoring, redaction audit, SLO và dashboard latency/error/cost.
 - [ ] `OPS-002 P1` Remote config/feature flag cho QR, AI provider, sync và rollout theo phần trăm.

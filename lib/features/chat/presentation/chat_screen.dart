@@ -233,7 +233,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final local = await ref.read(localChatAssistantProvider).answer(question);
       var reply = local;
       final api = ref.read(chatApiClientProvider);
-      if (api.isConfigured) {
+      if (api.isConfigured && local.facts.isEmpty) {
         try {
           reply = await api.ask(
             question: question,

@@ -9,12 +9,13 @@
 - Adapter ingestion thống nhất cho XML, PDF text và OCR.
 - ML Kit OCR chạy trên thiết bị. AI là tùy chọn và có fallback offline.
 - Supabase Edge Function gọi Gemini Structured Output; secret chỉ ở backend.
-- Trợ lý chi tiêu có chế độ local offline, Gemini `/v1/chat` tùy chọn và citation cho dữ liệu nguồn.
+- Trợ lý chi tiêu có bộ tool local read-only, chỉ gọi tool phù hợp với câu hỏi; Gemini `/v1/chat` là tùy chọn và citation cho dữ liệu nguồn.
+- Câu trả lời từ dữ liệu local không gọi Gemini. Khi cần Gemini, client và Edge Function chỉ cho phép facts tổng hợp, loại bỏ invoice ID/merchant/kết quả tìm kiếm và ẩn thông tin định danh trong câu hỏi/lịch sử.
 - Connector tỷ giá chỉ gọi provider allowlist ở backend, có timeout và hiển thị nguồn cập nhật.
 
 ## Chạy app một lượt
 
-Yêu cầu Flutter `3.41.6`, Android SDK và JDK 17.
+Yêu cầu Flutter `3.47.1`, Dart `3.12+`, Android SDK và JDK 17.
 
 ```bash
 flutter pub get
@@ -90,7 +91,7 @@ flutter run --dart-define-from-file=config/supabase.local.json
 Mặc định lệnh trên chạy flavor `dev`. Với staging hoặc production, dùng thêm
 `--flavor staging`/`--flavor production` và đặt `APP_ENV` tương ứng.
 
-Sau khi backend đã cấu hình `GEMINI_API_KEY`, app có thể hỏi bằng tiếng Việt về tổng chi, danh mục, ngân sách, so sánh tháng, hóa đơn gần đây và khoản chi định kỳ. Nếu chưa đăng nhập hoặc không có mạng, các câu hỏi dữ liệu local vẫn chạy offline; không gửi dữ liệu hóa đơn đi đâu.
+Sau khi backend đã cấu hình `GEMINI_API_KEY`, app có thể hỏi bằng tiếng Việt các câu hỏi ngoài phạm vi dữ liệu local. Các câu hỏi về tổng chi, danh mục, ngân sách, so sánh tháng, hóa đơn gần đây và khoản chi định kỳ được trả lời trực tiếp từ tool local; nếu Gemini được gọi, dữ liệu hóa đơn cấp dòng không được gửi đi.
 
 Các câu hỏi tỷ giá như “tỷ giá USD/VND hôm nay” sẽ dùng connector ExchangeRate-API ở backend và trả về citation. Provider này là dữ liệu tham khảo, cập nhật theo lịch của nhà cung cấp; không dùng làm chứng từ hoặc quyết định tài chính tự động.
 

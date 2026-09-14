@@ -88,6 +88,16 @@ void main() {
       hasLength(1),
     );
   });
+
+  test('does not load local data for an unsupported question', () async {
+    final reply = await LocalChatAssistant(
+      repository,
+    ).answer('Thời tiết hôm nay thế nào?');
+
+    expect(reply.facts, isEmpty);
+    expect(reply.citations, isEmpty);
+    expect(reply.text, contains('Bạn có thể hỏi cụ thể hơn'));
+  });
 }
 
 InvoiceEntity _invoice(String id, String seller, int total, DateTime date) {

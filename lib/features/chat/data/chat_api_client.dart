@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../../core/network/supabase_function_client.dart';
 import '../domain/chat_models.dart';
+import '../domain/chat_privacy_policy.dart';
 
 class ChatApiClient {
   ChatApiClient({SupabaseClient? supabaseClient, Uuid? uuid})
@@ -29,14 +30,11 @@ class ChatApiClient {
       'action': 'chat',
       'requestId': _uuid.v4(),
       'locale': 'vi-VN',
-      'question': question.trim(),
-      'facts': facts.map((fact) => fact.toJson()).toList(growable: false),
-      'history': history
-          .toList(growable: false)
-          .reversed
-          .take(8)
-          .toList()
-          .reversed
+      'question': ChatPrivacyPolicy.redactPersonalData(question.trim()),
+      'facts': ChatPrivacyPolicy.factsForExternal(
+        facts,
+      ).map((fact) => fact.toJson()).toList(growable: false),
+      'history': ChatPrivacyPolicy.historyForExternal(history)
           .map((message) => {'role': message.role.name, 'text': message.text})
           .toList(growable: false),
     };
