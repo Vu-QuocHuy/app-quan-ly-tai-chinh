@@ -487,7 +487,8 @@ test/fixtures/
 ### Phase 2 — Beta cá nhân/gia đình
 
 - Supabase Auth và cloud sync.
-- Shared wallet, member role và conflict strategy.
+- Shared expense groups, member role, invite code, split reconciliation và settlement tracking.
+- AI Agent cho nhóm: OCR hóa đơn, đề xuất phân bổ từng dòng, bắt buộc user review/confirm trước khi ghi.
 - Export PDF/Excel.
 - Recurring expense và cảnh báo bất thường.
 - Subscription/freemium và cost limit cho AI.

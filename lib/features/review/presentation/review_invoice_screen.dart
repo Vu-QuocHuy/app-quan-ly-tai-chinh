@@ -251,7 +251,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                   textCapitalization: TextCapitalization.sentences,
                 ),
                 const SizedBox(height: 24),
-                _buildLineItemsEditor(context),
+                _buildLineItemsEditor(context, categories),
               ],
             ),
           ),
@@ -386,6 +386,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
         return true;
       }
       if (draft.totalController.text != line.totalMinor.toString()) return true;
+      if (draft.categoryId != line.categoryId) return true;
     }
     return false;
   }
@@ -529,7 +530,10 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
         .toList(growable: false);
   }
 
-  Widget _buildLineItemsEditor(BuildContext context) {
+  Widget _buildLineItemsEditor(
+    BuildContext context,
+    List<CategoryEntity> categories,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -553,7 +557,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
         for (var index = 0; index < _lineDrafts.length; index++)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: _buildLineCard(context, index),
+            child: _buildLineCard(context, index, categories),
           ),
         OutlinedButton.icon(
           onPressed: _addLine,
@@ -564,7 +568,11 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
     );
   }
 
-  Widget _buildLineCard(BuildContext context, int index) {
+  Widget _buildLineCard(
+    BuildContext context,
+    int index,
+    List<CategoryEntity> categories,
+  ) {
     final draft = _lineDrafts[index];
     return Card(
       key: ValueKey(draft.id),
@@ -647,6 +655,26 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
               controller: draft.totalController,
               label: 'Thành tiền *',
             ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue:
+                  categories.any((item) => item.id == draft.categoryId)
+                  ? draft.categoryId
+                  : null,
+              decoration: const InputDecoration(
+                labelText: 'Danh mục chi tiêu',
+                prefixIcon: Icon(Icons.category_outlined),
+              ),
+              items: categories
+                  .map(
+                    (item) => DropdownMenuItem(
+                      value: item.id,
+                      child: Text(item.name),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged: (value) => setState(() => draft.categoryId = value),
+            ),
           ],
         ),
       ),
@@ -680,6 +708,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       unitPriceMinor: MoneyFormatter.tryParse(draft.unitPriceController.text),
       taxRate: _parseDecimal(draft.taxRateController.text),
       totalMinor: MoneyFormatter.tryParse(draft.totalController.text) ?? 0,
+      categoryId: draft.categoryId,
     );
   }
 
@@ -709,11 +738,13 @@ class _InvoiceLineDraft {
     String? unitPrice,
     String? taxRate,
     String? total,
+    String? categoryId,
   }) : descriptionController = TextEditingController(text: description),
        quantityController = TextEditingController(text: quantity),
        unitPriceController = TextEditingController(text: unitPrice),
        taxRateController = TextEditingController(text: taxRate),
-       totalController = TextEditingController(text: total);
+       totalController = TextEditingController(text: total),
+       categoryId = categoryId;
 
   factory _InvoiceLineDraft.empty() =>
       _InvoiceLineDraft(id: 'line-${const Uuid().v4()}', total: '0');
@@ -726,6 +757,7 @@ class _InvoiceLineDraft {
         unitPrice: line.unitPriceMinor?.toString(),
         taxRate: line.taxRate?.toString(),
         total: line.totalMinor.toString(),
+        categoryId: line.categoryId,
       );
 
   final String id;
@@ -734,6 +766,7 @@ class _InvoiceLineDraft {
   final TextEditingController unitPriceController;
   final TextEditingController taxRateController;
   final TextEditingController totalController;
+  String? categoryId;
 
   void dispose() {
     descriptionController.dispose();

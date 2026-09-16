@@ -6,6 +6,8 @@ import '../../features/chat/data/chat_api_client.dart';
 import '../../features/chat/data/chat_history_store.dart';
 import '../../features/chat/domain/local_chat_assistant.dart';
 import '../../features/export/data/backup_catalog_store.dart';
+import '../../features/groups/data/group_service.dart';
+import '../../features/groups/domain/group_models.dart';
 import '../../features/ingestion/application/import_coordinator.dart';
 import '../../features/ingestion/data/ai_extraction_client.dart';
 import '../../features/ingestion/data/drift_import_job_store.dart';
@@ -63,6 +65,18 @@ final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {
 
 final chatHistoryStoreProvider = Provider<ChatHistoryStore>((ref) {
   return const ChatHistoryStore();
+});
+
+final expenseGroupServiceProvider = Provider<ExpenseGroupService?>((ref) {
+  final client = ref.watch(supabaseClientProvider);
+  return client == null ? null : ExpenseGroupService(client);
+});
+
+final expenseGroupsProvider = FutureProvider.autoDispose<List<ExpenseGroup>>((
+  ref,
+) {
+  final service = ref.watch(expenseGroupServiceProvider);
+  return service?.listGroups() ?? const [];
 });
 
 final backupCatalogStoreProvider = Provider<BackupCatalogStore>((ref) {

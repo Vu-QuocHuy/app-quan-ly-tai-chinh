@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/providers/app_providers.dart';
@@ -187,6 +188,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             ),
             const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Phân tích ảnh hóa đơn',
+              onPressed: _sending ? null : _attachInvoiceImage,
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+            ),
+            const SizedBox(width: 4),
             Semantics(
               button: true,
               label: 'Gửi câu hỏi',
@@ -200,6 +207,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _attachInvoiceImage() async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 92,
+      maxWidth: 2400,
+    );
+    if (image == null || !mounted) return;
+    setState(() => _sending = true);
+    try {
+      final bytes = await image.readAsBytes();
+      final outcome = await ref
+          .read(importCoordinatorProvider)
+          .importImage(
+            bytes: bytes,
+            fileName: image.name,
+            imagePath: image.path,
+          );
+      if (!mounted) return;
+      setState(() => _sending = false);
+      await context.push('/review', extra: outcome.result.invoice);
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _sending = false;
+        _connectionNote = 'Không thể phân tích ảnh: ${friendlyMessage(error)}';
+      });
+    }
   }
 
   Future<void> _loadHistory() async {

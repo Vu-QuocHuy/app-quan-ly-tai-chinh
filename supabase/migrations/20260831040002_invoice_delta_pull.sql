@@ -51,7 +51,8 @@ as $$
               'quantity', l.quantity,
               'unitPriceMinor', l.unit_price_minor,
               'taxRate', l.tax_rate,
-              'totalMinor', l.total_minor
+              'totalMinor', l.total_minor,
+              'categoryId', l.category_id
             ) order by l.id
           )
           from public.invoice_lines l

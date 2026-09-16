@@ -56,6 +56,11 @@ class InvoiceLines extends Table {
   IntColumn get unitPriceMinor => integer().nullable()();
   RealColumn get taxRate => real().nullable()();
   IntColumn get totalMinor => integer()();
+  TextColumn get categoryId => text().nullable().references(
+    Categories,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -224,7 +229,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -260,6 +265,9 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 4) {
         await migrator.createTable(invoiceConflicts);
+      }
+      if (from < 5) {
+        await migrator.addColumn(invoiceLines, invoiceLines.categoryId);
       }
     },
     beforeOpen: (details) async {

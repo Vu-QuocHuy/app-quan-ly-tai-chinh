@@ -11,6 +11,7 @@ import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/invoices/domain/invoice_models.dart';
 import '../../features/invoices/presentation/invoice_detail_screen.dart';
 import '../../features/invoices/presentation/invoice_list_screen.dart';
+import '../../features/groups/presentation/group_screen.dart';
 import '../../features/ingestion/presentation/import_job_history_screen.dart';
 import '../../features/review/presentation/review_invoice_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
@@ -132,6 +133,15 @@ final appRouter = GoRouter(
                   builder: (context, state) => const SyncConflictsScreen(),
                 ),
               ],
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/groups',
+              pageBuilder: (context, state) =>
+                  _tabPage(context, const GroupScreen()),
             ),
           ],
         ),

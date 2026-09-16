@@ -90,6 +90,11 @@ class _AppShellState extends ConsumerState<AppShell>
       selectedIcon: Icon(Icons.settings),
       label: 'Cài đặt',
     ),
+    NavigationDestination(
+      icon: Icon(Icons.group_outlined),
+      selectedIcon: Icon(Icons.group),
+      label: 'Nhóm',
+    ),
   ];
 
   @override

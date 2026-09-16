@@ -6,7 +6,9 @@ type ChatHistoryMessage = {role: "user" | "assistant"; text: string};
 type ExtractionRequest = {
   requestId: string;
   locale: "vi-VN";
-  text: string;
+  text?: string;
+  imageBase64?: string;
+  mimeType?: string;
 };
 
 type ChatRequest = {
@@ -34,6 +36,7 @@ const corsHeaders = {
 const model = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
 const apiRoot = "https://generativelanguage.googleapis.com/v1beta";
 const maxTextLength = 50_000;
+const maxImageBase64Length = 15_000_000;
 const maxRequestsPerMinute = 30;
 const rateBuckets = new Map<string, {startedAt: number; count: number}>();
 
@@ -65,13 +68,17 @@ const invoiceSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["description", "quantity", "unitPriceMinor", "taxRate", "totalMinor"],
+        required: ["description", "quantity", "unitPriceMinor", "taxRate", "totalMinor", "categoryId"],
         properties: {
           description: {type: "string"},
           quantity: {type: ["number", "null"], minimum: 0},
           unitPriceMinor: {type: ["integer", "null"], minimum: 0},
           taxRate: {type: ["number", "null"], minimum: 0, maximum: 100},
           totalMinor: {type: "integer", minimum: 0},
+          categoryId: {
+            type: "string",
+            enum: ["food", "transport", "shopping", "utilities", "health", "education", "entertainment", "other"],
+          },
         },
       },
     },
@@ -122,10 +129,14 @@ async function extractInvoice(request: ExtractionRequest) {
     "Không suy đoán trường không nhìn thấy; dùng null hoặc 0.",
     "Tiền dùng số nguyên theo đơn vị nhỏ nhất; với VND giữ nguyên số đồng.",
     "Đối chiếu tổng tiền nhưng không tự sửa số liệu để ép khớp.",
-    "OCR text:",
-    request.text,
+    "Phân loại từng mặt hàng vào đúng categoryId dựa trên mô tả; nếu không chắc dùng other.",
+    request.text ? "OCR text:" : "Phân tích trực tiếp ảnh hóa đơn đính kèm:",
+    ...(request.text ? [request.text] : []),
   ].join("\n");
-  const parsed = await generateJson(prompt, invoiceSchema, 0.1, 15_000);
+  const image = request.imageBase64 && request.mimeType
+    ? {mimeType: request.mimeType, data: request.imageBase64}
+    : undefined;
+  const parsed = await generateJson(prompt, invoiceSchema, 0.1, 30_000, image);
   validateInvoice(parsed);
   return {
     requestId: request.requestId,
@@ -194,11 +205,23 @@ function classifyMerchant(request: {requestId: string; merchant: string}) {
   };
 }
 
-async function generateJson(prompt: string, schema: unknown, temperature: number, timeoutMs: number): Promise<JsonObject> {
+async function generateJson(
+  prompt: string,
+  schema: unknown,
+  temperature: number,
+  timeoutMs: number,
+  image?: {mimeType: string; data: string},
+): Promise<JsonObject> {
   const apiKey = Deno.env.get("GEMINI_API_KEY")?.trim();
   if (!apiKey) throw new FunctionError(503, "AI_NOT_CONFIGURED", "GEMINI_API_KEY chưa được cấu hình trong Supabase Secrets.");
   const requestBody = JSON.stringify({
-    contents: [{role: "user", parts: [{text: prompt}]}],
+    contents: [{
+      role: "user",
+      parts: [
+        {text: prompt},
+        ...(image ? [{inlineData: {mimeType: image.mimeType, data: image.data}}] : []),
+      ],
+    }],
     generationConfig: {
       temperature,
       responseMimeType: "application/json",
@@ -284,7 +307,24 @@ function currencyPair(question: string): {base: string; target: string} | undefi
 }
 
 function parseExtraction(body: JsonObject): ExtractionRequest {
-  return {requestId: requestId(body), locale: locale(body), text: requiredString(body, "text", maxTextLength)};
+  const textValue = body.text;
+  const text = typeof textValue === "string" ? textValue.trim() : undefined;
+  if (text && text.length > maxTextLength) {
+    throw new FunctionError(413, "TEXT_TOO_LARGE", "text vượt quá giới hạn.");
+  }
+  const imageValue = body.imageBase64;
+  const imageBase64 = typeof imageValue === "string" ? imageValue.trim() : undefined;
+  if (imageBase64 && imageBase64.length > maxImageBase64Length) {
+    throw new FunctionError(413, "IMAGE_TOO_LARGE", "Ảnh vượt quá giới hạn.");
+  }
+  if (!text && !imageBase64) {
+    throw new FunctionError(400, "MISSING_EXTRACTION_INPUT", "Cần có OCR text hoặc ảnh hóa đơn.");
+  }
+  const mimeType = typeof body.mimeType === "string" ? body.mimeType.trim().toLowerCase() : undefined;
+  if (imageBase64 && (!mimeType || !["image/jpeg", "image/png", "image/webp"].includes(mimeType))) {
+    throw new FunctionError(400, "INVALID_IMAGE_TYPE", "Định dạng ảnh không được hỗ trợ.");
+  }
+  return {requestId: requestId(body), locale: locale(body), text, imageBase64, mimeType};
 }
 
 function parseClassification(body: JsonObject) {

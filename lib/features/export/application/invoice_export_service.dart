@@ -507,6 +507,7 @@ abstract final class InvoiceExportFormatter {
                     'unitPriceMinor': line.unitPriceMinor,
                     'taxRate': line.taxRate,
                     'totalMinor': line.totalMinor,
+                    'categoryId': line.categoryId,
                   },
                 )
                 .toList(growable: false),
@@ -547,6 +548,7 @@ abstract final class InvoiceExportFormatter {
               'unitPriceMinor': line.unitPriceMinor,
               'taxRate': line.taxRate,
               'totalMinor': line.totalMinor,
+              'categoryId': line.categoryId,
             },
           )
           .toList(growable: false),

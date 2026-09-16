@@ -61,7 +61,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar.large(title: Text('Hóa đơn')),
+          const SliverAppBar.large(pinned: true, title: Text('Hóa đơn')),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),

@@ -22,6 +22,7 @@ class InvoiceLineEntity {
     this.quantity,
     this.unitPriceMinor,
     this.taxRate,
+    this.categoryId,
   });
 
   final String id;
@@ -30,6 +31,17 @@ class InvoiceLineEntity {
   final int? unitPriceMinor;
   final double? taxRate;
   final int totalMinor;
+  final String? categoryId;
+
+  InvoiceLineEntity copyWith({String? categoryId}) => InvoiceLineEntity(
+    id: id,
+    description: description,
+    quantity: quantity,
+    unitPriceMinor: unitPriceMinor,
+    taxRate: taxRate,
+    totalMinor: totalMinor,
+    categoryId: categoryId ?? this.categoryId,
+  );
 }
 
 @immutable

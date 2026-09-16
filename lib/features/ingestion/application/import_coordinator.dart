@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:uuid/uuid.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -14,6 +15,7 @@ import '../data/xml_invoice_extractor.dart';
 import '../domain/duplicate_detector.dart';
 import '../domain/extraction.dart';
 import '../domain/invoice_extractor_registry.dart';
+import '../domain/line_category_classifier.dart';
 import '../domain/ocr_text_normalizer.dart';
 
 class ImportOutcome {
@@ -37,6 +39,8 @@ class ImportCoordinator {
     required AiExtractionClient aiExtractor,
     required HeuristicTextExtractor heuristicExtractor,
     DuplicateDetector duplicateDetector = const DuplicateDetector(),
+    LineCategoryClassifier lineCategoryClassifier =
+        const LineCategoryClassifier(),
     Uuid uuid = const Uuid(),
     Iterable<InvoiceExtractor> additionalExtractors = const [],
   }) : _repository = repository,
@@ -45,6 +49,7 @@ class ImportCoordinator {
        _aiExtractor = aiExtractor,
        _heuristicExtractor = heuristicExtractor,
        _duplicateDetector = duplicateDetector,
+       _lineCategoryClassifier = lineCategoryClassifier,
        _uuid = uuid,
        _extractorRegistry = InvoiceExtractorRegistry([
          xmlExtractor,
@@ -57,6 +62,7 @@ class ImportCoordinator {
   final AiExtractionClient _aiExtractor;
   final HeuristicTextExtractor _heuristicExtractor;
   final DuplicateDetector _duplicateDetector;
+  final LineCategoryClassifier _lineCategoryClassifier;
   final Uuid _uuid;
   final InvoiceExtractorRegistry _extractorRegistry;
 
@@ -94,17 +100,34 @@ class ImportCoordinator {
     required String imagePath,
   }) async {
     _validateSize(bytes);
-    final text = OcrTextNormalizer.normalize(
-      await _ocrService.recognizeText(imagePath),
-    );
     final input = ExtractionInput(
       bytes: bytes,
       fileName: fileName,
       sourceType: InvoiceSourceType.imageOcr,
       localPath: imagePath,
-      ocrText: text,
     );
-    return _complete(await _extractText(input));
+    if (kIsWeb) {
+      if (!_aiExtractor.isConfigured) {
+        throw const NetworkException(
+          'OCR trên Chrome cần cấu hình backend AI. Trên Android/iOS có thể OCR offline.',
+        );
+      }
+      return _complete(await _aiExtractor.extractImage(input));
+    }
+    final text = OcrTextNormalizer.normalize(
+      await _ocrService.recognizeText(imagePath),
+    );
+    return _complete(
+      await _extractText(
+        ExtractionInput(
+          bytes: bytes,
+          fileName: fileName,
+          sourceType: InvoiceSourceType.imageOcr,
+          localPath: imagePath,
+          ocrText: text,
+        ),
+      ),
+    );
   }
 
   InvoiceEntity createManualDraft() {
@@ -124,6 +147,11 @@ class ImportCoordinator {
   }
 
   Future<ImportOutcome> _complete(ExtractionResult result) async {
+    final categories = await _repository.watchCategories().first;
+    final classifiedLines = _lineCategoryClassifier.classify(
+      result.invoice.lines,
+      categories,
+    );
     var categoryId = await _repository.categoryForMerchant(
       result.invoice.sellerName,
     );
@@ -136,14 +164,15 @@ class ImportCoordinator {
         // Classification is an enrichment step; import must remain offline-first.
       }
     }
-    final resolvedResult = categoryId == null
-        ? result
-        : ExtractionResult(
-            invoice: result.invoice.copyWith(categoryId: categoryId),
-            adapterName: result.adapterName,
-            adapterVersion: result.adapterVersion,
-            warnings: result.warnings,
-          );
+    final resolvedResult = ExtractionResult(
+      invoice: result.invoice.copyWith(
+        categoryId: categoryId,
+        lines: classifiedLines,
+      ),
+      adapterName: result.adapterName,
+      adapterVersion: result.adapterVersion,
+      warnings: result.warnings,
+    );
     final hash = resolvedResult.invoice.sourceHash;
     final exact = hash == null
         ? null

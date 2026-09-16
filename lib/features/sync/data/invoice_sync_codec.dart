@@ -84,6 +84,7 @@ abstract final class InvoiceSyncCodec {
                 : _int(raw['unitPriceMinor']),
             taxRate: _double(raw['taxRate']),
             totalMinor: _int(raw['totalMinor']),
+            categoryId: _string(raw['categoryId']),
           ),
     ];
   }

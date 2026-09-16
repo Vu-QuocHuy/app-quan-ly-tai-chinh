@@ -23,7 +23,7 @@ class BudgetScreen extends ConsumerWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar.large(title: Text('Ngân sách')),
+          const SliverAppBar.large(pinned: true, title: Text('Ngân sách')),
           const SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(16, 0, 16, 12),

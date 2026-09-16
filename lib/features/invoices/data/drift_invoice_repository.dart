@@ -600,6 +600,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
               unitPriceMinor: item.unitPriceMinor,
               taxRate: item.taxRate,
               totalMinor: item.totalMinor,
+              categoryId: item.categoryId,
             ),
           )
           .toList(growable: false),
@@ -902,6 +903,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
                   unitPriceMinor: Value(line.unitPriceMinor),
                   taxRate: Value(line.taxRate),
                   totalMinor: line.totalMinor,
+                  categoryId: Value(line.categoryId),
                 ),
               )
               .toList(growable: false),
@@ -1017,6 +1019,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
           'unitPriceMinor': line.unitPriceMinor,
           'taxRate': line.taxRate,
           'totalMinor': line.totalMinor,
+          'categoryId': line.categoryId,
         },
     ],
     'evidence': [

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
@@ -71,6 +73,33 @@ class AiExtractionClient implements InvoiceExtractor {
     return categoryId is String && categoryId.isNotEmpty ? categoryId : null;
   }
 
+  Future<ExtractionResult> extractImage(ExtractionInput input) async {
+    if (!isConfigured) {
+      throw const NetworkException('Backend AI chưa được cấu hình.');
+    }
+    final body = {
+      'action': 'extract',
+      'requestId': _uuid.v4(),
+      'locale': 'vi-VN',
+      'imageBase64': base64Encode(input.bytes),
+      'mimeType': _mimeType(input.fileName),
+    };
+    final data = await _supabaseFunctions!.invoke(
+      body,
+      errorMessage:
+          'Không thể kết nối dịch vụ phân tích ảnh. Vui lòng thử lại sau.',
+    );
+    return _fromJson(data, input);
+  }
+
+  String _mimeType(String fileName) {
+    return switch (fileName.toLowerCase().split('.').last) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+  }
+
   ExtractionResult _fromJson(Map<String, dynamic> json, ExtractionInput input) {
     final now = DateTime.now();
     final id = _uuid.v4();
@@ -109,6 +138,7 @@ class AiExtractionClient implements InvoiceExtractor {
               unitPriceMinor: (item['unitPriceMinor'] as num?)?.round(),
               taxRate: (item['taxRate'] as num?)?.toDouble(),
               totalMinor: (item['totalMinor'] as num?)?.round() ?? 0,
+              categoryId: item['categoryId'] as String?,
             );
           })
           .toList(growable: false),

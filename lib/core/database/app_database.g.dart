@@ -1775,6 +1775,20 @@ class $InvoiceLinesTable extends InvoiceLines
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _categoryIdMeta = const VerificationMeta(
+    'categoryId',
+  );
+  @override
+  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
+    'category_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES categories (id) ON DELETE SET NULL',
+    ),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1784,6 +1798,7 @@ class $InvoiceLinesTable extends InvoiceLines
     unitPriceMinor,
     taxRate,
     totalMinor,
+    categoryId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1850,6 +1865,12 @@ class $InvoiceLinesTable extends InvoiceLines
     } else if (isInserting) {
       context.missing(_totalMinorMeta);
     }
+    if (data.containsKey('category_id')) {
+      context.handle(
+        _categoryIdMeta,
+        categoryId.isAcceptableOrUnknown(data['category_id']!, _categoryIdMeta),
+      );
+    }
     return context;
   }
 
@@ -1887,6 +1908,10 @@ class $InvoiceLinesTable extends InvoiceLines
         DriftSqlType.int,
         data['${effectivePrefix}total_minor'],
       )!,
+      categoryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category_id'],
+      ),
     );
   }
 
@@ -1904,6 +1929,7 @@ class InvoiceLineRow extends DataClass implements Insertable<InvoiceLineRow> {
   final int? unitPriceMinor;
   final double? taxRate;
   final int totalMinor;
+  final String? categoryId;
   const InvoiceLineRow({
     required this.id,
     required this.invoiceId,
@@ -1912,6 +1938,7 @@ class InvoiceLineRow extends DataClass implements Insertable<InvoiceLineRow> {
     this.unitPriceMinor,
     this.taxRate,
     required this.totalMinor,
+    this.categoryId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1929,6 +1956,9 @@ class InvoiceLineRow extends DataClass implements Insertable<InvoiceLineRow> {
       map['tax_rate'] = Variable<double>(taxRate);
     }
     map['total_minor'] = Variable<int>(totalMinor);
+    if (!nullToAbsent || categoryId != null) {
+      map['category_id'] = Variable<String>(categoryId);
+    }
     return map;
   }
 
@@ -1947,6 +1977,9 @@ class InvoiceLineRow extends DataClass implements Insertable<InvoiceLineRow> {
           ? const Value.absent()
           : Value(taxRate),
       totalMinor: Value(totalMinor),
+      categoryId: categoryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(categoryId),
     );
   }
 
@@ -1963,6 +1996,7 @@ class InvoiceLineRow extends DataClass implements Insertable<InvoiceLineRow> {
       unitPriceMinor: serializer.fromJson<int?>(json['unitPriceMinor']),
       taxRate: serializer.fromJson<double?>(json['taxRate']),
       totalMinor: serializer.fromJson<int>(json['totalMinor']),
+      categoryId: serializer.fromJson<String?>(json['categoryId']),
     );
   }
   @override
@@ -1976,6 +2010,7 @@ class InvoiceLineRow extends DataClass implements Insertable<InvoiceLineRow> {
       'unitPriceMinor': serializer.toJson<int?>(unitPriceMinor),
       'taxRate': serializer.toJson<double?>(taxRate),
       'totalMinor': serializer.toJson<int>(totalMinor),
+      'categoryId': serializer.toJson<String?>(categoryId),
     };
   }
 
@@ -1987,6 +2022,7 @@ class InvoiceLineRow extends DataClass implements Insertable<InvoiceLineRow> {
     Value<int?> unitPriceMinor = const Value.absent(),
     Value<double?> taxRate = const Value.absent(),
     int? totalMinor,
+    Value<String?> categoryId = const Value.absent(),
   }) => InvoiceLineRow(
     id: id ?? this.id,
     invoiceId: invoiceId ?? this.invoiceId,
@@ -1997,6 +2033,7 @@ class InvoiceLineRow extends DataClass implements Insertable<InvoiceLineRow> {
         : this.unitPriceMinor,
     taxRate: taxRate.present ? taxRate.value : this.taxRate,
     totalMinor: totalMinor ?? this.totalMinor,
+    categoryId: categoryId.present ? categoryId.value : this.categoryId,
   );
   InvoiceLineRow copyWithCompanion(InvoiceLinesCompanion data) {
     return InvoiceLineRow(
@@ -2013,6 +2050,9 @@ class InvoiceLineRow extends DataClass implements Insertable<InvoiceLineRow> {
       totalMinor: data.totalMinor.present
           ? data.totalMinor.value
           : this.totalMinor,
+      categoryId: data.categoryId.present
+          ? data.categoryId.value
+          : this.categoryId,
     );
   }
 
@@ -2025,7 +2065,8 @@ class InvoiceLineRow extends DataClass implements Insertable<InvoiceLineRow> {
           ..write('quantity: $quantity, ')
           ..write('unitPriceMinor: $unitPriceMinor, ')
           ..write('taxRate: $taxRate, ')
-          ..write('totalMinor: $totalMinor')
+          ..write('totalMinor: $totalMinor, ')
+          ..write('categoryId: $categoryId')
           ..write(')'))
         .toString();
   }
@@ -2039,6 +2080,7 @@ class InvoiceLineRow extends DataClass implements Insertable<InvoiceLineRow> {
     unitPriceMinor,
     taxRate,
     totalMinor,
+    categoryId,
   );
   @override
   bool operator ==(Object other) =>
@@ -2050,7 +2092,8 @@ class InvoiceLineRow extends DataClass implements Insertable<InvoiceLineRow> {
           other.quantity == this.quantity &&
           other.unitPriceMinor == this.unitPriceMinor &&
           other.taxRate == this.taxRate &&
-          other.totalMinor == this.totalMinor);
+          other.totalMinor == this.totalMinor &&
+          other.categoryId == this.categoryId);
 }
 
 class InvoiceLinesCompanion extends UpdateCompanion<InvoiceLineRow> {
@@ -2061,6 +2104,7 @@ class InvoiceLinesCompanion extends UpdateCompanion<InvoiceLineRow> {
   final Value<int?> unitPriceMinor;
   final Value<double?> taxRate;
   final Value<int> totalMinor;
+  final Value<String?> categoryId;
   final Value<int> rowid;
   const InvoiceLinesCompanion({
     this.id = const Value.absent(),
@@ -2070,6 +2114,7 @@ class InvoiceLinesCompanion extends UpdateCompanion<InvoiceLineRow> {
     this.unitPriceMinor = const Value.absent(),
     this.taxRate = const Value.absent(),
     this.totalMinor = const Value.absent(),
+    this.categoryId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   InvoiceLinesCompanion.insert({
@@ -2080,6 +2125,7 @@ class InvoiceLinesCompanion extends UpdateCompanion<InvoiceLineRow> {
     this.unitPriceMinor = const Value.absent(),
     this.taxRate = const Value.absent(),
     required int totalMinor,
+    this.categoryId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        invoiceId = Value(invoiceId),
@@ -2093,6 +2139,7 @@ class InvoiceLinesCompanion extends UpdateCompanion<InvoiceLineRow> {
     Expression<int>? unitPriceMinor,
     Expression<double>? taxRate,
     Expression<int>? totalMinor,
+    Expression<String>? categoryId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2103,6 +2150,7 @@ class InvoiceLinesCompanion extends UpdateCompanion<InvoiceLineRow> {
       if (unitPriceMinor != null) 'unit_price_minor': unitPriceMinor,
       if (taxRate != null) 'tax_rate': taxRate,
       if (totalMinor != null) 'total_minor': totalMinor,
+      if (categoryId != null) 'category_id': categoryId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2115,6 +2163,7 @@ class InvoiceLinesCompanion extends UpdateCompanion<InvoiceLineRow> {
     Value<int?>? unitPriceMinor,
     Value<double?>? taxRate,
     Value<int>? totalMinor,
+    Value<String?>? categoryId,
     Value<int>? rowid,
   }) {
     return InvoiceLinesCompanion(
@@ -2125,6 +2174,7 @@ class InvoiceLinesCompanion extends UpdateCompanion<InvoiceLineRow> {
       unitPriceMinor: unitPriceMinor ?? this.unitPriceMinor,
       taxRate: taxRate ?? this.taxRate,
       totalMinor: totalMinor ?? this.totalMinor,
+      categoryId: categoryId ?? this.categoryId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2153,6 +2203,9 @@ class InvoiceLinesCompanion extends UpdateCompanion<InvoiceLineRow> {
     if (totalMinor.present) {
       map['total_minor'] = Variable<int>(totalMinor.value);
     }
+    if (categoryId.present) {
+      map['category_id'] = Variable<String>(categoryId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2169,6 +2222,7 @@ class InvoiceLinesCompanion extends UpdateCompanion<InvoiceLineRow> {
           ..write('unitPriceMinor: $unitPriceMinor, ')
           ..write('taxRate: $taxRate, ')
           ..write('totalMinor: $totalMinor, ')
+          ..write('categoryId: $categoryId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5997,6 +6051,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
+        'categories',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('invoice_lines', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
         'invoices',
         limitUpdateKind: UpdateKind.delete,
       ),
@@ -6069,6 +6130,24 @@ final class $$CategoriesTableReferences
     ).filter((f) => f.categoryId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_invoicesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$InvoiceLinesTable, List<InvoiceLineRow>>
+  _invoiceLinesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.invoiceLines,
+    aliasName: 'categories__id__invoice_lines__category_id',
+  );
+
+  $$InvoiceLinesTableProcessedTableManager get invoiceLinesRefs {
+    final manager = $$InvoiceLinesTableTableManager(
+      $_db,
+      $_db.invoiceLines,
+    ).filter((f) => f.categoryId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_invoiceLinesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -6162,6 +6241,31 @@ class $$CategoriesTableFilterComposer
           }) => $$InvoicesTableFilterComposer(
             $db: $db,
             $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> invoiceLinesRefs(
+    Expression<bool> Function($$InvoiceLinesTableFilterComposer f) f,
+  ) {
+    final $$InvoiceLinesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.invoiceLines,
+      getReferencedColumn: (t) => t.categoryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoiceLinesTableFilterComposer(
+            $db: $db,
+            $table: $db.invoiceLines,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -6308,6 +6412,31 @@ class $$CategoriesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> invoiceLinesRefs<T extends Object>(
+    Expression<T> Function($$InvoiceLinesTableAnnotationComposer a) f,
+  ) {
+    final $$InvoiceLinesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.invoiceLines,
+      getReferencedColumn: (t) => t.categoryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoiceLinesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.invoiceLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> merchantRulesRefs<T extends Object>(
     Expression<T> Function($$MerchantRulesTableAnnotationComposer a) f,
   ) {
@@ -6374,6 +6503,7 @@ class $$CategoriesTableTableManager
           CategoryRow,
           PrefetchHooks Function({
             bool invoicesRefs,
+            bool invoiceLinesRefs,
             bool merchantRulesRefs,
             bool budgetsRefs,
           })
@@ -6432,6 +6562,7 @@ class $$CategoriesTableTableManager
           prefetchHooksCallback:
               ({
                 invoicesRefs = false,
+                invoiceLinesRefs = false,
                 merchantRulesRefs = false,
                 budgetsRefs = false,
               }) {
@@ -6439,6 +6570,7 @@ class $$CategoriesTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (invoicesRefs) db.invoices,
+                    if (invoiceLinesRefs) db.invoiceLines,
                     if (merchantRulesRefs) db.merchantRules,
                     if (budgetsRefs) db.budgets,
                   ],
@@ -6460,6 +6592,27 @@ class $$CategoriesTableTableManager
                                 table,
                                 p0,
                               ).invoicesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.categoryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (invoiceLinesRefs)
+                        await $_getPrefetchedData<
+                          CategoryRow,
+                          $CategoriesTable,
+                          InvoiceLineRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CategoriesTableReferences
+                              ._invoiceLinesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CategoriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).invoiceLinesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.categoryId == item.id,
@@ -6530,6 +6683,7 @@ typedef $$CategoriesTableProcessedTableManager =
       CategoryRow,
       PrefetchHooks Function({
         bool invoicesRefs,
+        bool invoiceLinesRefs,
         bool merchantRulesRefs,
         bool budgetsRefs,
       })
@@ -7633,6 +7787,7 @@ typedef $$InvoiceLinesTableCreateCompanionBuilder =
       Value<int?> unitPriceMinor,
       Value<double?> taxRate,
       required int totalMinor,
+      Value<String?> categoryId,
       Value<int> rowid,
     });
 typedef $$InvoiceLinesTableUpdateCompanionBuilder =
@@ -7644,6 +7799,7 @@ typedef $$InvoiceLinesTableUpdateCompanionBuilder =
       Value<int?> unitPriceMinor,
       Value<double?> taxRate,
       Value<int> totalMinor,
+      Value<String?> categoryId,
       Value<int> rowid,
     });
 
@@ -7662,6 +7818,23 @@ final class $$InvoiceLinesTableReferences
       $_db.invoices,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_invoiceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $CategoriesTable _categoryIdTable(_$AppDatabase db) =>
+      db.categories.createAlias('invoice_lines__category_id__categories__id');
+
+  $$CategoriesTableProcessedTableManager? get categoryId {
+    final $_column = $_itemColumn<String>('category_id');
+    if ($_column == null) return null;
+    final manager = $$CategoriesTableTableManager(
+      $_db,
+      $_db.categories,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_categoryIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -7722,6 +7895,29 @@ class $$InvoiceLinesTableFilterComposer
           }) => $$InvoicesTableFilterComposer(
             $db: $db,
             $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CategoriesTableFilterComposer get categoryId {
+    final $$CategoriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryId,
+      referencedTable: $db.categories,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CategoriesTableFilterComposer(
+            $db: $db,
+            $table: $db.categories,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -7793,6 +7989,29 @@ class $$InvoiceLinesTableOrderingComposer
     );
     return composer;
   }
+
+  $$CategoriesTableOrderingComposer get categoryId {
+    final $$CategoriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryId,
+      referencedTable: $db.categories,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CategoriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.categories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$InvoiceLinesTableAnnotationComposer
@@ -7850,6 +8069,29 @@ class $$InvoiceLinesTableAnnotationComposer
     );
     return composer;
   }
+
+  $$CategoriesTableAnnotationComposer get categoryId {
+    final $$CategoriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryId,
+      referencedTable: $db.categories,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CategoriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.categories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$InvoiceLinesTableTableManager
@@ -7865,7 +8107,7 @@ class $$InvoiceLinesTableTableManager
           $$InvoiceLinesTableUpdateCompanionBuilder,
           (InvoiceLineRow, $$InvoiceLinesTableReferences),
           InvoiceLineRow,
-          PrefetchHooks Function({bool invoiceId})
+          PrefetchHooks Function({bool invoiceId, bool categoryId})
         > {
   $$InvoiceLinesTableTableManager(_$AppDatabase db, $InvoiceLinesTable table)
     : super(
@@ -7887,6 +8129,7 @@ class $$InvoiceLinesTableTableManager
                 Value<int?> unitPriceMinor = const Value.absent(),
                 Value<double?> taxRate = const Value.absent(),
                 Value<int> totalMinor = const Value.absent(),
+                Value<String?> categoryId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InvoiceLinesCompanion(
                 id: id,
@@ -7896,6 +8139,7 @@ class $$InvoiceLinesTableTableManager
                 unitPriceMinor: unitPriceMinor,
                 taxRate: taxRate,
                 totalMinor: totalMinor,
+                categoryId: categoryId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -7907,6 +8151,7 @@ class $$InvoiceLinesTableTableManager
                 Value<int?> unitPriceMinor = const Value.absent(),
                 Value<double?> taxRate = const Value.absent(),
                 required int totalMinor,
+                Value<String?> categoryId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => InvoiceLinesCompanion.insert(
                 id: id,
@@ -7916,6 +8161,7 @@ class $$InvoiceLinesTableTableManager
                 unitPriceMinor: unitPriceMinor,
                 taxRate: taxRate,
                 totalMinor: totalMinor,
+                categoryId: categoryId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -7926,7 +8172,7 @@ class $$InvoiceLinesTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({invoiceId = false}) {
+          prefetchHooksCallback: ({invoiceId = false, categoryId = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [],
@@ -7959,6 +8205,19 @@ class $$InvoiceLinesTableTableManager
                               )
                               as T;
                     }
+                    if (categoryId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.categoryId,
+                                referencedTable: $$InvoiceLinesTableReferences
+                                    ._categoryIdTable(db),
+                                referencedColumn: $$InvoiceLinesTableReferences
+                                    ._categoryIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
 
                     return state;
                   },
@@ -7983,7 +8242,7 @@ typedef $$InvoiceLinesTableProcessedTableManager =
       $$InvoiceLinesTableUpdateCompanionBuilder,
       (InvoiceLineRow, $$InvoiceLinesTableReferences),
       InvoiceLineRow,
-      PrefetchHooks Function({bool invoiceId})
+      PrefetchHooks Function({bool invoiceId, bool categoryId})
     >;
 typedef $$FieldEvidencesTableCreateCompanionBuilder =
     FieldEvidencesCompanion Function({

@@ -1,6 +1,6 @@
 # Quản lý Tài chính
 
-Ứng dụng Flutter local-first để quản lý thu chi cá nhân: nhập hóa đơn điện tử Việt Nam từ XML, PDF có text, camera/ảnh OCR hoặc nhập tay; kiểm tra dữ liệu trước khi lưu; tự phân loại; phát hiện trùng; theo dõi chi tiêu, ngân sách và xu hướng tài chính.
+Ứng dụng Flutter local-first để quản lý thu chi cá nhân và nhóm: nhập hóa đơn điện tử Việt Nam từ XML, PDF có text, camera/ảnh OCR hoặc nhập tay; kiểm tra dữ liệu trước khi lưu; tự phân loại; phát hiện trùng; theo dõi chi tiêu, ngân sách và xu hướng tài chính.
 
 ## Kiến trúc
 
@@ -12,6 +12,7 @@
 - Trợ lý chi tiêu có bộ tool local read-only, chỉ gọi tool phù hợp với câu hỏi; Gemini `/v1/chat` là tùy chọn và citation cho dữ liệu nguồn.
 - Câu trả lời từ dữ liệu local không gọi Gemini. Khi cần Gemini, client và Edge Function chỉ cho phép facts tổng hợp, loại bỏ invoice ID/merchant/kết quả tìm kiếm và ẩn thông tin định danh trong câu hỏi/lịch sử.
 - Connector tỷ giá chỉ gọi provider allowlist ở backend, có timeout và hiển thị nguồn cập nhật.
+- Nhóm chi tiêu dùng Supabase RLS: tạo/tham gia bằng mã mời, chia đều/theo số tiền/theo phần trăm, OCR hóa đơn để gán từng dòng cho thành viên và ghi nhận tất toán.
 
 ## Chạy app một lượt
 
@@ -116,6 +117,7 @@ Function `ai-api` bật `verify_jwt = true`; chỉ phiên Supabase hợp lệ m�
 - Android/iOS có local notification cho cảnh báo ngân sách, chống gửi lặp theo tháng/mức cảnh báo; chạm notification mở thẳng màn hình Ngân sách. Quyền thông báo chỉ được xin khi người dùng bật tùy chọn.
 - Merchant chưa có quy tắc local có thể được phân loại qua Supabase Edge Function khi đã đăng nhập; lỗi mạng vẫn giữ luồng offline-first.
 - Supabase Auth email/password, PostgreSQL RLS theo người dùng và bucket riêng tư `receipt-images`; đồng bộ push/pull áp dụng hóa đơn, dòng hàng, evidence, danh mục, ngân sách và quy tắc merchant.
+- Dữ liệu nhóm chỉ hiển thị cho thành viên nhóm; các RPC kiểm tra membership, tổng phần chia và yêu cầu user xác nhận trước khi ghi khoản chi.
 
 ## Chất lượng và bảo mật
 

@@ -48,6 +48,7 @@ create table public.invoice_lines (
   unit_price_minor bigint,
   tax_rate numeric,
   total_minor bigint not null default 0,
+  category_id text,
   primary key (user_id, id),
   foreign key (user_id, invoice_id)
     references public.invoices(user_id, id) on delete cascade
@@ -346,7 +347,8 @@ begin
       quantity,
       unit_price_minor,
       tax_rate,
-      total_minor
+      total_minor,
+      category_id
     ) values (
       v_user_id,
       v_line ->> 'id',
@@ -355,7 +357,8 @@ begin
       nullif(v_line ->> 'quantity', '')::numeric,
       nullif(v_line ->> 'unitPriceMinor', '')::bigint,
       nullif(v_line ->> 'taxRate', '')::numeric,
-      coalesce((v_line ->> 'totalMinor')::bigint, 0)
+      coalesce((v_line ->> 'totalMinor')::bigint, 0),
+      nullif(v_line ->> 'categoryId', '')
     );
   end loop;
 
