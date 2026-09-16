@@ -113,6 +113,15 @@ final appRouter = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
+              path: '/groups',
+              pageBuilder: (context, state) =>
+                  _tabPage(context, const GroupScreen()),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
               path: '/settings',
               pageBuilder: (context, state) =>
                   _tabPage(context, const SettingsScreen()),
@@ -133,15 +142,6 @@ final appRouter = GoRouter(
                   builder: (context, state) => const SyncConflictsScreen(),
                 ),
               ],
-            ),
-          ],
-        ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/groups',
-              pageBuilder: (context, state) =>
-                  _tabPage(context, const GroupScreen()),
             ),
           ],
         ),

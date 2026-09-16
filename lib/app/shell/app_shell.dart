@@ -86,14 +86,14 @@ class _AppShellState extends ConsumerState<AppShell>
       label: 'Ngân sách',
     ),
     NavigationDestination(
-      icon: Icon(Icons.settings_outlined),
-      selectedIcon: Icon(Icons.settings),
-      label: 'Cài đặt',
-    ),
-    NavigationDestination(
       icon: Icon(Icons.group_outlined),
       selectedIcon: Icon(Icons.group),
       label: 'Nhóm',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.settings_outlined),
+      selectedIcon: Icon(Icons.settings),
+      label: 'Cài đặt',
     ),
   ];
 
@@ -105,20 +105,37 @@ class _AppShellState extends ConsumerState<AppShell>
     final width = MediaQuery.sizeOf(context).width;
     final useRail = AppBreakpoints.useRail(width);
     final content = widget.navigationShell;
+    final scheme = Theme.of(context).colorScheme;
+    final showInvoiceAction = widget.navigationShell.currentIndex == 1;
     return Scaffold(
       body: SafeArea(
         child: Row(
           children: [
             if (useRail)
               NavigationRail(
+                backgroundColor: scheme.surfaceContainerLow,
+                groupAlignment: -0.85,
+                minWidth: 84,
                 selectedIndex: widget.navigationShell.currentIndex,
                 onDestinationSelected: _goBranch,
                 labelType: NavigationRailLabelType.all,
                 leading: Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Icon(
-                    Icons.receipt_long,
-                    color: Theme.of(context).colorScheme.primary,
+                  padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+                  child: Tooltip(
+                    message: 'Quản lý Tài chính',
+                    child: DecoratedBox(
+                      decoration: ShapeDecoration(
+                        color: scheme.primary,
+                        shape: AppShapes.control,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        child: Icon(
+                          Icons.account_balance_wallet_outlined,
+                          color: scheme.onPrimary,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
                 destinations: _destinations
@@ -131,6 +148,12 @@ class _AppShellState extends ConsumerState<AppShell>
                     )
                     .toList(growable: false),
               ),
+            if (useRail)
+              VerticalDivider(
+                width: 1,
+                thickness: 1,
+                color: scheme.outlineVariant,
+              ),
             // Khi rail xuất hiện, nội dung được ràng vào bề rộng đọc và canh
             // giữa thay vì kéo dài hết cửa sổ.
             Expanded(child: useRail ? ReadingPane(child: content) : content),
@@ -140,22 +163,27 @@ class _AppShellState extends ConsumerState<AppShell>
       bottomNavigationBar: useRail
           ? null
           : NavigationBar(
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
               selectedIndex: widget.navigationShell.currentIndex,
               onDestinationSelected: _goBranch,
               destinations: _destinations,
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _isImporting ? _cancelImport : _showImportSources,
-        tooltip: _isImporting && _importFileName != null
-            ? 'Đang xử lý $_importFileName · Nhấn để hủy'
-            : 'Thêm giao dịch',
-        icon: _isImporting
-            ? const Icon(Icons.stop_circle_outlined)
-            : const Icon(Icons.add_a_photo_outlined),
-        label: Text(
-          _isImporting ? 'Hủy $_importIndex/$_importTotal' : 'Thêm giao dịch',
-        ),
-      ),
+      floatingActionButton: showInvoiceAction
+          ? FloatingActionButton.extended(
+              onPressed: _isImporting ? _cancelImport : _showImportSources,
+              tooltip: _isImporting && _importFileName != null
+                  ? 'Đang xử lý $_importFileName · Nhấn để hủy'
+                  : 'Thêm hóa đơn',
+              icon: _isImporting
+                  ? const Icon(Icons.stop_circle_outlined)
+                  : const Icon(Icons.add_a_photo_outlined),
+              label: Text(
+                _isImporting
+                    ? 'Hủy $_importIndex/$_importTotal'
+                    : 'Thêm hóa đơn',
+              ),
+            )
+          : null,
     );
   }
 

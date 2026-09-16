@@ -83,7 +83,7 @@ abstract final class AppTheme {
         // `height: 72` bị XOÁ. Mặc định M3 là 80dp và 8dp chênh lệch đó chính
         // là khoảng dư mà bộ kẹp nhãn của Flutter cần cho "Tổng quan".
         elevation: AppElevations.raised,
-        backgroundColor: scheme.surface,
+        backgroundColor: scheme.surfaceContainerLow,
         surfaceTintColor: scheme.surfaceTint,
         // Pill thương hiệu đặc: 7.20:1 sáng / 11.13:1 tối.
         indicatorColor: scheme.primary,
@@ -106,7 +106,7 @@ abstract final class AppTheme {
         }),
       ),
       navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: scheme.surface,
+        backgroundColor: scheme.surfaceContainerLow,
         indicatorColor: scheme.primary,
         indicatorShape: AppShapes.pill,
         selectedIconTheme: IconThemeData(color: scheme.onPrimary, size: 24),

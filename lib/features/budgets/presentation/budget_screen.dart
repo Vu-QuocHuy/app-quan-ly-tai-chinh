@@ -4,8 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
-import '../../../shared/widgets/month_selector.dart';
+import '../../../app/theme/app_tokens.dart';
+import '../../../app/theme/finance_colors.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/budget_meter.dart';
 import '../../../shared/widgets/category_avatar.dart';
+import '../../../shared/widgets/month_selector.dart';
+import '../../../shared/widgets/money_text.dart';
+import '../../../shared/widgets/section_header.dart';
 import '../../invoices/domain/invoice_models.dart';
 import 'category_management.dart';
 import '../../../shared/errors/error_presenter.dart';
@@ -20,10 +26,11 @@ class BudgetScreen extends ConsumerWidget {
     final dashboard = ref.watch(dashboardProvider);
     final selectedMonth = ref.watch(selectedMonthProvider);
     final monthKey = MonthUtils.key(selectedMonth);
+    final dashboardSnapshot = dashboard.asData?.value;
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar.large(pinned: true, title: Text('Ngân sách')),
+          const SliverAppBar(pinned: true, title: Text('Ngân sách')),
           const SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -54,6 +61,8 @@ class BudgetScreen extends ConsumerWidget {
                     return _BudgetTile(
                       category: category,
                       budget: budget,
+                      spentMinor:
+                          dashboardSnapshot?.categoryTotals[category.id] ?? 0,
                       onEdit: () =>
                           _editBudget(context, ref, category, budget, monthKey),
                     );
@@ -168,30 +177,102 @@ class _BudgetTile extends StatelessWidget {
   const _BudgetTile({
     required this.category,
     required this.onEdit,
+    required this.spentMinor,
     this.budget,
   });
 
   final CategoryEntity category;
   final BudgetEntity? budget;
+  final int spentMinor;
   final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        minTileHeight: 72,
-        leading: CategoryAvatar(category: category),
-        title: Text(category.name),
-        subtitle: Text(
-          budget == null
-              ? 'Chưa đặt hạn mức'
-              : MoneyFormatter.format(budget!.limitMinor),
-        ),
-        trailing: IconButton(
-          tooltip: 'Sửa ngân sách ${category.name}',
-          onPressed: onEdit,
-          icon: const Icon(Icons.edit_outlined),
-        ),
+    final scheme = Theme.of(context).colorScheme;
+    final finance = context.finance;
+    final limit = budget?.limitMinor ?? 0;
+    final ratio = limit <= 0 ? 0.0 : spentMinor / limit;
+    final progressColor = ratio >= 1
+        ? finance.budgetOver.color
+        : ratio >= 0.8
+        ? finance.budgetWarn.color
+        : scheme.primary;
+    final remaining = limit - spentMinor;
+
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.sm,
+        AppSpacing.md,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          CategoryAvatar(category: category),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        category.name,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Sửa ngân sách ${category.name}',
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                  ],
+                ),
+                if (budget == null)
+                  Text(
+                    'Chưa đặt hạn mức · Đã chi ${MoneyFormatter.format(spentMinor)}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  )
+                else ...[
+                  Row(
+                    children: [
+                      Expanded(child: MoneyText(spentMinor)),
+                      Text(
+                        ' / ${MoneyFormatter.format(limit)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  LinearProgressIndicator(
+                    value: ratio.clamp(0.0, 1.0),
+                    minHeight: 8,
+                    color: progressColor,
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(AppSpacing.sm),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    remaining >= 0
+                        ? 'Còn lại ${MoneyFormatter.format(remaining)}'
+                        : 'Vượt ${MoneyFormatter.format(-remaining)}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: remaining < 0
+                          ? finance.budgetOver.color
+                          : scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -204,9 +285,10 @@ class _BudgetSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: snapshot.when(
           loading: () => const SizedBox(
             height: 76,
@@ -228,36 +310,21 @@ class _BudgetSummary extends StatelessWidget {
           ),
           data: (data) {
             final hasBudget = data.budgetLimitMinor > 0;
-            final progress = data.budgetProgress.clamp(0.0, 1.0);
             final remaining = data.budgetLimitMinor - data.totalMinor;
             final isOver = hasBudget && remaining < 0;
-            final accent = isOver
-                ? Theme.of(context).colorScheme.error
-                : Theme.of(context).colorScheme.primary;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Tổng quan tháng',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    Text(
-                      '${data.invoiceCount} giao dịch',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
+                SectionHeader(
+                  title: 'Tổng quan tháng',
+                  subtitle: '${data.invoiceCount} giao dịch đã ghi nhận',
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  MoneyFormatter.format(data.totalMinor),
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                const SizedBox(height: AppSpacing.lg),
+                MoneyText(
+                  data.totalMinor,
+                  emphasis: MoneyEmphasis.title,
+                  tone: isOver ? context.finance.budgetOver : null,
                 ),
-                const SizedBox(height: 4),
                 Text(
                   hasBudget
                       ? isOver
@@ -265,26 +332,83 @@ class _BudgetSummary extends StatelessWidget {
                             : 'Còn lại ${MoneyFormatter.format(remaining)}'
                       : 'Chưa đặt tổng hạn mức cho tháng này',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isOver ? Theme.of(context).colorScheme.error : null,
+                    color: isOver ? scheme.error : scheme.onSurfaceVariant,
                   ),
                 ),
+                const SizedBox(height: AppSpacing.lg),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _BudgetMetric(
+                        label: 'Đã chi',
+                        value: MoneyFormatter.format(data.totalMinor),
+                        icon: Icons.trending_down,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: _BudgetMetric(
+                        label: 'Hạn mức',
+                        value: hasBudget
+                            ? MoneyFormatter.format(data.budgetLimitMinor)
+                            : 'Chưa đặt',
+                        icon: Icons.savings_outlined,
+                      ),
+                    ),
+                  ],
+                ),
                 if (hasBudget) ...[
-                  const SizedBox(height: 14),
-                  LinearProgressIndicator(
-                    value: progress,
-                    color: accent,
-                    minHeight: 8,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Hạn mức ${MoneyFormatter.format(data.budgetLimitMinor)}',
-                    style: Theme.of(context).textTheme.bodySmall,
+                  const SizedBox(height: AppSpacing.lg),
+                  BudgetMeter(
+                    spentMinor: data.totalMinor,
+                    limitMinor: data.budgetLimitMinor,
+                    animate: false,
                   ),
                 ],
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _BudgetMetric extends StatelessWidget {
+  const _BudgetMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        color: scheme.surfaceContainerLow,
+        shape: AppShapes.control,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: AppIconSizes.sm, color: scheme.primary),
+            const SizedBox(height: AppSpacing.xs),
+            Text(label, style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          ],
         ),
       ),
     );

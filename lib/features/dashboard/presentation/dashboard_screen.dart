@@ -73,7 +73,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverAppBar.medium(
+          SliverAppBar(
             pinned: true,
             title: const Text('Tổng quan'),
             actions: [
@@ -128,6 +128,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     snapshot: snapshot,
                     alertsEnabled: budgetAlertsEnabled,
                     month: selectedMonth,
+                    onViewBudgets: () => context.go('/budgets'),
                   ),
                   const SizedBox(height: 16),
                   _InsightsCard(
@@ -169,9 +170,9 @@ class _InsightsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return AppCard(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.zero,
         child: insights.when(
           loading: () => const Row(
             children: [
@@ -377,11 +378,30 @@ class _HeroSummary extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // CÂU THƯỜNG. Bỏ .toUpperCase() + letterSpacing: 1 — viết hoa đẩy
-              // dấu chồng tiếng Việt vào vùng ascender và rộng hơn ~30%.
-              EyebrowLabel(
-                'Tổng chi ${MonthUtils.label(month)}',
-                color: scheme.onPrimary,
+              Row(
+                children: [
+                  Expanded(
+                    child: EyebrowLabel(
+                      'Tổng chi ${MonthUtils.label(month)}',
+                      color: scheme.onPrimary,
+                    ),
+                  ),
+                  ExcludeSemantics(
+                    child: DecoratedBox(
+                      decoration: ShapeDecoration(
+                        color: scheme.onPrimary.withValues(alpha: 0.14),
+                        shape: AppShapes.control,
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.all(AppSpacing.sm),
+                        child: Icon(
+                          Icons.account_balance_wallet_outlined,
+                          color: scheme.onPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: AppSpacing.sm),
               // fitToWidth: "1.234.567.890 ₫" ở 36sp trong ~280dp trước đây
@@ -414,6 +434,25 @@ class _HeroSummary extends StatelessWidget {
                   tone: change >= 0 ? StatusTone.warn : StatusTone.safe,
                 ),
               ],
+              const SizedBox(height: AppSpacing.lg),
+              Divider(color: scheme.onPrimary.withValues(alpha: 0.22)),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  Icon(
+                    Icons.receipt_long_outlined,
+                    size: AppIconSizes.sm,
+                    color: scheme.onPrimary,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    'Tổng quan đã cập nhật',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelMedium?.copyWith(color: scheme.onPrimary),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -427,11 +466,13 @@ class _BudgetCard extends StatelessWidget {
     required this.snapshot,
     required this.alertsEnabled,
     required this.month,
+    required this.onViewBudgets,
   });
 
   final DashboardSnapshot snapshot;
   final bool alertsEnabled;
   final DateTime month;
+  final VoidCallback onViewBudgets;
 
   @override
   Widget build(BuildContext context) {
@@ -448,17 +489,15 @@ class _BudgetCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.savings_outlined, color: scheme.onSurfaceVariant),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Text(
-                  'Ngân sách',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-            ],
+          SectionHeader(
+            title: 'Ngân sách',
+            subtitle: hasBudget
+                ? 'Theo dõi nhịp chi trong ${MonthUtils.label(month)}'
+                : 'Đặt hạn mức để kiểm soát tháng này',
+            trailing: TextButton(
+              onPressed: onViewBudgets,
+              child: const Text('Xem'),
+            ),
           ),
           const SizedBox(height: AppSpacing.lg),
           if (hasBudget)
@@ -671,11 +710,13 @@ class _CategoryBreakdown extends StatelessWidget {
     }
     final entries = snapshot.categoryTotals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    return Card(
+    final total = entries.fold<int>(0, (sum, entry) => sum + entry.value);
+    return AppCard(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
       child: ListView.separated(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(8),
+        padding: EdgeInsets.zero,
         itemCount: entries.length,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, index) {
@@ -683,13 +724,56 @@ class _CategoryBreakdown extends StatelessWidget {
           final category = categories
               .where((item) => item.id == entry.key)
               .firstOrNull;
-          return ListTile(
-            // CategoryAvatar suy dẫn màu theo brightness và bảo đảm glyph
-            // >= 4.5:1 trên cả nền thẻ lẫn tint. Bản tint 14% + glyph nguyên
-            // màu trước đây chỉ đạt 2.32:1 và mù theme.
-            leading: CategoryAvatar(category: category),
-            title: Text(category?.name ?? 'Khác'),
-            trailing: MoneyText(entry.value),
+          final ratio = total <= 0 ? 0.0 : entry.value / total;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              AppSpacing.sm,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CategoryAvatar(category: category, radius: 18),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Text(
+                        category?.name ?? 'Khác',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ),
+                    MoneyText(entry.value),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Padding(
+                  padding: const EdgeInsets.only(left: 48),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: LinearProgressIndicator(
+                          value: ratio,
+                          minHeight: 6,
+                          color: Theme.of(context).colorScheme.primary,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(AppSpacing.sm),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(
+                        '${(ratio * 100).round()}%',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),

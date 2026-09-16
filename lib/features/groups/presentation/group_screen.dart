@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/providers/app_providers.dart';
@@ -32,10 +33,15 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverAppBar.large(
+          SliverAppBar(
             pinned: true,
             title: const Text('Nhóm chi tiêu'),
             actions: [
+              IconButton(
+                tooltip: 'Mở trợ lý chi tiêu',
+                onPressed: () => context.push('/chat'),
+                icon: const Icon(Icons.chat_bubble_outline),
+              ),
               IconButton(
                 tooltip: 'Làm mới nhóm',
                 onPressed: _refresh,

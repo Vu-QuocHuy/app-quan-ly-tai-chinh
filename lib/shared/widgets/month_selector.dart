@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/app_tokens.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/utils/month_utils.dart';
 import 'month_picker_sheet.dart';
@@ -12,10 +13,15 @@ class MonthSelector extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final month = ref.watch(selectedMonthProvider);
     final label = MonthUtils.label(month);
+    final scheme = Theme.of(context).colorScheme;
     return Card(
       margin: EdgeInsets.zero,
+      color: scheme.surfaceContainerLow,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
+        ),
         child: Row(
           children: [
             IconButton(
@@ -27,10 +33,35 @@ class MonthSelector extends ConsumerWidget {
               child: Semantics(
                 button: true,
                 label: 'Chọn $label',
-                child: TextButton.icon(
+                child: TextButton(
                   onPressed: () => _pickMonth(context, ref, month),
-                  icon: const Icon(Icons.calendar_month_outlined),
-                  label: Text(label),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
+                    ),
+                    alignment: Alignment.center,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.calendar_month_outlined,
+                        size: AppIconSizes.md,
+                        color: scheme.primary,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(color: scheme.onSurface),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -61,7 +61,18 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar.large(pinned: true, title: Text('Hóa đơn')),
+          SliverAppBar(
+            pinned: true,
+            title: const Text('Hóa đơn'),
+            actions: [
+              IconButton(
+                tooltip: 'Mở trợ lý chi tiêu',
+                onPressed: () => context.push('/chat'),
+                icon: const Icon(Icons.chat_bubble_outline),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),

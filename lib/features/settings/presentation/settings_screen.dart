@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/config/app_environment.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/month_utils.dart';
 import '../../export/application/invoice_export_service.dart';
@@ -27,12 +26,20 @@ class SettingsScreen extends ConsumerWidget {
     final backupRecords = ref.watch(backupRecordsProvider);
     final authUser = ref.watch(authUserProvider);
     final supabaseConfigured = ref.watch(supabaseClientProvider) != null;
+    final aiStatus = authUser.when(
+      data: (user) => supabaseConfigured && user != null
+          ? 'OCR và chatbot AI online đã sẵn sàng.'
+          : 'Đang dùng OCR và chatbot offline; đăng nhập để bật AI online.',
+      loading: () => 'Đang kiểm tra trạng thái AI online…',
+      error: (_, _) =>
+          'Không kiểm tra được AI online; OCR và chatbot offline vẫn dùng được.',
+    );
     final categories = categoriesAsync.value ?? const <CategoryEntity>[];
 
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar.large(pinned: true, title: Text('Cài đặt')),
+          const SliverAppBar(pinned: true, title: Text('Cài đặt')),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 112),
             sliver: SliverList.list(
@@ -213,19 +220,10 @@ class SettingsScreen extends ConsumerWidget {
                 _Section(
                   title: 'Xử lý thông minh',
                   children: [
-                    const ListTile(
-                      leading: Icon(Icons.auto_awesome_outlined),
-                      title: Text('AI extraction'),
-                      subtitle: Text(
-                        'Tự động dùng Supabase Edge Function khi đã đăng nhập; nếu không, app dùng fallback offline.',
-                      ),
-                    ),
-                    const ListTile(
-                      leading: Icon(Icons.qr_code_scanner),
-                      title: Text('QR lookup'),
-                      subtitle: Text(
-                        'Đã đọc QR từ camera; tra cứu provider vẫn cần backend allowlist.',
-                      ),
+                    ListTile(
+                      leading: const Icon(Icons.auto_awesome_outlined),
+                      title: const Text('OCR và trợ lý AI'),
+                      subtitle: Text(aiStatus),
                     ),
                     ListTile(
                       leading: const Icon(Icons.chat_bubble_outline),
@@ -311,22 +309,6 @@ class SettingsScreen extends ConsumerWidget {
                                 ref.invalidate(invoiceConflictsProvider),
                           ),
                         ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _Section(
-                  title: 'Ứng dụng',
-                  children: [
-                    const ListTile(
-                      leading: Icon(Icons.info_outline),
-                      title: Text('Quản lý Tài chính'),
-                      subtitle: Text('MVP 0.1.0 · Flutter'),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.tune),
-                      title: const Text('Môi trường'),
-                      subtitle: Text(AppEnvironment.current.label),
-                    ),
                   ],
                 ),
               ],
