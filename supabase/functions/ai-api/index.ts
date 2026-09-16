@@ -174,7 +174,6 @@ async function answerChat(request: ChatRequest) {
   const period = request.facts.find((fact) => fact.key === "period")?.value ?? "local";
   const citations = [
     ...(request.facts.length ? [{label: `Dữ liệu local ${period}`, sourceType: "local", sourceId: period}] : []),
-    ...sourceInvoiceIds(request.facts).map((sourceId) => ({label: "Mở hóa đơn nguồn", sourceType: "invoice", sourceId})),
     ...external.citations,
   ];
   return {
@@ -357,10 +356,11 @@ function parseFacts(value: unknown): ChatFact[] {
 function parseHistory(value: unknown): ChatHistoryMessage[] {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.length > 12) throw new FunctionError(400, "INVALID_HISTORY", "history không hợp lệ.");
-  return value.map((item) => {
+  return value.map((item): ChatHistoryMessage => {
     if (!isObject(item) || (item.role !== "user" && item.role !== "assistant") || typeof item.text !== "string") throw new FunctionError(400, "INVALID_HISTORY_MESSAGE", "Một tin nhắn không hợp lệ.");
     if (item.text.trim().length === 0 || item.text.length > 4_000) throw new FunctionError(413, "HISTORY_MESSAGE_TOO_LARGE", "Tin nhắn vượt giới hạn.");
-    return {role: item.role, text: redactPersonalData(item.text.trim())};
+    const role: ChatHistoryMessage["role"] = item.role === "user" ? "user" : "assistant";
+    return {role, text: redactPersonalData(item.text.trim())};
   }).filter((message) => message.role === "user").slice(-4);
 }
 

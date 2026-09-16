@@ -267,7 +267,14 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(invoiceConflicts);
       }
       if (from < 5) {
-        await migrator.addColumn(invoiceLines, invoiceLines.categoryId);
+        final invoiceLinesTable = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'invoice_lines'",
+        ).getSingleOrNull();
+        if (invoiceLinesTable == null) {
+          await migrator.createTable(invoiceLines);
+        } else {
+          await migrator.addColumn(invoiceLines, invoiceLines.categoryId);
+        }
       }
     },
     beforeOpen: (details) async {
