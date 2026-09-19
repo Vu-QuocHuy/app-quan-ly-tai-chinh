@@ -216,11 +216,11 @@ class ImportJobs extends Table {
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase([QueryExecutor? executor])
+  AppDatabase([QueryExecutor? executor, String databaseName = 'hoadon_insight'])
     : super(
         executor ??
             driftDatabase(
-              name: 'hoadon_insight',
+              name: databaseName,
               web: DriftWebOptions(
                 sqlite3Wasm: Uri.parse('sqlite3.wasm'),
                 driftWorker: Uri.parse('drift_worker.js'),

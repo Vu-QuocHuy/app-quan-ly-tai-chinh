@@ -43,6 +43,53 @@ void main() {
       },
     );
 
+    test('parses generic invoice information schema variant', () async {
+      final bytes = await File(
+        'test/fixtures/xml/generic_einvoice.xml',
+      ).readAsBytes();
+
+      final result = await extractor.extract(
+        ExtractionInput(
+          bytes: bytes,
+          fileName: 'generic.xml',
+          sourceType: InvoiceSourceType.xml,
+        ),
+      );
+
+      expect(result.invoice.sellerName, 'CÔNG TY GENERIC');
+      expect(result.invoice.sellerTaxCode, '0101234567');
+      expect(result.invoice.invoiceNumber, 'GEN-0001');
+      expect(result.invoice.invoiceSymbol, 'G26AA');
+      expect(result.invoice.issuedAt, DateTime(2026, 9, 1));
+      expect(result.invoice.totalMinor, 54000);
+      expect(result.invoice.lines.single.description, 'Hàng tiêu dùng');
+      expect(result.invoice.lines.single.quantity, 2);
+      expect(result.invoice.lines.single.taxRate, 8);
+    });
+
+    test('parses invoice information schema variant', () async {
+      final bytes = await File(
+        'test/fixtures/xml/invoice_information.xml',
+      ).readAsBytes();
+
+      final result = await extractor.extract(
+        ExtractionInput(
+          bytes: bytes,
+          fileName: 'invoice-information.xml',
+          sourceType: InvoiceSourceType.xml,
+        ),
+      );
+
+      expect(result.invoice.sellerName, 'CỬA HÀNG INFORMATION');
+      expect(result.invoice.sellerTaxCode, '0207654321');
+      expect(result.invoice.invoiceNumber, 'INFO-0002');
+      expect(result.invoice.invoiceSymbol, 'I26BB');
+      expect(result.invoice.issuedAt, DateTime(2026, 9, 2));
+      expect(result.invoice.totalMinor, 33000);
+      expect(result.invoice.lines.single.description, 'Đồ uống');
+      expect(result.invoice.lines.single.unitPriceMinor, 30000);
+    });
+
     test('rejects malformed XML with a user-facing exception', () async {
       final input = ExtractionInput(
         bytes: File(

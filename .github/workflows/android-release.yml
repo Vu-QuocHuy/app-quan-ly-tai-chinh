@@ -1,0 +1,65 @@
+name: Android Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_OAUTH_REDIRECT_URI: ${{ secrets.SUPABASE_OAUTH_REDIRECT_URI }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.1
+          channel: stable
+          cache: true
+      - name: Validate release inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_PUBLISHABLE_KEY"
+          test -n "$SUPABASE_OAUTH_REDIRECT_URI"
+      - name: Prepare signing keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          keystore_path="$RUNNER_TEMP/hoadon-insight-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          test -s "$keystore_path"
+          echo "ANDROID_KEYSTORE_PATH=$keystore_path" >> "$GITHUB_ENV"
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - name: Build signed production bundle
+        run: >-
+          flutter build appbundle --release --flavor production
+          --dart-define="SUPABASE_URL=$SUPABASE_URL"
+          --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY"
+          --dart-define="SUPABASE_OAUTH_REDIRECT_URI=$SUPABASE_OAUTH_REDIRECT_URI"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hoadon-insight-production-aab
+          path: build/app/outputs/bundle/productionRelease/*.aab
+          if-no-files-found: error
+          retention-days: 7

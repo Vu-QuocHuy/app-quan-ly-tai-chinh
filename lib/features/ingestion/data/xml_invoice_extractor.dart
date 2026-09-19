@@ -23,7 +23,7 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
   String get adapterName => 'vietnam-einvoice-xml';
 
   @override
-  String get adapterVersion => '1.0.0';
+  String get adapterVersion => '1.1.0';
 
   @override
   bool canHandle(ExtractionInput input) =>
@@ -46,11 +46,19 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
       final now = DateTime.now();
       final id = _uuid.v4();
       final seller = _sellerElement(document);
-      final general = _firstElement(document, const ['TTChung', 'GeneralInfo']);
+      final general = _firstElement(document, const [
+        'TTChung',
+        'GeneralInfo',
+        'General',
+        'InvoiceInfo',
+        'InvoiceInformation',
+      ]);
       final totals = _firstElement(document, const [
         'TToan',
         'Summary',
         'Totals',
+        'AmountSummary',
+        'PaymentSummary',
       ]);
       final sellerName =
           _valueWithin(seller, const [
@@ -58,6 +66,8 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
             'TenNBan',
             'Name',
             'SellerName',
+            'SellerLegalName',
+            'SupplierName',
           ]) ??
           _value(document, const ['TenNBan', 'SellerName']) ??
           '';
@@ -67,11 +77,18 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
               'TgTThue',
               'Subtotal',
               'TotalBeforeTax',
+              'NetAmount',
+              'TaxExclusiveAmount',
             ]) ??
             _value(document, const ['TgTCThue', 'Subtotal']),
       );
       final tax = _money(
-        _valueWithin(totals, const ['TgTThue', 'TaxAmount', 'TotalTax']) ??
+        _valueWithin(totals, const [
+              'TgTThue',
+              'TaxAmount',
+              'TotalTax',
+              'VATAmount',
+            ]) ??
             _value(document, const ['TgTThue', 'TaxAmount']),
       );
       final total = _money(
@@ -80,6 +97,8 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
               'TgTTTToan',
               'TotalAmount',
               'GrandTotal',
+              'PayableAmount',
+              'TaxInclusiveAmount',
             ]) ??
             _value(document, const ['TgTTTBSo', 'TotalAmount']),
       );
@@ -94,19 +113,34 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
                     'Ten',
                     'Description',
                     'ItemName',
+                    'ProductName',
+                    'ItemDescription',
                   ]) ??
                   'Hàng hóa/dịch vụ',
               quantity: _decimal(
-                _valueWithin(element, const ['SLuong', 'Quantity']),
+                _valueWithin(element, const [
+                  'SLuong',
+                  'Quantity',
+                  'InvoicedQuantity',
+                ]),
               ),
               unitPriceMinor: _nullableMoney(
-                _valueWithin(element, const ['DGia', 'UnitPrice']),
+                _valueWithin(element, const [
+                  'DGia',
+                  'UnitPrice',
+                  'PriceAmount',
+                ]),
               ),
               taxRate: _taxRate(
-                _valueWithin(element, const ['TSuat', 'TaxRate']),
+                _valueWithin(element, const ['TSuat', 'TaxRate', 'VATRate']),
               ),
               totalMinor: _money(
-                _valueWithin(element, const ['ThTien', 'Amount', 'LineTotal']),
+                _valueWithin(element, const [
+                  'ThTien',
+                  'Amount',
+                  'LineTotal',
+                  'LineExtensionAmount',
+                ]),
               ),
             );
           })
@@ -120,20 +154,32 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
               'MSTNBan',
               'TaxCode',
               'SellerTaxCode',
+              'SupplierTaxCode',
+              'TaxIdentificationNumber',
             ]) ??
             _value(document, const ['MSTNBan', 'SellerTaxCode']),
         invoiceNumber: _valueWithin(general, const [
           'SHDon',
           'InvoiceNumber',
           'No',
+          'InvoiceNo',
+          'Number',
         ]),
         invoiceSymbol: _valueWithin(general, const [
           'KHHDon',
           'InvoiceSymbol',
           'Serial',
+          'InvoiceSeries',
+          'Series',
         ]),
         issuedAt: _date(
-          _valueWithin(general, const ['NLap', 'IssuedDate', 'InvoiceDate']),
+          _valueWithin(general, const [
+            'NLap',
+            'IssuedDate',
+            'InvoiceDate',
+            'IssueDate',
+            'Date',
+          ]),
         ),
         currencyCode:
             _valueWithin(general, const [
@@ -175,8 +221,10 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
     }
   }
 
-  XmlElement? _sellerElement(XmlDocument document) =>
-      _firstElement(document, const ['NBan', 'Seller', 'SellerInfo']);
+  XmlElement? _sellerElement(XmlDocument document) => _firstElement(
+    document,
+    const ['NBan', 'Seller', 'SellerInfo', 'SellerParty', 'SellerInformation'],
+  );
 
   XmlElement? _firstElement(XmlDocument document, List<String> names) {
     for (final element in document.descendants.whereType<XmlElement>()) {
@@ -201,7 +249,14 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
   }
 
   Iterable<XmlElement> _lineElements(XmlDocument document) {
-    const names = {'HHDVu', 'LineItem', 'InvoiceItem'};
+    const names = {
+      'HHDVu',
+      'LineItem',
+      'InvoiceItem',
+      'Item',
+      'Product',
+      'ProductLine',
+    };
     return document.descendants.whereType<XmlElement>().where(
       (element) => names.contains(element.name.local),
     );
@@ -256,14 +311,23 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
 
   DateTime? _date(String? value) {
     if (value == null) return null;
-    final iso = DateTime.tryParse(value);
-    if (iso != null) return iso;
-    final parts = value.split(RegExp(r'[/.-]'));
+    final normalized = value.trim();
+    final iso = DateTime.tryParse(normalized);
+    if (iso != null &&
+        RegExp(r'^\d{4}-\d{2}-\d{2}(?:$|T)').hasMatch(normalized)) {
+      return iso;
+    }
+    final parts = normalized.split(RegExp(r'[/.-]'));
     if (parts.length != 3) return null;
-    final day = int.tryParse(parts[0]);
+    final yearFirst = parts[0].length == 4;
+    final year = int.tryParse(yearFirst ? parts[0] : parts[2]);
     final month = int.tryParse(parts[1]);
-    final year = int.tryParse(parts[2]);
+    final day = int.tryParse(yearFirst ? parts[2] : parts[0]);
     if (day == null || month == null || year == null) return null;
-    return DateTime(year, month, day);
+    final date = DateTime(year, month, day);
+    if (date.year != year || date.month != month || date.day != day) {
+      return null;
+    }
+    return date;
   }
 }

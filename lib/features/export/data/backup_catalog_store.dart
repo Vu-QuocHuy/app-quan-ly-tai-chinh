@@ -47,15 +47,19 @@ class BackupRecord {
 }
 
 class BackupCatalogStore {
-  const BackupCatalogStore({this.maxRecords = 20});
+  const BackupCatalogStore({this.maxRecords = 20, this.scope});
 
   static const storageKey = 'backup.catalog.v1';
 
   final int maxRecords;
+  final String? scope;
+
+  String get _storageKey =>
+      scope == null ? storageKey : '$storageKey.${scope!.trim()}';
 
   Future<List<BackupRecord>> load() async {
     final preferences = await SharedPreferences.getInstance();
-    final raw = preferences.getString(storageKey);
+    final raw = preferences.getString(_storageKey);
     if (raw == null || raw.isEmpty) return const [];
     try {
       final decoded = jsonDecode(raw);
@@ -81,7 +85,7 @@ class BackupCatalogStore {
       ..sort((left, right) => right.createdAt.compareTo(left.createdAt));
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(
-      storageKey,
+      _storageKey,
       jsonEncode(
         records
             .take(maxRecords)
@@ -89,6 +93,17 @@ class BackupCatalogStore {
             .toList(growable: false),
       ),
     );
+  }
+
+  Future<void> clear() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove(_storageKey);
+  }
+
+  Future<void> clearAll({bool includeLegacy = false}) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove(_storageKey);
+    if (includeLegacy && scope != null) await preferences.remove(storageKey);
   }
 
   Future<void> prune({Duration retention = const Duration(days: 90)}) async {
@@ -99,11 +114,11 @@ class BackupCatalogStore {
         .toList(growable: false);
     final preferences = await SharedPreferences.getInstance();
     if (retained.isEmpty) {
-      await preferences.remove(storageKey);
+      await preferences.remove(_storageKey);
       return;
     }
     await preferences.setString(
-      storageKey,
+      _storageKey,
       jsonEncode(retained.map((item) => item.toJson()).toList()),
     );
   }

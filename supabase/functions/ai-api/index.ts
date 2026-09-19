@@ -17,6 +17,35 @@ type ChatRequest = {
   question: string;
   facts: ChatFact[];
   history: ChatHistoryMessage[];
+  allowExternalData: boolean;
+};
+
+type ExtractionJob = {
+  id: string;
+  request_id: string;
+  status: string;
+  input_kind: string;
+  input_mime_type: string | null;
+  attempt_count: number;
+  max_attempts: number;
+  available_at: string;
+  result: JsonObject | null;
+  error_code: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
+type ExternalContext = {
+  facts: ChatFact[];
+  citations: JsonObject[];
+  usedExternalData: boolean;
+};
+
+type ExchangeRateProvider = {
+  label: string;
+  url: string;
+  parse: (payload: unknown, target: string) => {rate: number; updatedAt: string} | undefined;
 };
 
 const externalFactKeys = new Set([
@@ -26,7 +55,7 @@ const externalFactKeys = new Set([
   "external_exchange_updated_at",
 ]);
 
-const corsHeaders = {
+const baseCorsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -37,8 +66,39 @@ const model = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
 const apiRoot = "https://generativelanguage.googleapis.com/v1beta";
 const maxTextLength = 50_000;
 const maxImageBase64Length = 15_000_000;
-const maxRequestsPerMinute = 30;
+const maxBodyBytes = configuredInteger("AI_MAX_BODY_BYTES", 16_000_000, 1_024, 25_000_000);
+const maxRequestsPerMinute = configuredInteger("AI_MAX_REQUESTS_PER_MINUTE", 30, 1, 120);
+const maxRequestsPerDay = configuredInteger("AI_MAX_REQUESTS_PER_DAY", 500, 1, 5_000);
+const costUnitsByAction: Record<string, number> = {
+  classify: 1,
+  extract: 5,
+  chat: 2,
+};
+const externalRatesCacheTtlMs = configuredInteger("EXTERNAL_RATES_CACHE_TTL_SECONDS", 300, 30, 3_600) * 1_000;
 const rateBuckets = new Map<string, {startedAt: number; count: number}>();
+const externalRatesCache = new Map<string, {expiresAt: number; context: ExternalContext}>();
+const supportedCurrencies = new Set(["VND", "USD", "EUR", "JPY", "CNY"]);
+const supportedCategories = new Set([
+  "food", "transport", "shopping", "utilities", "health", "education",
+  "entertainment", "other",
+]);
+const fallbackRateCurrencies = new Set([
+  "AUD", "CAD", "CHF", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD", "HUF",
+  "IDR", "INR", "JPY", "KRW", "MXN", "MYR", "NOK", "NZD", "PHP", "PLN",
+  "RON", "SEK", "SGD", "THB", "TRY", "USD", "ZAR",
+]);
+const configuredOrigins = (Deno.env.get("AI_ALLOWED_ORIGINS") ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter((origin) => origin.length > 0);
+const allowedOrigins = new Set(
+  configuredOrigins
+    .map(normalizeOrigin)
+    .filter((origin): origin is string => origin !== null),
+);
+const originsConfigurationValid = configuredOrigins.length > 0 &&
+  configuredOrigins.every((origin) => normalizeOrigin(origin) !== null);
+const requireOriginAllowlist = envFlag("AI_REQUIRE_ORIGIN_ALLOWLIST");
 
 const invoiceSchema = {
   type: "object",
@@ -102,24 +162,44 @@ class FunctionError extends Error {
 }
 
 Deno.serve(async (request) => {
-  if (request.method === "OPTIONS") return new Response("ok", {headers: corsHeaders});
-  if (request.method !== "POST") return json({code: "METHOD_NOT_ALLOWED", message: "Chỉ hỗ trợ POST."}, 405);
+  if (request.method === "OPTIONS") {
+    return originAllowed(request)
+      ? new Response("ok", {headers: headersFor(request)})
+      : json(request, {code: "ORIGIN_NOT_ALLOWED", message: "Origin không được phép."}, 403);
+  }
+  if (request.method !== "POST") return json(request, {code: "METHOD_NOT_ALLOWED", message: "Chỉ hỗ trợ POST."}, 405);
 
+  const startedAt = Date.now();
+  let action = "unknown";
   try {
-    enforceRateLimit(request.headers.get("Authorization") ?? "anonymous");
+    if (!originAllowed(request)) {
+      throw new FunctionError(403, "ORIGIN_NOT_ALLOWED", "Origin không được phép.");
+    }
     const body = await readObject(request);
-    const action = requiredString(body, "action", 32);
+    action = requiredString(body, "action", 32);
+    if (["classify", "extract", "chat"].includes(action)) {
+      await enforceQuota(request, action);
+    } else {
+      enforceRateLimit(await rateLimitIdentifier(request));
+    }
 
-    if (action === "classify") return json(classifyMerchant(parseClassification(body)));
-    if (action === "extract") return json(await extractInvoice(parseExtraction(body)));
-    if (action === "chat") return json(await answerChat(parseChat(body)));
+    if (action === "classify") return completed(request, action, startedAt, classifyMerchant(parseClassification(body)));
+    if (action === "extract") return completed(request, action, startedAt, await extractInvoice(parseExtraction(body)));
+    if (action === "extract_submit") return completed(request, action, startedAt, await submitExtractionJob(request, parseExtraction(body)));
+    if (action === "extract_status") return completed(request, action, startedAt, await extractionJobStatus(request, parseJobId(body)));
+    if (action === "extract_cancel") return completed(request, action, startedAt, await cancelExtractionJob(request, parseJobId(body)));
+    if (action === "extract_retry") return completed(request, action, startedAt, await retryExtractionJob(request, parseJobId(body)));
+    if (action === "chat") return completed(request, action, startedAt, await answerChat(parseChat(body)));
     throw new FunctionError(400, "UNKNOWN_ACTION", "Tác vụ AI không được hỗ trợ.");
   } catch (error) {
     if (error instanceof FunctionError) {
-      return json({code: error.code, message: error.message}, error.status);
+      await recordAiMetric(request, action, error.status, Date.now() - startedAt, error.code);
+      console.warn("ai_request_rejected", JSON.stringify({action, status: error.status, code: error.code, durationMs: Date.now() - startedAt}));
+      return json(request, {code: error.code, message: error.message}, error.status);
     }
-    console.error("ai_function_failed", error instanceof Error ? error.name : "unknown");
-    return json({code: "INTERNAL", message: "Không thể xử lý yêu cầu AI."}, 500);
+    await recordAiMetric(request, action, 500, Date.now() - startedAt, "INTERNAL");
+    console.error("ai_function_failed", JSON.stringify({action, error: error instanceof Error ? error.name : "unknown", durationMs: Date.now() - startedAt}));
+    return json(request, {code: "INTERNAL", message: "Không thể xử lý yêu cầu AI."}, 500);
   }
 });
 
@@ -149,8 +229,217 @@ async function extractInvoice(request: ExtractionRequest) {
   };
 }
 
+async function submitExtractionJob(request: Request, input: ExtractionRequest) {
+  const existing = await findExtractionJob(request, input.requestId);
+  if (existing) return {requestId: input.requestId, job: publicJob(existing), idempotent: true};
+
+  const userId = jwtSubject(request);
+  const inputPath = userId + "/" + crypto.randomUUID() + ".input";
+  const bytes = input.text
+    ? new TextEncoder().encode(input.text)
+    : decodeBase64(input.imageBase64 ?? "");
+  const inputKind = input.text ? "text" : "image";
+  const inputMimeType = input.text ? "text/plain" : input.mimeType!;
+  await uploadAiInput(request, inputPath, bytes, inputMimeType);
+  try {
+    const rows = await userRestJson(request, "/rest/v1/rpc/submit_ai_extraction_job", {
+      method: "POST",
+      body: JSON.stringify({
+        p_request_id: input.requestId,
+        p_input_path: inputPath,
+        p_input_kind: inputKind,
+        p_input_mime_type: inputMimeType,
+      }),
+    });
+    if (!Array.isArray(rows) || !isObject(rows[0]) || typeof rows[0].id !== "string") {
+      throw new FunctionError(502, "INVALID_JOB_RESPONSE", "Không tạo được tác vụ AI.");
+    }
+    const created = rows[0].created !== false;
+    if (!created) await deleteAiInput(request, inputPath);
+    return {
+      requestId: input.requestId,
+      job: {id: rows[0].id, requestId: input.requestId, status: rows[0].status ?? "queued"},
+      idempotent: !created,
+    };
+  } catch (error) {
+    await deleteAiInput(request, inputPath);
+    throw error;
+  }
+}
+
+async function extractionJobStatus(request: Request, jobId: string) {
+  const job = await findExtractionJobById(request, jobId);
+  if (!job) throw new FunctionError(404, "JOB_NOT_FOUND", "Không tìm thấy tác vụ AI.");
+  return {job: publicJob(job)};
+}
+
+async function cancelExtractionJob(request: Request, jobId: string) {
+  const rows = await userRestJson(request, "/rest/v1/rpc/cancel_ai_extraction_job", {
+    method: "POST",
+    body: JSON.stringify({p_job_id: jobId}),
+  });
+  if (Array.isArray(rows) && isObject(rows[0]) && typeof rows[0].input_path === "string") {
+    await deleteAiInput(request, rows[0].input_path);
+    return {jobId, status: "cancelled"};
+  }
+  const job = await findExtractionJobById(request, jobId);
+  if (!job) throw new FunctionError(404, "JOB_NOT_FOUND", "Không tìm thấy tác vụ AI.");
+  return {jobId, status: job.status};
+}
+
+async function retryExtractionJob(request: Request, jobId: string) {
+  const rows = await userRestJson(request, "/rest/v1/rpc/retry_ai_extraction_job", {
+    method: "POST",
+    body: JSON.stringify({p_job_id: jobId}),
+  });
+  if (!Array.isArray(rows) || !isObject(rows[0])) {
+    const job = await findExtractionJobById(request, jobId);
+    if (!job) throw new FunctionError(404, "JOB_NOT_FOUND", "Không tìm thấy tác vụ AI.");
+    return {jobId, status: job.status};
+  }
+  return {jobId, status: rows[0].status ?? "queued"};
+}
+
+function parseJobId(body: JsonObject): string {
+  const value = requiredString(body, "jobId", 64).trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new FunctionError(400, "INVALID_JOB_ID", "jobId không hợp lệ.");
+  }
+  return value;
+}
+
+async function findExtractionJob(request: Request, requestIdValue: string): Promise<ExtractionJob | undefined> {
+  const query = new URLSearchParams({
+    request_id: "eq." + requestIdValue,
+    select: "id,request_id,status,input_kind,input_mime_type,attempt_count,max_attempts,available_at,result,error_code,created_at,updated_at,completed_at",
+    limit: "1",
+  });
+  const rows = await userRestJson(request, "/rest/v1/ai_extraction_jobs?" + query);
+  return Array.isArray(rows) && isObject(rows[0]) ? rows[0] as ExtractionJob : undefined;
+}
+
+async function findExtractionJobById(request: Request, jobId: string): Promise<ExtractionJob | undefined> {
+  const query = new URLSearchParams({
+    id: "eq." + jobId,
+    select: "id,request_id,status,input_kind,input_mime_type,attempt_count,max_attempts,available_at,result,error_code,created_at,updated_at,completed_at",
+    limit: "1",
+  });
+  const rows = await userRestJson(request, "/rest/v1/ai_extraction_jobs?" + query);
+  return Array.isArray(rows) && isObject(rows[0]) ? rows[0] as ExtractionJob : undefined;
+}
+
+function publicJob(job: ExtractionJob): JsonObject {
+  return {
+    id: job.id,
+    requestId: job.request_id,
+    status: job.status,
+    inputKind: job.input_kind,
+    inputMimeType: job.input_mime_type,
+    attemptCount: job.attempt_count,
+    maxAttempts: job.max_attempts,
+    availableAt: job.available_at,
+    result: job.result,
+    errorCode: job.error_code,
+    createdAt: job.created_at,
+    updatedAt: job.updated_at,
+    completedAt: job.completed_at,
+  };
+}
+
+async function uploadAiInput(request: Request, path: string, bytes: Uint8Array, mimeType: string): Promise<void> {
+  const response = await userRestFetch(request, "/storage/v1/object/ai-inputs/" + storageObjectPath(path), {
+    method: "POST",
+    headers: {"Content-Type": mimeType, "x-upsert": "false"},
+    body: bytes as unknown as BodyInit,
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) {
+    throw new FunctionError(503, "INPUT_UPLOAD_FAILED", "Không thể lưu input AI an toàn.");
+  }
+}
+
+async function deleteAiInput(request: Request, path: string): Promise<void> {
+  try {
+    await userRestFetch(request, "/storage/v1/object/ai-inputs/" + storageObjectPath(path), {
+      method: "DELETE",
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+  }
+}
+
+async function userRestJson(request: Request, path: string, init: RequestInit = {}): Promise<unknown> {
+  const response = await userRestFetch(request, path, init);
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new FunctionError(401, "AUTH_REQUIRED", "Phiên đăng nhập không hợp lệ.");
+    }
+    if (response.status === 400) {
+      try {
+        const payload: unknown = await response.json();
+        if (isObject(payload) && payload.code === "P0001") {
+          throw new FunctionError(429, "RATE_LIMITED", "Quá nhiều yêu cầu. Vui lòng thử lại sau một phút.");
+        }
+      } catch (error) {
+        if (error instanceof FunctionError) throw error;
+      }
+    }
+    throw new FunctionError(503, "BACKEND_UNAVAILABLE", "Không thể truy cập hàng đợi AI.");
+  }
+  try {
+    return await response.json();
+  } catch {
+    throw new FunctionError(502, "INVALID_BACKEND_RESPONSE", "Backend trả dữ liệu không hợp lệ.");
+  }
+}
+
+function storageObjectPath(path: string): string {
+  return path.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+}
+
+async function userRestFetch(request: Request, path: string, init: RequestInit = {}): Promise<Response> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")?.trim();
+  const authorization = request.headers.get("Authorization")?.trim();
+  if (!supabaseUrl || !anonKey || !authorization) {
+    throw new FunctionError(503, "BACKEND_NOT_CONFIGURED", "Backend hàng đợi AI chưa được cấu hình.");
+  }
+  const headers = new Headers(init.headers);
+  headers.set("apikey", anonKey);
+  headers.set("Authorization", authorization);
+  if (init.body != null && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  return fetch(supabaseUrl + path, {
+    ...init,
+    headers,
+    signal: init.signal ?? AbortSignal.timeout(5_000),
+  });
+}
+
+function jwtSubject(request: Request): string {
+  const authorization = request.headers.get("Authorization")?.trim();
+  const match = authorization ? /^Bearer\s+([^\s]+)$/i.exec(authorization) : null;
+  if (!match) throw new FunctionError(401, "AUTH_REQUIRED", "Phiên đăng nhập không hợp lệ.");
+  try {
+    const payload = JSON.parse(decodeBase64Url(match[1]!.split(".")[1] ?? ""));
+    if (isObject(payload) && typeof payload.sub === "string" && /^[0-9a-f-]{36}$/i.test(payload.sub)) {
+      return payload.sub;
+    }
+  } catch {
+  }
+  throw new FunctionError(401, "AUTH_REQUIRED", "Phiên đăng nhập không hợp lệ.");
+}
+
+function decodeBase64(value: string): Uint8Array {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  return Uint8Array.from(atob(normalized), (character) => character.charCodeAt(0));
+}
+
 async function answerChat(request: ChatRequest) {
-  const external = await loadExternalContext(request.question);
+  const external = request.allowExternalData
+    ? await loadExternalContext(request.question)
+    : {facts: [] as ChatFact[], citations: [] as JsonObject[], usedExternalData: false};
   const facts = JSON.stringify([...request.facts, ...external.facts]);
   const history = JSON.stringify(request.history);
   const prompt = [
@@ -178,7 +467,7 @@ async function answerChat(request: ChatRequest) {
   ];
   return {
     answer: response.answer.trim(),
-    usedExternalData: response.usedExternalData || external.usedExternalData,
+    usedExternalData: external.usedExternalData,
     citations,
     modelVersion: model,
   };
@@ -259,31 +548,69 @@ async function generateJson(
   }
 }
 
-async function loadExternalContext(question: string) {
+async function loadExternalContext(question: string): Promise<ExternalContext> {
   const pair = currencyPair(question);
   if (!pair || Deno.env.get("ENABLE_EXTERNAL_EXCHANGE_RATES") === "false") {
     return {facts: [] as ChatFact[], citations: [] as JsonObject[], usedExternalData: false};
   }
-  const url = `https://open.er-api.com/v6/latest/${pair.base}`;
-  try {
-    const response = await fetch(url, {signal: AbortSignal.timeout(5_000)});
-    if (!response.ok) return unavailable(pair, url);
-    const payload: unknown = await response.json();
-    if (!isObject(payload) || payload.result !== "success" || !isObject(payload.rates)) return unavailable(pair, url);
-    const rate = payload.rates[pair.target];
-    if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) return unavailable(pair, url);
-    const updated = typeof payload.time_last_update_utc === "string" ? payload.time_last_update_utc : "không rõ";
-    return {
-      facts: [
-        {key: "external_exchange_rate", value: `1 ${pair.base} = ${rate} ${pair.target}`},
-        {key: "external_exchange_updated_at", value: updated},
-      ],
-      citations: [{label: "ExchangeRate-API", sourceType: "external", sourceId: `${pair.base}/${pair.target}`, url, capturedAt: new Date().toISOString()}],
-      usedExternalData: true,
-    };
-  } catch {
-    return unavailable(pair, url);
+  const cacheKey = `${pair.base}/${pair.target}`;
+  const cached = externalRatesCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.context;
+  externalRatesCache.delete(cacheKey);
+  const providers: ExchangeRateProvider[] = [
+    {
+      label: "ExchangeRate-API",
+      url: `https://open.er-api.com/v6/latest/${pair.base}`,
+      parse: (payload, target) => {
+        if (!isObject(payload) || payload.result !== "success" || !isObject(payload.rates)) return undefined;
+        const rate = payload.rates[target];
+        if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) return undefined;
+        return {
+          rate,
+          updatedAt: typeof payload.time_last_update_utc === "string" ? payload.time_last_update_utc : "không rõ",
+        };
+      },
+    },
+  ];
+  if (fallbackRateCurrencies.has(pair.base) && fallbackRateCurrencies.has(pair.target)) {
+    providers.push({
+      label: "Frankfurter",
+      url: `https://api.frankfurter.app/latest?from=${pair.base}&to=${pair.target}`,
+      parse: (payload, target) => {
+        if (!isObject(payload) || !isObject(payload.rates)) return undefined;
+        const rate = payload.rates[target];
+        if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) return undefined;
+        return {rate, updatedAt: typeof payload.date === "string" ? payload.date : "không rõ"};
+      },
+    });
   }
+  for (const provider of providers) {
+    try {
+      const response = await fetch(provider.url, {signal: AbortSignal.timeout(5_000)});
+      if (!response.ok) continue;
+      const parsed = provider.parse(await response.json(), pair.target);
+      if (!parsed) continue;
+      return cacheExternalContext(cacheKey, {
+        facts: [
+          {key: "external_exchange_rate", value: `1 ${pair.base} = ${parsed.rate} ${pair.target}`},
+          {key: "external_exchange_updated_at", value: parsed.updatedAt},
+        ],
+        citations: [{label: provider.label, sourceType: "external", sourceId: `${pair.base}/${pair.target}`, url: provider.url, capturedAt: new Date().toISOString()}],
+        usedExternalData: true,
+      });
+    } catch {
+    }
+  }
+  return cacheExternalContext(cacheKey, unavailable(pair, providers[0]!.url));
+}
+
+function cacheExternalContext(cacheKey: string, context: ExternalContext): ExternalContext {
+  if (externalRatesCache.size >= 100) {
+    const oldest = externalRatesCache.keys().next().value;
+    if (typeof oldest === "string") externalRatesCache.delete(oldest);
+  }
+  externalRatesCache.set(cacheKey, {expiresAt: Date.now() + externalRatesCacheTtlMs, context});
+  return context;
 }
 
 function unavailable(pair: {base: string; target: string}, url: string) {
@@ -337,7 +664,14 @@ function parseChat(body: JsonObject): ChatRequest {
   if (question.length < 2) throw new FunctionError(400, "EMPTY_QUESTION", "Câu hỏi không được rỗng.");
   const facts = parseFacts(body.facts);
   const history = parseHistory(body.history);
-  return {requestId: requestId(body), locale: locale(body), question, facts, history};
+  return {
+    requestId: requestId(body),
+    locale: locale(body),
+    question,
+    facts,
+    history,
+    allowExternalData: body.allowExternalData !== false,
+  };
 }
 
 function parseFacts(value: unknown): ChatFact[] {
@@ -378,7 +712,9 @@ function redactPersonalData(value: string): string {
 
 function requestId(body: JsonObject): string {
   const value = requiredString(body, "requestId", 128);
-  if (value.length < 8) throw new FunctionError(400, "INVALID_REQUEST_ID", "requestId không hợp lệ.");
+  if (!/^[A-Za-z0-9._:-]{8,128}$/.test(value)) {
+    throw new FunctionError(400, "INVALID_REQUEST_ID", "requestId không hợp lệ.");
+  }
   return value;
 }
 
@@ -395,11 +731,56 @@ function requiredString(body: JsonObject, key: string, maxLength: number): strin
 }
 
 function validateInvoice(value: JsonObject): void {
+  if (typeof value.sellerName !== "string" || value.sellerName.trim().length === 0 || value.sellerName.length > 500) {
+    throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Tên bên bán không hợp lệ.");
+  }
+  for (const key of ["sellerTaxCode", "invoiceNumber", "invoiceSymbol"]) {
+    const field = value[key];
+    if (field !== null && field !== undefined && (typeof field !== "string" || field.length > 300)) {
+      throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Trường hóa đơn không hợp lệ.");
+    }
+  }
+  if (value.invoiceDate !== null && value.invoiceDate !== undefined &&
+      (typeof value.invoiceDate !== "string" || Date.parse(value.invoiceDate) !== Date.parse(value.invoiceDate))) {
+    throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Ngày hóa đơn không hợp lệ.");
+  }
+  if (typeof value.currencyCode !== "string" || !supportedCurrencies.has(value.currencyCode)) {
+    throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Loại tiền không hợp lệ.");
+  }
+  if (typeof value.categoryId !== "string" || !supportedCategories.has(value.categoryId)) {
+    throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Danh mục hóa đơn không hợp lệ.");
+  }
   for (const key of ["subtotalMinor", "taxMinor", "totalMinor"]) {
     const amount = value[key];
     if (typeof amount !== "number" || !Number.isSafeInteger(amount) || amount < 0) throw new FunctionError(502, "INVALID_AMOUNT", `Trường ${key} không hợp lệ.`);
   }
-  if (typeof value.sellerName !== "string") throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Dữ liệu model sai schema.");
+  if (!Array.isArray(value.items) || value.items.length > 200) {
+    throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Danh sách hàng hóa không hợp lệ.");
+  }
+  for (const item of value.items) {
+    if (!isObject(item) || typeof item.description !== "string" ||
+        item.description.trim().length === 0 || item.description.length > 500 ||
+        typeof item.categoryId !== "string" || !supportedCategories.has(item.categoryId)) {
+      throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Dòng hàng hóa không hợp lệ.");
+    }
+    const quantity = item.quantity;
+    if (quantity !== null && quantity !== undefined &&
+        (typeof quantity !== "number" || !Number.isFinite(quantity) || quantity < 0)) {
+      throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Số lượng hàng hóa không hợp lệ.");
+    }
+    const unitPrice = item.unitPriceMinor;
+    if (unitPrice !== null && unitPrice !== undefined &&
+        (typeof unitPrice !== "number" || !Number.isSafeInteger(unitPrice) || unitPrice < 0)) {
+      throw new FunctionError(502, "INVALID_AMOUNT", "Đơn giá hàng hóa không hợp lệ.");
+    }
+    if (item.taxRate !== null && item.taxRate !== undefined &&
+        (typeof item.taxRate !== "number" || !Number.isFinite(item.taxRate) || item.taxRate < 0 || item.taxRate > 100)) {
+      throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Thuế suất hàng hóa không hợp lệ.");
+    }
+    if (typeof item.totalMinor !== "number" || !Number.isSafeInteger(item.totalMinor) || item.totalMinor < 0) {
+      throw new FunctionError(502, "INVALID_AMOUNT", "Thành tiền hàng hóa không hợp lệ.");
+    }
+  }
 }
 
 function modelText(payload: unknown): string {
@@ -411,6 +792,142 @@ function modelText(payload: unknown): string {
 
 function normalize(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+async function completed(request: Request, action: string, startedAt: number, body: JsonObject): Promise<Response> {
+  const durationMs = Date.now() - startedAt;
+  await recordAiMetric(request, action, 200, durationMs);
+  console.log("ai_request_completed", JSON.stringify({action, status: 200, durationMs}));
+  return json(request, body);
+}
+
+async function recordAiMetric(
+  request: Request,
+  action: string,
+  statusCode: number,
+  durationMs: number,
+  errorCode?: string,
+): Promise<void> {
+  try {
+    await userRestJson(request, "/rest/v1/rpc/record_ai_request_metric", {
+      method: "POST",
+      body: JSON.stringify({
+        p_action: action,
+        p_status_code: statusCode,
+        p_duration_ms: Math.max(0, Math.min(durationMs, 600000)),
+        p_model: model,
+        p_error_code: errorCode ?? null,
+      }),
+      signal: AbortSignal.timeout(750),
+    });
+  } catch {
+  }
+}
+
+async function enforceQuota(request: Request, action: string): Promise<void> {
+  const authorization = request.headers.get("Authorization")?.trim();
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")?.trim();
+  if (!authorization) {
+    throw new FunctionError(401, "AUTH_REQUIRED", "Phiên đăng nhập không hợp lệ.");
+  }
+  if (!supabaseUrl || !anonKey) {
+    throw new FunctionError(503, "QUOTA_NOT_CONFIGURED", "Quota AI chưa được cấu hình.");
+  }
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/consume_ai_quota`, {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: authorization,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({p_limit: maxRequestsPerMinute, p_daily_limit: maxRequestsPerDay}),
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!response.ok) {
+      throw new FunctionError(503, "QUOTA_UNAVAILABLE", "Không thể kiểm tra quota AI.");
+    }
+    const allowed: unknown = await response.json();
+    if (allowed === false) {
+      throw new FunctionError(429, "RATE_LIMITED", "Quá nhiều yêu cầu. Vui lòng thử lại sau một phút.");
+    }
+    if (allowed !== true) {
+      throw new FunctionError(503, "QUOTA_UNAVAILABLE", "Quota AI trả dữ liệu không hợp lệ.");
+    }
+    await enforceCostBudget(request, action);
+  } catch (error) {
+    if (error instanceof FunctionError) throw error;
+    throw new FunctionError(503, "QUOTA_UNAVAILABLE", "Không thể kiểm tra quota AI.");
+  }
+}
+
+async function enforceCostBudget(request: Request, action: string): Promise<void> {
+  const authorization = request.headers.get("Authorization")?.trim();
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")?.trim();
+  const costUnits = costUnitsByAction[action];
+  if (!authorization) {
+    throw new FunctionError(401, "AUTH_REQUIRED", "Phiên đăng nhập không hợp lệ.");
+  }
+  if (!supabaseUrl || !anonKey || !Number.isSafeInteger(costUnits)) {
+    throw new FunctionError(503, "QUOTA_NOT_CONFIGURED", "Ngân sách AI chưa được cấu hình.");
+  }
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/consume_ai_cost_budget`, {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: authorization,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_cost_units: costUnits,
+      }),
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!response.ok) {
+      throw new FunctionError(503, "QUOTA_UNAVAILABLE", "Không thể kiểm tra ngân sách AI.");
+    }
+    const allowed: unknown = await response.json();
+    if (allowed === false) {
+      throw new FunctionError(429, "AI_COST_BUDGET_EXCEEDED", "Đã đạt giới hạn ngân sách AI. Vui lòng thử lại sau.");
+    }
+    if (allowed !== true) {
+      throw new FunctionError(503, "QUOTA_UNAVAILABLE", "Ngân sách AI trả dữ liệu không hợp lệ.");
+    }
+  } catch (error) {
+    if (error instanceof FunctionError) throw error;
+    throw new FunctionError(503, "QUOTA_UNAVAILABLE", "Không thể kiểm tra ngân sách AI.");
+  }
+}
+
+async function rateLimitIdentifier(request: Request): Promise<string> {
+  const authorization = request.headers.get("Authorization")?.trim();
+  if (!authorization) return "anonymous";
+  const match = /^Bearer\s+([^\s]+)$/i.exec(authorization);
+  if (!match) return "invalid-token";
+  const parts = match[1].split(".");
+  if (parts.length !== 3) return "invalid-token";
+  try {
+    const payload = JSON.parse(decodeBase64Url(parts[1]));
+    if (isObject(payload) && typeof payload.sub === "string" && payload.sub.trim().length > 0) {
+      return `user:${payload.sub.trim()}`;
+    }
+  } catch {
+    return "invalid-token";
+  }
+  return "authenticated-unknown";
+}
+
+function decodeBase64Url(value: string): string {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  return new TextDecoder().decode(Uint8Array.from(atob(base64), (character) => character.charCodeAt(0)));
+}
+
+function configuredInteger(name: string, fallback: number, minimum: number, maximum: number): number {
+  const value = Number.parseInt(Deno.env.get(name) ?? "", 10);
+  return Number.isInteger(value) && value >= minimum && value <= maximum ? value : fallback;
 }
 
 function enforceRateLimit(identifier: string): void {
@@ -431,18 +948,105 @@ function enforceRateLimit(identifier: string): void {
 
 async function readObject(request: Request): Promise<JsonObject> {
   try {
-    const value: unknown = await request.json();
+    const contentLength = Number.parseInt(request.headers.get("content-length") ?? "", 10);
+    if (Number.isInteger(contentLength) && contentLength > maxBodyBytes) {
+      throw new FunctionError(413, "BODY_TOO_LARGE", "Body vượt quá giới hạn.");
+    }
+    const value: unknown = JSON.parse(await readBodyText(request));
     if (!isObject(value)) throw new Error("not-object");
     return value;
-  } catch {
+  } catch (error) {
+    if (error instanceof FunctionError) throw error;
     throw new FunctionError(400, "INVALID_BODY", "Body phải là JSON object.");
   }
+}
+
+async function readBodyText(request: Request): Promise<string> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done || !value) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBodyBytes) {
+        await reader.cancel();
+        throw new FunctionError(413, "BODY_TOO_LARGE", "Body vượt quá giới hạn.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(body);
+}
+
+function originAllowed(request: Request): boolean {
+  const origin = request.headers.get("Origin")?.trim();
+  if (origin == null || origin.length === 0) return true;
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (normalizedOrigin === null) return false;
+  if (requireOriginAllowlist && !originsConfigurationValid) return false;
+  if (allowedOrigins.size === 0) return !requireOriginAllowlist;
+  return allowedOrigins.has(normalizedOrigin);
 }
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function json(body: JsonObject | string, status = 200): Response {
-  return new Response(typeof body === "string" ? body : JSON.stringify(body), {status, headers: corsHeaders});
+function headersFor(request: Request): Record<string, string> {
+  const origin = request.headers.get("Origin")?.trim();
+  if (origin == null || origin.length === 0) {
+    return baseCorsHeaders;
+  }
+  if (allowedOrigins.size === 0 && !requireOriginAllowlist) {
+    return baseCorsHeaders;
+  }
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (normalizedOrigin === null ||
+      (requireOriginAllowlist && !originsConfigurationValid) ||
+      !allowedOrigins.has(normalizedOrigin)) {
+    return {
+      ...baseCorsHeaders,
+      "Access-Control-Allow-Origin": "null",
+      "Vary": "Origin",
+    };
+  }
+  return {
+    ...baseCorsHeaders,
+    "Access-Control-Allow-Origin": normalizedOrigin,
+    "Vary": "Origin",
+  };
+}
+
+function normalizeOrigin(value: string): string | null {
+  try {
+    const parsed = new URL(value);
+    const isLocalHttp = parsed.protocol === "http:" &&
+      (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]");
+    const isSecure = parsed.protocol === "https:";
+    if ((!isSecure && !isLocalHttp) || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+      return null;
+    }
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+function envFlag(name: string): boolean {
+  return (Deno.env.get(name) ?? "").trim().toLowerCase() === "true";
+}
+
+function json(request: Request, body: JsonObject | string, status = 200): Response {
+  return new Response(typeof body === "string" ? body : JSON.stringify(body), {status, headers: headersFor(request)});
 }

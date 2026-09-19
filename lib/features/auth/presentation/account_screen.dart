@@ -3,7 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/database/app_database.dart';
+import '../../../core/database/local_database_scope.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../chat/data/chat_history_store.dart';
+import '../../export/data/backup_catalog_store.dart';
+import '../../ingestion/data/drift_import_job_store.dart';
+import '../../ingestion/data/pending_import_store.dart';
+import '../../insights/data/anomaly_feedback_store.dart';
+import '../../invoices/data/drift_invoice_repository.dart';
+import '../../notifications/data/budget_alert_preferences.dart';
+import '../domain/auth_validators.dart';
+import '../../notifications/data/budget_notification_service.dart';
+import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 import '../../../shared/widgets/app_skeleton.dart';
@@ -149,14 +161,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               hintText: 'ban@example.com',
               prefixIcon: Icon(Icons.email_outlined),
             ),
-            validator: (value) {
-              final email = value?.trim() ?? '';
-              if (email.isEmpty) return 'Hãy nhập email.';
-              if (!email.contains('@') || !email.contains('.')) {
-                return 'Email chưa đúng định dạng.';
-              }
-              return null;
-            },
+            validator: AuthValidators.email,
           ),
           const SizedBox(height: 16),
           TextFormField(
@@ -233,12 +238,19 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   ),
             label: Text(_registering ? 'Tạo tài khoản' : 'Đăng nhập'),
           ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _signInWithGoogle,
+            icon: const Icon(Icons.account_circle_outlined),
+            label: const Text('Tiếp tục với Google'),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildSignedIn(BuildContext context, User user) {
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -247,6 +259,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           title: 'Đã kết nối Supabase',
           message: user.email ?? 'Tài khoản ${user.id}',
         ),
+        const SizedBox(height: 16),
+        _buildIdentitySection(context),
         if (_message != null) ...[
           const SizedBox(height: 16),
           Semantics(
@@ -279,14 +293,108 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           icon: const Icon(Icons.logout),
           label: const Text('Đăng xuất'),
         ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _deleteAccount,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: scheme.error,
+            side: BorderSide(color: scheme.error),
+          ),
+          icon: const Icon(Icons.delete_forever_outlined),
+          label: const Text('Xóa tài khoản'),
+        ),
         const SizedBox(height: 16),
         Text(
-          'Đăng xuất không xóa dữ liệu đang lưu trên thiết bị.',
+          'Đăng xuất không xóa dữ liệu đang lưu trên thiết bị. Xóa tài khoản sẽ xóa dữ liệu cloud và dữ liệu local liên quan.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
     );
+  }
+
+  Widget _buildIdentitySection(BuildContext context) {
+    final identitiesAsync = ref.watch(authIdentitiesProvider);
+    return identitiesAsync.when(
+      loading: () => const LinearProgressIndicator(),
+      error: (error, _) => Card(
+        child: ListTile(
+          leading: const Icon(Icons.link_off_outlined),
+          title: const Text('Không tải được phương thức đăng nhập'),
+          subtitle: Text(friendlyMessage(error)),
+          trailing: IconButton(
+            tooltip: 'Tải lại',
+            onPressed: _busy
+                ? null
+                : () => ref.invalidate(authIdentitiesProvider),
+            icon: const Icon(Icons.refresh),
+          ),
+        ),
+      ),
+      data: (identities) {
+        final hasGoogle = identities.any(
+          (identity) => identity.provider == OAuthProvider.google.name,
+        );
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Phương thức đăng nhập',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                for (final identity in identities)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(_identityIcon(identity.provider)),
+                    title: Text(_identityLabel(identity.provider)),
+                    subtitle: Text(
+                      identity.provider == 'email'
+                          ? 'Đăng nhập bằng email và mật khẩu'
+                          : 'Đã liên kết với tài khoản này',
+                    ),
+                    trailing:
+                        identity.provider == 'email' || identities.length < 2
+                        ? null
+                        : IconButton(
+                            tooltip: 'Gỡ liên kết',
+                            onPressed: _busy
+                                ? null
+                                : () => _unlinkIdentity(identity),
+                            icon: const Icon(Icons.link_off_outlined),
+                          ),
+                  ),
+                if (!hasGoogle) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _linkGoogle,
+                    icon: const Icon(Icons.add_link),
+                    label: const Text('Liên kết Google'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  IconData _identityIcon(String provider) {
+    return provider == OAuthProvider.google.name
+        ? Icons.account_circle_outlined
+        : Icons.email_outlined;
+  }
+
+  String _identityLabel(String provider) {
+    return switch (provider) {
+      'email' => 'Email',
+      'google' => 'Google',
+      _ => provider,
+    };
   }
 
   Future<void> _submit() async {
@@ -322,13 +430,123 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
-        _message = error.message;
+        _message = friendlyMessage(error);
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
         _message = 'Không thể kết nối Supabase: ${friendlyMessage(error)}';
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    final auth = ref.read(supabaseAuthServiceProvider);
+    if (auth == null) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final launched = await auth.signInWithGoogle();
+      if (!launched) {
+        throw const AuthException('Không thể mở trang đăng nhập Google.');
+      }
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = false;
+        _message = 'Đã mở Google. Hoàn tất đăng nhập để quay lại ứng dụng.';
+      });
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = true;
+        _message = friendlyMessage(error);
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = true;
+        _message = friendlyMessage(error);
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _linkGoogle() async {
+    final auth = ref.read(supabaseAuthServiceProvider);
+    if (auth == null) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final launched = await auth.linkGoogleIdentity();
+      if (!launched) {
+        throw const AuthException('Không thể mở trang liên kết Google.');
+      }
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = false;
+        _message = 'Đã mở Google. Hoàn tất liên kết để quay lại ứng dụng.';
+      });
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = true;
+        _message = friendlyMessage(error);
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = true;
+        _message = friendlyMessage(error);
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _unlinkIdentity(UserIdentity identity) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Gỡ liên kết ${_identityLabel(identity.provider)}?',
+      message:
+          'Bạn vẫn giữ được phương thức đăng nhập còn lại. Có thể liên kết lại sau.',
+      confirmLabel: 'Gỡ liên kết',
+      icon: Icons.link_off_outlined,
+      destructive: true,
+    );
+    if (confirmed != true || !mounted) return;
+    final auth = ref.read(supabaseAuthServiceProvider);
+    if (auth == null) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      await auth.unlinkIdentity(identity);
+      ref.invalidate(authIdentitiesProvider);
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = false;
+        _message = 'Đã gỡ liên kết ${_identityLabel(identity.provider)}.';
+      });
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = true;
+        _message = friendlyMessage(error);
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = true;
+        _message = friendlyMessage(error);
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -349,7 +567,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
   Future<void> _sendPasswordReset() async {
     final email = _emailController.text.trim();
-    if (!email.contains('@') || !email.contains('.')) {
+    if (AuthValidators.email(email) != null) {
       setState(() {
         _messageIsError = true;
         _message = 'Hãy nhập email hợp lệ trước khi khôi phục mật khẩu.';
@@ -373,7 +591,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
-        _message = error.message;
+        _message = friendlyMessage(error);
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -403,7 +621,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
-        _message = error.message;
+        _message = friendlyMessage(error);
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -429,6 +647,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     setState(() => _busy = true);
     try {
       await auth.signOut();
+      await _clearBudgetNotifications();
       if (!mounted) return;
       setState(() {
         _message = null;
@@ -443,6 +662,187 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       });
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirmationController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) {
+          final canDelete =
+              confirmationController.text.trim().toUpperCase() == 'XÓA';
+          final scheme = Theme.of(context).colorScheme;
+          return AlertDialog(
+            icon: Icon(Icons.delete_forever_outlined, color: scheme.error),
+            title: const Text('Xóa tài khoản?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Tài khoản, dữ liệu đồng bộ và tệp backup cloud sẽ bị xóa vĩnh viễn. Dữ liệu local liên quan cũng sẽ bị xóa. Thao tác này không thể hoàn tác.',
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: confirmationController,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'Nhập XÓA để xác nhận',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Hủy'),
+              ),
+              FilledButton(
+                onPressed: canDelete
+                    ? () => Navigator.pop(dialogContext, true)
+                    : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: scheme.error,
+                  foregroundColor: scheme.onError,
+                ),
+                child: const Text('Xóa vĩnh viễn'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    confirmationController.dispose();
+    if (confirmed != true || !mounted) return;
+    final auth = ref.read(supabaseAuthServiceProvider);
+    if (auth == null) return;
+    var deletedRemotely = false;
+    var signedOut = false;
+    final deletedUserId = auth.currentUser?.id;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      await auth.deleteAccount();
+      deletedRemotely = true;
+      await _clearLocalAccountData(deletedUserId);
+      await auth.signOut();
+      signedOut = true;
+    } on Object catch (error) {
+      if (deletedRemotely) {
+        var localCleaned = false;
+        try {
+          await _clearLocalAccountData(deletedUserId);
+          localCleaned = true;
+        } on Object {
+          localCleaned = false;
+        }
+        try {
+          await auth.signOut();
+          signedOut = true;
+        } on Object catch (signOutError) {
+          if (mounted) {
+            setState(() {
+              _messageIsError = true;
+              _message =
+                  'Tài khoản đã xóa trên máy chủ. Hãy khởi động lại ứng dụng để hoàn tất đăng xuất: ${friendlyMessage(signOutError)}';
+            });
+          }
+        }
+        if (localCleaned && signedOut) {
+          if (mounted) {
+            setState(() {
+              _messageIsError = false;
+              _message = 'Tài khoản và dữ liệu đã được xóa.';
+            });
+          }
+          return;
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = true;
+        _message = deletedRemotely
+            ? 'Tài khoản đã bị xóa trên máy chủ nhưng chưa dọn hết dữ liệu local. Hãy khởi động lại ứng dụng.'
+            : friendlyMessage(error);
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _clearLocalAccountData(String? userId) async {
+    final scopedUserId = userId?.trim().toLowerCase();
+    if (!LocalDatabaseScope.isValidUserId(scopedUserId)) {
+      throw StateError('Không xác định được dữ liệu local của tài khoản.');
+    }
+    final includeLegacy = await LocalDatabaseScope.ownsLegacyDatabase(
+      scopedUserId,
+    );
+    final database = AppDatabase(
+      null,
+      LocalDatabaseScope.databaseName(
+        userId: scopedUserId,
+        cloudConfigured: true,
+      ),
+    );
+    final repository = DriftInvoiceRepository(database);
+    final importJobs = DriftImportJobStore(database);
+    Object? firstError;
+    final cleanups = <Future<void> Function()>[
+      repository.deleteAllUserData,
+      importJobs.clear,
+      () => PendingImportStore(
+        scope: scopedUserId,
+      ).clearAll(includeLegacy: includeLegacy),
+      () => ChatHistoryStore(
+        scope: scopedUserId,
+      ).clearAll(includeLegacy: includeLegacy),
+      () => AnomalyFeedbackStore(
+        scope: scopedUserId,
+      ).clearAll(includeLegacy: includeLegacy),
+      () => BackupCatalogStore(
+        scope: scopedUserId,
+      ).clearAll(includeLegacy: includeLegacy),
+      () => BudgetAlertPreferences(
+        scope: scopedUserId,
+      ).clearAll(includeLegacy: includeLegacy),
+      _clearBudgetNotifications,
+    ];
+    try {
+      for (final cleanup in cleanups) {
+        try {
+          await cleanup();
+        } on Object catch (error) {
+          firstError ??= error;
+        }
+      }
+    } finally {
+      try {
+        await database.close();
+      } on Object catch (error) {
+        firstError ??= error;
+      }
+      try {
+        await LocalDatabaseScope.releaseLegacyDatabase(scopedUserId);
+      } on Object catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError != null) throw firstError;
+  }
+
+  Future<void> _clearBudgetNotifications() async {
+    try {
+      await BudgetNotificationService.instance.cancelBudgetNotifications();
+    } on Object {
+      return;
     }
   }
 }

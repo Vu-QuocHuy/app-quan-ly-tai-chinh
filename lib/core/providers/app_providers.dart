@@ -10,10 +10,12 @@ import '../../features/groups/data/group_service.dart';
 import '../../features/groups/domain/group_models.dart';
 import '../../features/ingestion/application/import_coordinator.dart';
 import '../../features/ingestion/data/ai_extraction_client.dart';
+import '../../features/ingestion/data/ai_extraction_job_client.dart';
 import '../../features/ingestion/data/drift_import_job_store.dart';
 import '../../features/ingestion/data/heuristic_text_extractor.dart';
 import '../../features/ingestion/data/ocr_service.dart';
 import '../../features/ingestion/data/pdf_text_service.dart';
+import '../../features/ingestion/data/pending_import_store.dart';
 import '../../features/ingestion/data/xml_invoice_extractor.dart';
 import '../../features/ingestion/domain/import_job.dart';
 import '../../features/invoices/data/drift_invoice_repository.dart';
@@ -31,12 +33,22 @@ import '../../features/sync/data/drift_sync_cursor_store.dart';
 import '../../features/sync/data/supabase_sync_gateway.dart';
 import '../../features/sync/domain/sync_gateway.dart';
 import '../../features/sync/domain/sync_models.dart';
+import '../config/feature_flags.dart';
 import '../database/app_database.dart';
+import '../database/local_database_scope.dart';
 import '../security/supabase_bootstrap.dart';
 import '../utils/month_utils.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
-  final database = AppDatabase();
+  final cloudConfigured = ref.watch(supabaseClientProvider) != null;
+  final userId = ref.watch(authUserProvider).value?.id;
+  final database = AppDatabase(
+    null,
+    LocalDatabaseScope.databaseName(
+      userId: userId,
+      cloudConfigured: cloudConfigured,
+    ),
+  );
   ref.onDispose(database.close);
   return database;
 });
@@ -56,7 +68,28 @@ final authUserProvider = StreamProvider<User?>((ref) async* {
     yield null;
     return;
   }
-  yield* service.watchUser();
+  final currentUser = service.currentUser;
+  await LocalDatabaseScope.bindUser(currentUser?.id);
+  yield currentUser;
+  await for (final user in service.watchUser().skip(1)) {
+    await LocalDatabaseScope.bindUser(user?.id);
+    yield user;
+  }
+});
+
+final authIdentitiesProvider = FutureProvider.autoDispose<List<UserIdentity>>((
+  ref,
+) async {
+  final user = ref.watch(authUserProvider).value;
+  final service = ref.watch(supabaseAuthServiceProvider);
+  if (user == null || service == null) return const [];
+  return service.getUserIdentities();
+});
+
+final featureFlagsProvider = FutureProvider<FeatureFlags>((ref) {
+  final client = ref.watch(supabaseClientProvider);
+  final user = ref.watch(authUserProvider).value;
+  return RemoteConfigService(client).load(userId: user?.id);
 });
 
 final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {
@@ -64,7 +97,8 @@ final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {
 });
 
 final chatHistoryStoreProvider = Provider<ChatHistoryStore>((ref) {
-  return const ChatHistoryStore();
+  final userId = ref.watch(authUserProvider).value?.id;
+  return ChatHistoryStore(scope: userId);
 });
 
 final expenseGroupServiceProvider = Provider<ExpenseGroupService?>((ref) {
@@ -80,7 +114,8 @@ final expenseGroupsProvider = FutureProvider.autoDispose<List<ExpenseGroup>>((
 });
 
 final backupCatalogStoreProvider = Provider<BackupCatalogStore>((ref) {
-  return const BackupCatalogStore();
+  final userId = ref.watch(authUserProvider).value?.id;
+  return BackupCatalogStore(scope: userId);
 });
 
 final backupRecordsProvider = FutureProvider<List<BackupRecord>>((ref) {
@@ -100,7 +135,17 @@ final chatApiClientProvider = Provider<ChatApiClient>((ref) {
 final aiExtractionClientProvider = Provider<AiExtractionClient>((ref) {
   ref.watch(authUserProvider);
   final client = ref.watch(supabaseClientProvider);
-  return AiExtractionClient(supabaseClient: client);
+  final flags = ref.watch(featureFlagsProvider).value ?? FeatureFlags.defaults;
+  return AiExtractionClient(supabaseClient: client, enabled: flags.onlineAi);
+});
+
+final aiExtractionJobClientProvider = Provider<AiExtractionJobClient>((ref) {
+  ref.watch(authUserProvider);
+  final flags = ref.watch(featureFlagsProvider).value ?? FeatureFlags.defaults;
+  return AiExtractionJobClient(
+    supabaseClient: ref.watch(supabaseClientProvider),
+    enabled: flags.onlineAi,
+  );
 });
 
 final importCoordinatorProvider = Provider<ImportCoordinator>((ref) {
@@ -116,6 +161,11 @@ final importCoordinatorProvider = Provider<ImportCoordinator>((ref) {
 
 final importJobStoreProvider = Provider<DriftImportJobStore>((ref) {
   return DriftImportJobStore(ref.watch(databaseProvider));
+});
+
+final pendingImportStoreProvider = Provider<PendingImportStore>((ref) {
+  final userId = ref.watch(authUserProvider).value?.id;
+  return PendingImportStore(scope: userId);
 });
 
 final importJobsProvider = StreamProvider<List<ImportJobEntity>>((ref) {
@@ -282,7 +332,8 @@ final spendingInsightsProvider = StreamProvider<SpendingInsights>((ref) {
 });
 
 final anomalyFeedbackStoreProvider = Provider<AnomalyFeedbackStore>((ref) {
-  return const AnomalyFeedbackStore();
+  final userId = ref.watch(authUserProvider).value?.id;
+  return AnomalyFeedbackStore(scope: userId);
 });
 
 final dismissedAnomalyIdsProvider = FutureProvider<Set<String>>((ref) {
@@ -290,11 +341,14 @@ final dismissedAnomalyIdsProvider = FutureProvider<Set<String>>((ref) {
 });
 
 final budgetAlertPreferencesProvider = Provider<BudgetAlertPreferences>((ref) {
-  return const BudgetAlertPreferences();
+  final userId = ref.watch(authUserProvider).value?.id;
+  return BudgetAlertPreferences(scope: userId);
 });
 
 final budgetNotificationServiceProvider = Provider<BudgetNotificationService>(
-  (ref) => BudgetNotificationService.instance,
+  (ref) => BudgetNotificationService(
+    preferences: ref.watch(budgetAlertPreferencesProvider),
+  ),
 );
 
 final budgetAlertsEnabledProvider = FutureProvider<bool>((ref) {

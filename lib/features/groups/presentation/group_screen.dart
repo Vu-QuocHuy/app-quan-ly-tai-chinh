@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,11 +8,13 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
-import '../../invoices/domain/invoice_models.dart';
+import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 import '../../../shared/widgets/app_empty_state.dart';
+import '../../invoices/domain/invoice_models.dart';
 import '../data/group_service.dart';
+import '../domain/group_balance_calculator.dart';
 import '../domain/group_models.dart';
 import '../domain/group_split_calculator.dart';
 
@@ -176,6 +180,11 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
             onAddExpense: () => _addExpense(details),
             onAddReceipt: () => _addReceipt(details),
             onSettle: _settleShare,
+            onSetMemberRole: (userId, role) =>
+                _setMemberRole(details.group.id, userId, role),
+            onRemoveMember: (userId, displayName) =>
+                _removeMember(details.group.id, userId, displayName),
+            onLeaveGroup: () => _leaveGroup(details),
           );
         },
       ),
@@ -292,6 +301,66 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     });
   }
 
+  Future<void> _setMemberRole(
+    String groupId,
+    String userId,
+    String role,
+  ) async {
+    await _runGroupAction(() async {
+      await ref
+          .read(expenseGroupServiceProvider)!
+          .setMemberRole(groupId: groupId, userId: userId, role: role);
+      _reloadDetails();
+    });
+  }
+
+  Future<void> _removeMember(
+    String groupId,
+    String userId,
+    String displayName,
+  ) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Xóa thành viên?',
+      message: '“$displayName” sẽ không thể thêm khoản chi mới vào nhóm này.',
+      confirmLabel: 'Xóa thành viên',
+      icon: Icons.person_remove_outlined,
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    await _runGroupAction(() async {
+      await ref
+          .read(expenseGroupServiceProvider)!
+          .removeMember(groupId: groupId, userId: userId);
+      _reloadDetails();
+    });
+  }
+
+  Future<void> _leaveGroup(GroupDetails details) async {
+    final service = ref.read(expenseGroupServiceProvider);
+    if (service == null) return;
+    final isOwner = details.group.ownerId == service.currentUserId;
+    final confirmed = await showConfirmDialog(
+      context,
+      title: isOwner ? 'Xóa nhóm?' : 'Rời nhóm?',
+      message: isOwner
+          ? 'Nhóm và toàn bộ khoản chia trong nhóm sẽ bị xóa vĩnh viễn.'
+          : 'Bạn sẽ không còn xem hoặc thêm khoản chi vào nhóm này.',
+      confirmLabel: isOwner ? 'Xóa nhóm' : 'Rời nhóm',
+      icon: isOwner ? Icons.delete_outline : Icons.logout_outlined,
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    await _runGroupAction(() async {
+      await service.leaveGroup(details.group.id);
+      if (!mounted) return;
+      setState(() {
+        _selectedGroup = null;
+        _detailsFuture = null;
+      });
+    });
+  }
+
   Future<void> _addReceipt(GroupDetails details) async {
     final image = await ImagePicker().pickImage(
       source: ImageSource.gallery,
@@ -386,6 +455,9 @@ class _GroupDetails extends StatelessWidget {
     required this.onAddExpense,
     required this.onAddReceipt,
     required this.onSettle,
+    required this.onSetMemberRole,
+    required this.onRemoveMember,
+    required this.onLeaveGroup,
   });
 
   final GroupDetails details;
@@ -394,6 +466,9 @@ class _GroupDetails extends StatelessWidget {
   final VoidCallback onAddExpense;
   final VoidCallback onAddReceipt;
   final Future<void> Function(String expenseId) onSettle;
+  final Future<void> Function(String userId, String role) onSetMemberRole;
+  final Future<void> Function(String userId, String displayName) onRemoveMember;
+  final VoidCallback onLeaveGroup;
 
   @override
   Widget build(BuildContext context) {
@@ -401,6 +476,9 @@ class _GroupDetails extends StatelessWidget {
       for (final member in details.members) member.userId: member.displayName,
     };
     final balances = _balances();
+    final transfers = GroupBalanceCalculator.calculateSettlementTransfers(
+      balances,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -430,21 +508,38 @@ class _GroupDetails extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 for (final member in details.members)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    leading: const Icon(Icons.person_outline),
-                    title: Text(
-                      member.userId == currentUserId
-                          ? '${member.displayName} (Bạn)'
-                          : member.displayName,
-                    ),
-                    trailing: Text(_balanceLabel(balances[member.userId] ?? 0)),
+                  _MemberTile(
+                    member: member,
+                    currentUserId: currentUserId,
+                    isGroupOwner: details.group.ownerId == currentUserId,
+                    balanceLabel: _balanceLabel(balances[member.userId] ?? 0),
+                    onSetRole: onSetMemberRole,
+                    onRemove: onRemoveMember,
                   ),
               ],
             ),
           ),
         ),
+        if (transfers.isNotEmpty)
+          _SettlementSuggestions(transfers: transfers, names: names),
+        if (details.group.ownerId != currentUserId ||
+            details.members.length == 1)
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: onLeaveGroup,
+              icon: Icon(
+                details.group.ownerId == currentUserId
+                    ? Icons.delete_outline
+                    : Icons.logout_outlined,
+              ),
+              label: Text(
+                details.group.ownerId == currentUserId
+                    ? 'Xóa nhóm'
+                    : 'Rời nhóm',
+              ),
+            ),
+          ),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -477,20 +572,55 @@ class _GroupDetails extends StatelessWidget {
             currentUserId: currentUserId,
             onSettle: onSettle,
           ),
+        if (details.auditEvents.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Text(
+            'Lịch sử hoạt động',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          for (final event in details.auditEvents)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: const Icon(Icons.history_outlined),
+              title: Text(_auditLabel(event, names)),
+              subtitle: Text(_formatAuditDate(event.createdAt)),
+            ),
+        ],
       ],
     );
   }
 
+  String _auditLabel(GroupAuditEvent event, Map<String, String> names) {
+    final actor = names[event.actorId] ?? 'Tài khoản đã xóa';
+    return switch (event.eventType) {
+      'group_created' => '$actor đã tạo nhóm',
+      'member_joined' =>
+        '${names[event.targetUserId] ?? actor} đã tham gia nhóm',
+      'member_role_changed' => '$actor đã cập nhật vai trò thành viên',
+      'member_removed' => '$actor đã xóa một thành viên',
+      'member_left' => '$actor đã rời nhóm',
+      'expense_created' => '$actor đã thêm khoản chi',
+      'expense_settled' => '$actor đã xác nhận phần chia',
+      _ => 'Có hoạt động mới trong nhóm',
+    };
+  }
+
+  String _formatAuditDate(DateTime value) {
+    final local = value.toLocal();
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$day/$month/${local.year} $hour:$minute';
+  }
+
   Map<String, int> _balances() {
-    final result = {for (final member in details.members) member.userId: 0};
-    for (final expense in details.expenses) {
-      result[expense.payerId] =
-          (result[expense.payerId] ?? 0) + expense.totalMinor;
-      for (final split in expense.splits) {
-        result[split.userId] = (result[split.userId] ?? 0) - split.amountMinor;
-      }
-    }
-    return result;
+    return GroupBalanceCalculator.calculate(
+      memberIds: details.members.map((member) => member.userId),
+      expenses: details.expenses,
+    );
   }
 
   String _balanceLabel(int amount) {
@@ -498,6 +628,107 @@ class _GroupDetails extends StatelessWidget {
     return amount > 0
         ? 'được nhận ${MoneyFormatter.format(amount)}'
         : 'cần trả ${MoneyFormatter.format(-amount)}';
+  }
+}
+
+class _SettlementSuggestions extends StatelessWidget {
+  const _SettlementSuggestions({required this.transfers, required this.names});
+
+  final List<GroupSettlementTransfer> transfers;
+  final Map<String, String> names;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Theme.of(context).colorScheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Gợi ý thanh toán',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            for (final transfer in transfers)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  '${names[transfer.fromUserId] ?? 'Tài khoản đã xóa'} trả '
+                  '${MoneyFormatter.format(transfer.amountMinor)} cho '
+                  '${names[transfer.toUserId] ?? 'Tài khoản đã xóa'}',
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MemberTile extends StatelessWidget {
+  const _MemberTile({
+    required this.member,
+    required this.currentUserId,
+    required this.isGroupOwner,
+    required this.balanceLabel,
+    required this.onSetRole,
+    required this.onRemove,
+  });
+
+  final GroupMember member;
+  final String currentUserId;
+  final bool isGroupOwner;
+  final String balanceLabel;
+  final Future<void> Function(String userId, String role) onSetRole;
+  final Future<void> Function(String userId, String displayName) onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final canManage = isGroupOwner && member.userId != currentUserId;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      leading: const Icon(Icons.person_outline),
+      title: Text(
+        member.userId == currentUserId
+            ? '${member.displayName} (Bạn)'
+            : member.displayName,
+      ),
+      subtitle: Text(member.role == 'owner' ? 'Chủ nhóm' : 'Thành viên'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(balanceLabel),
+          if (canManage)
+            PopupMenuButton<String>(
+              tooltip: 'Quản lý thành viên',
+              onSelected: (action) {
+                if (action == 'remove') {
+                  unawaited(onRemove(member.userId, member.displayName));
+                } else {
+                  unawaited(onSetRole(member.userId, action));
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: member.role == 'owner' ? 'member' : 'owner',
+                  child: Text(
+                    member.role == 'owner'
+                        ? 'Thu hồi quyền chủ nhóm'
+                        : 'Chuyển quyền chủ nhóm',
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'remove',
+                  child: Text('Xóa khỏi nhóm'),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -544,12 +775,16 @@ class _ExpenseCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Text('Người trả: ${names[expense.payerId] ?? 'Thành viên'}'),
+            Text('Người trả: ${names[expense.payerId] ?? 'Tài khoản đã xóa'}'),
             for (final split in expense.splits)
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,
-                title: Text(names[split.userId] ?? 'Thành viên'),
+                title: Text(
+                  split.userId == null
+                      ? 'Tài khoản đã xóa'
+                      : names[split.userId!] ?? 'Thành viên',
+                ),
                 trailing: Text(
                   '${MoneyFormatter.format(split.amountMinor)}${split.isSettled ? ' · Đã trả' : ''}',
                 ),
@@ -633,6 +868,15 @@ class _InvoiceAllocationDialogState extends State<_InvoiceAllocationDialog> {
         )
         .toList(growable: true);
     final lineTotal = lines.fold<int>(0, (sum, line) => sum + line.amount);
+    if (lines.isEmpty && widget.invoice.totalMinor > 0) {
+      lines.add(
+        _InvoiceAllocationLine(
+          description: 'Tổng hóa đơn',
+          amount: widget.invoice.totalMinor,
+        ),
+      );
+      return lines;
+    }
     final remainder = widget.invoice.totalMinor - lineTotal;
     if (remainder > 0) {
       lines.add(

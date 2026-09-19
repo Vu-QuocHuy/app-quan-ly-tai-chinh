@@ -38,28 +38,50 @@ class BudgetNotificationService {
   final BudgetAlertPreferences _preferences;
   final BudgetAlertPolicy _policy;
   bool _initialized = false;
+  NotificationTapHandler? _onTap;
+  Future<String?>? _initialization;
+  Future<void> _notificationLock = Future<void>.value();
 
-  Future<String?> initialize({NotificationTapHandler? onTap}) async {
-    if (!_isSupportedPlatform) return null;
-    if (_initialized) return null;
+  Future<String?> initialize({NotificationTapHandler? onTap}) {
+    if (!_isSupportedPlatform) return Future<String?>.value();
+    if (onTap != null) _onTap = onTap;
+    if (_initialized) return Future<String?>.value();
+    final initialization = _initialization;
+    if (initialization != null) return initialization;
 
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    final darwin = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
-    await _plugin.initialize(
-      settings: InitializationSettings(android: android, iOS: darwin),
-      onDidReceiveNotificationResponse: (response) {
-        onTap?.call(response.payload);
-      },
-    );
-    _initialized = true;
+    final operation = _initialize();
+    _initialization = operation;
+    return operation.whenComplete(() {
+      if (identical(_initialization, operation)) _initialization = null;
+    });
+  }
 
-    final launchDetails = await _plugin.getNotificationAppLaunchDetails();
-    if (launchDetails?.didNotificationLaunchApp != true) return null;
-    return launchDetails?.notificationResponse?.payload;
+  Future<String?> _initialize() async {
+    try {
+      const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+      final darwin = DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      );
+      final initialized = await _plugin.initialize(
+        settings: InitializationSettings(android: android, iOS: darwin),
+        onDidReceiveNotificationResponse: (response) {
+          _onTap?.call(response.payload);
+        },
+      );
+      if (initialized == false) {
+        throw StateError('Không thể khởi tạo thông báo trên thiết bị.');
+      }
+      _initialized = true;
+
+      final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp != true) return null;
+      return launchDetails?.notificationResponse?.payload;
+    } on Object {
+      _initialized = false;
+      rethrow;
+    }
   }
 
   Future<bool> requestPermission() async {
@@ -90,7 +112,19 @@ class BudgetNotificationService {
     return true;
   }
 
-  Future<BudgetNotificationResult> notifyIfNeeded(
+  Future<void> cancelBudgetNotifications() async {
+    if (!_isSupportedPlatform) return;
+    if (!_initialized) await initialize();
+    await _plugin.cancelAll();
+  }
+
+  Future<BudgetNotificationResult> notifyIfNeeded(DashboardSnapshot snapshot) {
+    final operation = _notificationLock.then((_) => _notifyIfNeeded(snapshot));
+    _notificationLock = operation.then<void>((_) {}, onError: (_, _) {});
+    return operation;
+  }
+
+  Future<BudgetNotificationResult> _notifyIfNeeded(
     DashboardSnapshot snapshot,
   ) async {
     if (!_isSupportedPlatform) return BudgetNotificationResult.unsupported;
@@ -100,7 +134,7 @@ class BudgetNotificationService {
       return BudgetNotificationResult.disabled;
     }
     if (!_initialized) await initialize();
-    if (!await _preferences.shouldDeliver(decision.deduplicationKey)) {
+    if (!await _preferences.canDeliver(decision.deduplicationKey)) {
       return BudgetNotificationResult.duplicate;
     }
 
@@ -141,12 +175,25 @@ class BudgetNotificationService {
       notificationDetails: notificationDetails,
       payload: _payload,
     );
+    await _preferences.markDelivered(decision.deduplicationKey);
     return BudgetNotificationResult.shown;
   }
 
   int _notificationId(BudgetAlertDecision decision) {
-    final value = Object.hash(decision.monthKey, decision.level.name).abs();
+    final scope = _preferences.scope?.trim() ?? 'anonymous';
+    final value = _stableHash(
+      '$scope:${decision.monthKey}:${decision.level.name}',
+    );
     return value == 0 ? 1 : value;
+  }
+
+  int _stableHash(String value) {
+    var hash = 0x811c9dc5;
+    for (final codeUnit in value.codeUnits) {
+      hash ^= codeUnit;
+      hash = (hash * 0x01000193) & 0x7fffffff;
+    }
+    return hash;
   }
 
   bool get _isSupportedPlatform =>

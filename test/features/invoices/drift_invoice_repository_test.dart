@@ -126,6 +126,14 @@ void main() {
         categoryId: category.id,
         createdAt: now,
         updatedAt: now,
+        lines: [
+          const InvoiceLineEntity(
+            id: 'line-custom-category',
+            description: 'Bút viết',
+            totalMinor: 100000,
+            categoryId: 'custom-office',
+          ),
+        ],
       ),
     );
     await repository.saveBudget(
@@ -146,6 +154,12 @@ void main() {
     );
     expect(
       (await repository.findById('invoice-custom-category'))?.categoryId,
+      'other',
+    );
+    expect(
+      (await repository.findById(
+        'invoice-custom-category',
+      ))?.lines.single.categoryId,
       'other',
     );
     expect(await repository.watchBudgets('2026-08').first, isEmpty);
@@ -275,6 +289,41 @@ void main() {
       isEmpty,
     );
   });
+
+  test(
+    'finds bounded duplicate candidates without loading all summaries',
+    () async {
+      await repository.saveInvoices([
+        _invoice(
+          id: 'duplicate-candidate',
+          seller: 'Alpha',
+          date: DateTime(2026, 8, 12),
+          categoryId: 'food',
+          total: 100000,
+        ),
+        _invoice(
+          id: 'different-candidate',
+          seller: 'Beta',
+          date: DateTime(2026, 8, 13),
+          categoryId: 'food',
+          total: 200000,
+        ),
+      ]);
+
+      final candidates = await repository.findDuplicateCandidates(
+        _invoice(
+          id: 'new-invoice',
+          seller: 'New',
+          date: DateTime(2026, 8, 12),
+          categoryId: 'other',
+          total: 100000,
+        ),
+      );
+
+      expect(candidates.map((item) => item.id), ['duplicate-candidate']);
+      expect(candidates.single.lines, isEmpty);
+    },
+  );
 
   test('aggregates dashboard in SQL and persists notes and tags', () async {
     await repository.saveInvoices([

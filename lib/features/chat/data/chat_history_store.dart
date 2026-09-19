@@ -5,14 +5,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../domain/chat_models.dart';
 
 class ChatHistoryStore {
-  const ChatHistoryStore({this.maxMessages = 100});
+  const ChatHistoryStore({this.maxMessages = 100, this.scope});
 
   static const storageKey = 'chat.history.v1';
   final int maxMessages;
+  final String? scope;
+
+  String get _storageKey =>
+      scope == null ? storageKey : '$storageKey.${scope!.trim()}';
 
   Future<List<ChatMessage>> load() async {
     final preferences = await SharedPreferences.getInstance();
-    final raw = preferences.getString(storageKey);
+    final raw = preferences.getString(_storageKey);
     if (raw == null || raw.isEmpty) return const [];
     try {
       final decoded = jsonDecode(raw);
@@ -35,13 +39,19 @@ class ChatHistoryStore {
         : items.sublist(items.length - maxMessages);
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(
-      storageKey,
+      _storageKey,
       jsonEncode(bounded.map((message) => message.toJson()).toList()),
     );
   }
 
   Future<void> clear() async {
     final preferences = await SharedPreferences.getInstance();
-    await preferences.remove(storageKey);
+    await preferences.remove(_storageKey);
+  }
+
+  Future<void> clearAll({bool includeLegacy = false}) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove(_storageKey);
+    if (includeLegacy && scope != null) await preferences.remove(storageKey);
   }
 }

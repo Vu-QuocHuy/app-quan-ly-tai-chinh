@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum ImportSource { xmlOrPdf, camera, gallery, manual, qr }
+enum ImportSource { xmlOrPdf, camera, gallery, manual }
 
 class ImportSourceSheet extends StatelessWidget {
   const ImportSourceSheet({super.key});
@@ -47,12 +47,6 @@ class ImportSourceSheet extends StatelessWidget {
               title: 'Nhập thủ công',
               subtitle: 'Phù hợp khi không có file hoặc ảnh',
               onTap: () => Navigator.pop(context, ImportSource.manual),
-            ),
-            _SourceTile(
-              icon: Icons.qr_code_scanner,
-              title: 'Quét QR',
-              subtitle: 'Đọc QR từ camera; tra cứu provider vẫn Experimental',
-              onTap: () => Navigator.pop(context, ImportSource.qr),
             ),
           ],
         ),

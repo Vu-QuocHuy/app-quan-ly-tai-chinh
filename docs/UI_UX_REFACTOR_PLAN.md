@@ -91,7 +91,7 @@ Typography: chỉ 6/15 vai được đặt (`app_theme.dart:42-59`) nên `titleL
 Bảng route nhỏ và dễ đọc (9 route), nhưng IA quanh nó mất cân đối và shell là một god-object.
 
 - **[Chặn phát hành]** `app_router.dart:30-31` chặn *mọi* route sau session Supabase, mà `SupabaseBootstrap.clientOrNull` trả `null` khi build không có `--dart-define` — chính xác là cách `ci.yml:27` build APK. Build mặc định redirect về `/auth` vĩnh viễn rồi hiển thị `_ConfigurationMissingCard` (`account_screen.dart:454-465`) **không có nút nào**. Mâu thuẫn trực tiếp với `README.md:28`.
-- `app_shell.dart` 460 dòng, trong đó **~300 dòng (`:159-459`)** là file-picking, OCR, quét QR, resume pending import, hẹn giờ retry, điều phối hàng đợi và snackbar — không dòng nào là chrome điều hướng.
+- `app_shell.dart` 460 dòng, trong đó **~300 dòng (`:159-459`)** là file-picking, OCR, resume pending import, hẹn giờ retry, điều phối hàng đợi và snackbar — không dòng nào là chrome điều hướng.
 - FAB **đổi vai** từ hành động sáng tạo sang phá hủy tại cùng toạ độ (`app_shell.dart:137-147`). Trong batch import, `/review` được push lên root navigator (`:452`) **che chính cái FAB "Hủy"** người dùng cần, còn `import_queue.dart:100` `await onOutcome(...)` khoá cả hàng đợi cho tới khi họ thoát form.
 - 4 tab đều `NoTransitionPage` (`app_router.dart:46,55,73,82`) → **motion identity bằng 0**.
 - Route `/review` phụ thuộc `state.extra`; khi sai kiểu thì trả `Scaffold` **không có AppBar** (`app_router.dart:115-119`) → không có nút quay lại.
@@ -135,7 +135,7 @@ Bảng route nhỏ và dễ đọc (9 route), nhưng IA quanh nó mất cân đ�
 ### 2.6. Loading / empty / error / feedback / motion
 
 - 12 surface async đều rơi về 3 primitive: `CircularProgressIndicator` giữa màn, `Text` có `$error`, và đôi khi một thẻ rỗng.
-- **39 chỗ** nội suy exception thô vào copy tiếng Việt. `app_exception.dart:8` `String toString() => message;` an toàn, nhưng throw site thật là `StateError` (`sync_gateway.dart:39`), `FormatException` (`qr_scanner_service.dart:16`), `PostgrestException`, `SqliteException`. `app_shell.dart:420-421` còn hiển thị `error.toString()` **trần không có câu nào bọc quanh**.
+- **39 chỗ** nội suy exception thô vào copy tiếng Việt. `app_exception.dart:8` `String toString() => message;` an toàn, nhưng throw site thật là `StateError` (`sync_gateway.dart:39`), `PostgrestException`, `SqliteException`. `app_shell.dart:420-421` còn hiển thị `error.toString()` **trần không có câu nào bọc quanh**.
 - **36 `showSnackBar`, 0 `SnackBarAction`, 0 `duration:`, 0 `SnackBarBehavior`, 0 `MaterialBanner`.** `app_shell.dart:456-458` gọi `hideCurrentSnackBar()` trước → 4 file lỗi trong batch thì chỉ thấy cái cuối.
 - Cảnh báo trùng hoá đơn — một quyết định người dùng phải đưa ra — được giao bằng SnackBar rồi app điều hướng đi ngay (`app_shell.dart:441-446` → `:452`).
 - Tiến trình import duy nhất trong app là **nhãn text của FAB** (`:144-147`); tên file đang xử lý chỉ tới được qua `Tooltip` (`:139-141`) — trên điện thoại phải nhấn giữ, mà nhấn giữ nút đó rất nguy hiểm.
@@ -2559,7 +2559,7 @@ Route `/settings/conflicts` **luôn bấm được** (bỏ `onTap: conflicts.isE
 - Body thành `SingleChildScrollView`. Đã đo: header ~18dp + phụ đề 2 dòng ~40dp + gap 20 + 5×64dp tile + 24dp padding + drag handle ≈ **420dp** chiều cao nội tại, trong khi máy ngang 812×375 chỉ có 375dp — `RenderFlex overflow` **không có lối thoát cuộn**, trên hành động chính của app.
 - `_SourceTile` → `EntityListRow` (bỏ `minTileHeight: 64` riêng).
 - Bỏ `Semantics(button: true)` không nhãn ở `:79-89` bọc một `ListTile` vốn đã là button — nó thêm một node button trần không tên phía trên 5 tile vốn đã đúng.
-- **"Quét QR" thôi là ngõ cụt.** Hôm nay nó chiếm 1 trong 5 chỗ của menu tạo mới có giá trị nhất, mở camera, làm việc, rồi hiện một chuỗi thô và nút "Đóng" (`app_shell.dart:280-292`). Đổi thành: mở `/review` với **bản nháp đã điền sẵn** từ dữ liệu quét được, kèm `AppCallout(tone: info)` giải thích phần nào chưa đọc được.
+- Luồng thêm giao dịch hiện tập trung vào XML/PDF, OCR ảnh và nhập thủ công; sau khi nhập luôn mở bước review để người dùng kiểm tra dữ liệu trước khi lưu.
 
 ### 6.13. App shell — `lib/app/shell/app_shell.dart` (460 → ~120)
 
@@ -2567,11 +2567,10 @@ Route `/settings/conflicts` **luôn bấm được** (bỏ `onTap: conflicts.isE
 
 | Chuyển từ | Sang (NEW) |
 |---|---|
-| `_pickDocument` `:182`, `_pickImage` `:210`, `_scanQr` `:234`, `_processPendingImport` `:303`, `_resumePendingImports` `:332`, `_schedulePendingResume` `:362`, `_runImportBatch` `:373`, + 5 mảnh state ở `:27-31` | `lib/features/ingestion/application/import_session_controller.dart` — Riverpod `Notifier<ImportSessionState>` expose `{isImporting, index, total, fileName, failures}` |
-| `_showQrResult` `:258-301` | `lib/features/ingestion/presentation/qr_result_sheet.dart` |
+| `_pickDocument` `:182`, `_pickImage` `:210`, `_processPendingImport` `:303`, `_resumePendingImports` `:332`, `_schedulePendingResume` `:362`, `_runImportBatch` `:373`, + 5 mảnh state ở `:27-31` | `lib/features/ingestion/application/import_session_controller.dart` — Riverpod `Notifier<ImportSessionState>` expose `{isImporting, index, total, fileName, failures}` |
 | `_syncCloud` `:56` + observer `didChangeAppLifecycleState` | `lib/features/sync/application/sync_lifecycle_observer.dart` |
 
-Shell chỉ còn `ref.watch` state đó. Kết quả: widget vẽ NavigationBar có thể unit-test và đổi da mà không kéo theo `file_picker`, `image_picker`, `QrScannerService`, `PendingImportStore`.
+Shell chỉ còn `ref.watch` state đó. Kết quả: widget vẽ NavigationBar có thể unit-test và đổi da mà không kéo theo `file_picker`, `image_picker`, `PendingImportStore`.
 
 **B. FAB thôi đổi vai.** Hôm nay `:137-147` biến "Thêm giao dịch" thành "Hủy N/M" **tại cùng một toạ độ** — trí nhớ cơ bắp đưa ngón cái tới đó để thêm hóa đơn thứ hai và huỷ cả hàng đợi. Tệ hơn: `unawaited(_resumePendingImports())` chạy ở `:40` mỗi lần shell mount, nên nút có thể **âm thầm** trở thành "Hủy 2/3".
 
@@ -2659,7 +2658,6 @@ Mỗi surface async × loading / empty / error / retry. Cột "Hôm nay" là hi�
 | Throw site | Người dùng đọc thấy |
 |---|---|
 | `sync_gateway.dart:39` `throw StateError('Cloud sync chưa được cấu hình.')` | `Bad state: Cloud sync chưa được cấu hình.` |
-| `qr_scanner_service.dart:16` `throw const FormatException('QR không chứa dữ liệu.')` | `FormatException: QR không chứa dữ liệu.` |
 | Supabase | `PostgrestException(message: JWT expired, code: PGRST301, details: Unauthorized, hint: null)` |
 | Mạng | `SocketException: Failed host lookup: 'xxx.supabase.co' (OS Error ..., errno = 7)` |
 | drift | `SqliteException(787): FOREIGN KEY constraint failed` |
@@ -2987,7 +2985,6 @@ Sửa đảo ngược đã mô tả ở §6.13-D: `SafeArea` rời khỏi body, 
 
 Hai bottom sheet **chắc chắn** tràn ở 812×375:
 - `import_source_sheet.dart:11-58`: chiều cao nội tại ≈ 420dp trong viewport 375dp, `Column` không cuộn được → §6.12.
-- `app_shell.dart:258-301` (kết quả QR): **không** `isScrollControlled` nên bị kẹp 9/16 chiều cao màn hình; một payload QR hóa đơn điện tử dài (URL provider hoặc chuỗi phân cách bằng `|`) đẩy nút "Đóng" (`:291`) ra ngoài màn hình **không có cách nào đóng ngoài kéo tay**.
 
 Bốn `SliverAppBar.large` chiếm 152 trên 375dp (**40,5%**) ở landscape. Chuyển sang `.medium(pinned: true)` (§6) đã sửa việc này; không cần kiểm tra orientation riêng.
 
@@ -2998,7 +2995,7 @@ Web là target đã ship (`web/drift_worker.js`, `web/sqlite3.wasm`, commit `74a
 | Vấn đề | Sửa |
 |---|---|
 | `app_shell.dart:40` `unawaited(_resumePendingImports())` đi qua `dart:io` + `path_provider` (`pending_import_store.dart:2,5,47`) → rơi vào catch `:357` và hiện SnackBar lỗi tiếng Việt cho **mọi** người dùng web khi mở app | Chặn bằng `kIsWeb`, hiện surface "chưa hỗ trợ trên web" trung thực |
-| OCR / QR (`google_mlkit_*`) không có bản web → `MissingPluginException` | Chặn bằng `kIsWeb` trong `ImportSourceSheet`; `friendlyMessage` đã map `MissingPluginException` |
+| OCR (`google_mlkit_*`) không có bản web → `MissingPluginException` | Chặn bằng `kIsWeb` trong `ImportSourceSheet`; `friendlyMessage` đã map `MissingPluginException` |
 | `/review` phụ thuộc `state.extra` (`app_router.dart:113-121`), không serialize vào lịch sử trình duyệt → F5 / back-forward / chia sẻ URL trên **màn hình quan trọng nhất app** cho một ngõ cụt | Tham số `?invoiceId=` hydrate từ drift (§6.13-I) |
 | CI chỉ `flutter build apk --debug` (`ci.yml:24`) | Thêm job `flutter build web --release` |
 | `MaterialScrollBehavior` mặc định loại chuột khỏi `dragDevices` → kéo-chuột để cuộn không hoạt động | `AppScrollBehavior` (NEW) thêm `PointerDeviceKind.mouse` |
@@ -3020,7 +3017,7 @@ Web là target đã ship (`web/drift_worker.js`, `web/sqlite3.wasm`, commit `74a
 | 5 | Ngân sách dựng danh sách hai lần | `:44-59` lười + `:72-77` eager qua `SliverToBoxAdapter` | Gộp một lần (§6.5) |
 | 6 | Chat rebuild mỗi phím | `:170` `onChanged: (_) => setState(() {})` dựng lại cả `ListView` | Tách `ChatComposer` (§6.9) |
 | 7 | Detail bắn lại query | `invoice_detail_screen.dart:17-19` tạo `Future` trong `build` | `StreamProvider.family.autoDispose` (§6.3) |
-| 8 | Đọc file hàng loạt | `app_shell.dart:188-202` đọc **toàn bộ** file đã chọn vào bộ nhớ trước khi xử lý file nào; QR dùng `imageQuality: 100, maxWidth: 3000` (`:236-239`). 20 PDF scan 3–5MB = 60–100MB `Uint8List` trên heap | Xử lý theo luồng; giới hạn số file mỗi lô; giảm chất lượng QR |
+| 8 | Đọc file hàng loạt | `app_shell.dart:188-202` đọc **toàn bộ** file đã chọn vào bộ nhớ trước khi xử lý file nào. 20 PDF scan 3–5MB = 60–100MB `Uint8List` trên heap | Xử lý theo luồng; giới hạn số file mỗi lô |
 | 9 | ThemeData dựng lại | `app.dart:15-16` gọi `AppTheme.light()`/`dark()` trong `build()` của widget gốc | Hoist `static final` (§4.7) |
 
 **Ngân sách đo được (tiêu chí nghiệm thu):**
@@ -3219,7 +3216,6 @@ graph LR
 |---|---|
 | `lib/app/shell/app_shell.dart` | 460 → ~120; tách 3 file mới (§6.13-A) |
 | `lib/features/ingestion/application/import_session_controller.dart` | NEW |
-| `lib/features/ingestion/presentation/qr_result_sheet.dart` | NEW |
 | `lib/features/sync/application/sync_lifecycle_observer.dart` | NEW |
 | `lib/features/chat/presentation/chat_screen.dart` (+ `widgets/chat_composer.dart`) | 448 → ~260 |
 | `lib/features/ingestion/presentation/import_job_history_screen.dart` | 307 → ~200 |
@@ -3344,7 +3340,7 @@ Ba cổng bổ sung là test thường nên không cần bước riêng: `theme_
 |---|---|---|
 | Điện thoại nhỏ | 320×640, textScale 1.0 và 2.0 | Hero không tràn; nhãn nav không cắt; sheet import cuộn được; không `RenderFlex` vàng-đen ở đâu |
 | Điện thoại chuẩn | 375×812 | Toàn bộ luồng: import XML → Review → lưu → thấy trong danh sách → mở chi tiết → sửa → quay lại **chi tiết** (không phải danh sách) |
-| Điện thoại ngang | 812×375 | Sheet import và sheet QR cuộn được; app bar không chiếm 40% màn hình |
+| Điện thoại ngang | 812×375 | Sheet import cuộn được; app bar không chiếm 40% màn hình |
 | Tablet | 1024×768 | `NavigationRail` hiện; FAB ở `leading:` của rail; nội dung kẹp 720dp; **không** có 112dp trống ở đáy |
 | Web rộng | 1440×900 | Dashboard hai cột; kéo-chuột cuộn được; focus ring nhìn thấy khi Tab; Ctrl+F focus ô tìm kiếm |
 | Máy tầm trung | Snapdragon 680 hoặc tương đương, `--profile` | p99 raster ≤ 16ms khi cuộn 200 hóa đơn và cuộn Dashboard |

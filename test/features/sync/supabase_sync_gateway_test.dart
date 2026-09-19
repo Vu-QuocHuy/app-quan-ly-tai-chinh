@@ -7,24 +7,37 @@ import 'package:hoadon_insight/features/sync/domain/sync_models.dart';
 void main() {
   test('sends an invoice event through the atomic RPC', () async {
     String? capturedOperation;
+    String? capturedExpectedUserId;
     Map<String, dynamic>? capturedPayload;
     int? capturedRevision;
     final gateway = SupabaseSyncGateway.withInvoker(
       currentUserId: () => 'user-1',
       invoke:
-          ({required operation, required payload, required revision}) async {
+          ({
+            required expectedUserId,
+            required operation,
+            required payload,
+            required revision,
+          }) async {
+            capturedExpectedUserId = expectedUserId;
             capturedOperation = operation;
             capturedPayload = payload;
             capturedRevision = revision;
           },
     );
     final entry = _entry(
-      payloadJson: '{"id":"invoice-1","sellerName":"Cửa hàng"}',
+      payloadJson:
+          '{"id":"invoice-1","sellerName":"Cửa hàng",'
+          '"currencyCode":"VND","subtotalMinor":100000,"taxMinor":0,'
+          '"totalMinor":100000,"sourceType":"manual","status":"confirmed",'
+          '"createdAt":"2026-08-31T00:00:00.000Z",'
+          '"updatedAt":"2026-08-31T00:00:00.000Z","revision":3}',
     );
 
     await gateway.push('user-1', entry);
 
     expect(capturedOperation, 'upsert');
+    expect(capturedExpectedUserId, 'user-1');
     expect(capturedRevision, 3);
     expect(capturedPayload, containsPair('id', 'invoice-1'));
   });
@@ -34,7 +47,12 @@ void main() {
     final gateway = SupabaseSyncGateway.withInvoker(
       currentUserId: () => 'user-1',
       invoke:
-          ({required operation, required payload, required revision}) async {
+          ({
+            required expectedUserId,
+            required operation,
+            required payload,
+            required revision,
+          }) async {
             invoked = true;
           },
     );
@@ -53,9 +71,15 @@ void main() {
     final gateway = SupabaseSyncGateway.withInvoker(
       currentUserId: () => 'user-1',
       invoke:
-          ({required operation, required payload, required revision}) async {},
+          ({
+            required expectedUserId,
+            required operation,
+            required payload,
+            required revision,
+          }) async {},
       invokeReference:
           ({
+            required expectedUserId,
             required eventId,
             required aggregateType,
             required operation,
@@ -82,6 +106,133 @@ void main() {
     expect(capturedType, 'budget');
     expect(capturedOperation, 'upsert');
     expect(capturedPayload, containsPair('limitMinor', 2000000));
+  });
+
+  test('rejects unsupported aggregates before invoking Supabase', () async {
+    var invoked = false;
+    final gateway = SupabaseSyncGateway.withInvoker(
+      currentUserId: () => 'user-1',
+      invoke:
+          ({
+            required expectedUserId,
+            required operation,
+            required payload,
+            required revision,
+          }) async {
+            invoked = true;
+          },
+    );
+
+    await expectLater(
+      gateway.push(
+        'user-1',
+        _entry(
+          aggregateType: 'unknown',
+          aggregateId: 'unknown-1',
+          payloadJson: '{"id":"unknown-1"}',
+        ),
+      ),
+      throwsA(isA<FormatException>()),
+    );
+    expect(invoked, isFalse);
+  });
+
+  test(
+    'rejects a payload whose id differs from the outbox aggregate',
+    () async {
+      var invoked = false;
+      final gateway = SupabaseSyncGateway.withInvoker(
+        currentUserId: () => 'user-1',
+        invoke:
+            ({
+              required expectedUserId,
+              required operation,
+              required payload,
+              required revision,
+            }) async {
+              invoked = true;
+            },
+      );
+
+      await expectLater(
+        gateway.push('user-1', _entry(payloadJson: '{"id":"another-invoice"}')),
+        throwsA(isA<FormatException>()),
+      );
+      expect(invoked, isFalse);
+    },
+  );
+
+  test('rejects malformed invoice payload before invoking Supabase', () async {
+    var invoked = false;
+    final gateway = SupabaseSyncGateway.withInvoker(
+      currentUserId: () => 'user-1',
+      invoke:
+          ({
+            required expectedUserId,
+            required operation,
+            required payload,
+            required revision,
+          }) async {
+            invoked = true;
+          },
+    );
+
+    await expectLater(
+      gateway.push(
+        'user-1',
+        _entry(
+          payloadJson:
+              '{"id":"invoice-1","sellerName":"Cửa hàng",'
+              '"currencyCode":"VND","subtotalMinor":-1}',
+        ),
+      ),
+      throwsA(isA<FormatException>()),
+    );
+    expect(invoked, isFalse);
+  });
+
+  test('records pull telemetry without blocking synchronization', () async {
+    String? capturedDirection;
+    String? capturedAggregateType;
+    int? capturedStatusCode;
+    int? capturedBatchSize;
+    final gateway = SupabaseSyncGateway.withInvoker(
+      currentUserId: () => 'user-1',
+      invoke:
+          ({
+            required expectedUserId,
+            required operation,
+            required payload,
+            required revision,
+          }) async {},
+      pull: ({required aggregateType, required cursor, required limit}) async {
+        return const SyncPullPage(changes: [], hasMore: false);
+      },
+      recordMetric:
+          ({
+            required direction,
+            required aggregateType,
+            required statusCode,
+            required durationMs,
+            required batchSize,
+            errorCode,
+          }) async {
+            capturedDirection = direction;
+            capturedAggregateType = aggregateType;
+            capturedStatusCode = statusCode;
+            capturedBatchSize = batchSize;
+            expect(durationMs, inInclusiveRange(0, 600000));
+            expect(errorCode, isNull);
+          },
+    );
+
+    final result = await gateway.pull(userId: 'user-1');
+
+    expect(result.changes, isEmpty);
+    expect(capturedDirection, 'pull');
+    expect(capturedAggregateType, 'invoice');
+    expect(capturedStatusCode, 200);
+    expect(capturedBatchSize, 0);
   });
 }
 

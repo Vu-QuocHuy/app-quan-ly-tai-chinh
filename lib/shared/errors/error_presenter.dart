@@ -27,9 +27,9 @@ String friendlyMessage(Object error) {
 
     final AuthException e => switch (e.statusCode) {
       '400' => 'Email hoặc mật khẩu chưa đúng.',
-      '422' => 'Mật khẩu chưa đủ mạnh. Hãy dùng ít nhất 8 ký tự.',
+      '422' => 'Thông tin tài khoản chưa hợp lệ. Hãy kiểm tra và thử lại.',
       '429' => 'Bạn thử quá nhiều lần. Hãy chờ một phút rồi thử lại.',
-      _ => e.message,
+      _ => 'Không thể hoàn tất xác thực. Hãy kiểm tra thông tin và thử lại.',
     },
 
     final PostgrestException e => switch (e.code) {

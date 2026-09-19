@@ -26,4 +26,35 @@ void main() {
 
     expect(await store.loadDismissedIds(), isEmpty);
   });
+
+  test('keeps feedback isolated by account scope', () async {
+    const userOne = AnomalyFeedbackStore(scope: 'user-1');
+    const userTwo = AnomalyFeedbackStore(scope: 'user-2');
+
+    await userOne.dismiss('invoice-1');
+
+    expect(await userTwo.loadDismissedIds(), isEmpty);
+    expect(await userOne.loadDismissedIds(), {'invoice-1'});
+  });
+
+  test(
+    'clearAll removes scoped feedback without touching legacy or another account',
+    () async {
+      const legacy = AnomalyFeedbackStore();
+      const userOne = AnomalyFeedbackStore(scope: 'user-1');
+      const userTwo = AnomalyFeedbackStore(scope: 'user-2');
+
+      await legacy.dismiss('legacy-invoice');
+      await userOne.dismiss('user-one-invoice');
+      await userTwo.dismiss('user-two-invoice');
+      await userOne.clearAll();
+
+      expect(await legacy.loadDismissedIds(), {'legacy-invoice'});
+      expect(await userOne.loadDismissedIds(), isEmpty);
+      expect(await userTwo.loadDismissedIds(), {'user-two-invoice'});
+
+      await userOne.clearAll(includeLegacy: true);
+      expect(await legacy.loadDismissedIds(), isEmpty);
+    },
+  );
 }

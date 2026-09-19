@@ -484,7 +484,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       if (_categoryId != null) {
         await repository.saveMerchantRule(updated.sellerName, _categoryId!);
       }
-      if (mounted) context.go('/invoices');
+      if (mounted) context.pop(true);
     } on Object catch (error) {
       if (mounted) {
         setState(() {

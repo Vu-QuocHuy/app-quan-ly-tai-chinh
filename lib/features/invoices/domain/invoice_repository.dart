@@ -19,8 +19,15 @@ abstract interface class InvoiceRepository {
   Stream<SpendingInsights> watchSpendingInsights(String monthKey);
   Future<InvoiceEntity?> findById(String id);
   Future<InvoiceEntity?> findBySourceHash(String hash);
+  Future<List<InvoiceEntity>> findDuplicateCandidates(InvoiceEntity candidate);
   Future<void> saveInvoice(InvoiceEntity invoice);
   Future<void> saveRemoteInvoice(InvoiceEntity invoice);
+  Future<void> deleteRemoteInvoice(
+    String id, {
+    required int revision,
+    required DateTime updatedAt,
+    DateTime? deletedAt,
+  });
   Future<void> saveRemoteCategory(CategoryEntity category);
   Future<void> deleteRemoteCategory(String id);
   Future<void> saveRemoteBudget(BudgetEntity budget);

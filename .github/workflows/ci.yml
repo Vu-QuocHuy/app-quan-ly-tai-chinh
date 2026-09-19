@@ -9,6 +9,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   flutter:
     runs-on: ubuntu-latest
@@ -21,10 +24,33 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - run: dart run build_runner build
+      - name: Reject stale generated files
+        run: git diff --exit-code
       - run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter analyze
       - run: flutter test
       - run: flutter build apk --debug
+      - run: flutter build web
+
+  database-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.1
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Benchmark SQLite search
+        run: flutter test tool/benchmark_local_database.dart --reporter expanded | tee sqlite-benchmark.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-benchmark
+          path: sqlite-benchmark.log
+          retention-days: 30
 
   supabase-functions:
     runs-on: ubuntu-latest
@@ -33,5 +59,53 @@ jobs:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.x
+          deno-version: 2.9.6
       - run: deno check supabase/functions/ai-api/index.ts
+      - run: deno check supabase/functions/ai-worker/index.ts
+      - run: deno check supabase/functions/delete-account/index.ts
+      - run: deno check supabase/functions/health/index.ts
+
+  supabase-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - name: Start local Supabase
+        run: supabase start > supabase-start.log
+      - name: Apply migrations
+        run: supabase db reset --local --yes
+      - name: Lint migrations
+        run: supabase db lint
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop
+
+  repository-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tracked secret files
+        shell: bash
+        run: |
+          if git ls-files | rg '(^|/)(\.env($|\.)|.*\.(pem|key|p12|jks)$)'; then
+            echo "Tracked secret-like file detected"
+            exit 1
+          fi
+      - name: Scan repository for credential patterns
+        shell: bash
+        run: |
+          if rg --hidden -n \
+            --glob '!.git/**' \
+            --glob '!build/**' \
+            --glob '!.dart_tool/**' \
+            --glob '!pubspec.lock' \
+            'AIza[0-9A-Za-z_-]{20,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}|sb_secret_[A-Za-z0-9_-]{10,}|service_role_[A-Za-z0-9_-]{10,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' .; then
+            echo "Credential pattern detected"
+            exit 1
+          fi
+      - name: Check patch whitespace
+        run: git diff --check

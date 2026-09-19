@@ -1,0 +1,39 @@
+name: AI Worker
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+concurrency:
+  group: ai-worker
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Process queued extraction jobs
+        env:
+          SUPABASE_FUNCTION_URL: ${{ secrets.SUPABASE_FUNCTION_URL }}
+          AI_WORKER_SECRET: ${{ secrets.AI_WORKER_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_FUNCTION_URL"
+          test "${#AI_WORKER_SECRET}" -ge 32
+          base_url="${SUPABASE_FUNCTION_URL%/}"
+          test -n "$base_url"
+          case "$base_url" in
+            https://*) ;;
+            *)
+              echo "SUPABASE_FUNCTION_URL production phải dùng HTTPS."
+              exit 1
+              ;;
+          esac
+          curl --fail --silent --show-error --retry 2 --max-time 120 \
+            -X POST "$base_url/functions/v1/ai-worker" \
+            -H "X-Worker-Secret: $AI_WORKER_SECRET"

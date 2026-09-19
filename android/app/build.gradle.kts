@@ -1,9 +1,36 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val releaseSigningProperties = Properties()
+val releaseSigningPropertiesFile = rootProject.file("key.properties")
+if (releaseSigningPropertiesFile.isFile) {
+    FileInputStream(releaseSigningPropertiesFile).use { input ->
+        releaseSigningProperties.load(input)
+    }
+}
+
+fun signingValue(environmentName: String, propertyName: String): String? {
+    return System.getenv(environmentName)?.takeIf { it.isNotEmpty() }
+        ?: releaseSigningProperties.getProperty(propertyName)?.takeIf { it.isNotEmpty() }
+}
+
+val releaseStoreFilePath = signingValue("ANDROID_KEYSTORE_PATH", "storeFile")
+val releaseStorePassword = signingValue("ANDROID_KEYSTORE_PASSWORD", "storePassword")
+val releaseKeyAlias = signingValue("ANDROID_KEY_ALIAS", "keyAlias")
+val releaseKeyPassword = signingValue("ANDROID_KEY_PASSWORD", "keyPassword")
+val releaseSigningConfigured = listOf(
+    releaseStoreFilePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrEmpty() }
 
 android {
     namespace = "vn.hoadoninsight.hoadon_insight"
@@ -47,12 +74,47 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("release") {
+                storeFile = file(releaseStoreFilePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (releaseSigningConfigured) {
+                signingConfigs.getByName("release")
+            } else {
+                null
+            }
         }
+    }
+}
+
+val verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
+    doLast {
+        if (!releaseSigningConfigured) {
+            throw GradleException(
+                "Release signing is not configured. Set ANDROID_KEYSTORE_PATH, " +
+                    "ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and " +
+                    "ANDROID_KEY_PASSWORD, or create android/key.properties.",
+            )
+        }
+        val keystore = file(releaseStoreFilePath!!)
+        if (!keystore.isFile) {
+            throw GradleException("Android keystore does not exist: ${keystore.path}")
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name != verifyReleaseSigning.name && name.contains("Release", ignoreCase = true)) {
+        dependsOn(verifyReleaseSigning)
     }
 }
 

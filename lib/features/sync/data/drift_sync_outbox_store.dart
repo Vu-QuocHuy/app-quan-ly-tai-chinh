@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:drift/drift.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/errors/app_exception.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../domain/sync_models.dart';
 
@@ -56,27 +57,50 @@ class DriftSyncOutboxStore {
 
   Future<void> recoverInterrupted() async {
     final now = DateTime.now();
-    await (_db.update(
-      _db.syncOutboxEvents,
-    )..where((row) => row.state.equals(SyncOutboxState.sending.name))).write(
-      SyncOutboxEventsCompanion(
-        state: Value(SyncOutboxState.pending.name),
-        availableAt: Value(now),
-        updatedAt: Value(now),
-        lastError: const Value(
-          'Lần đồng bộ trước bị gián đoạn; đã xếp lại tác vụ.',
-        ),
-      ),
-    );
+    await (_db.update(_db.syncOutboxEvents)..where(
+          (row) =>
+              row.state.equals(SyncOutboxState.sending.name) &
+              row.updatedAt.isSmallerThanValue(
+                now.subtract(const Duration(minutes: 10)),
+              ),
+        ))
+        .write(
+          SyncOutboxEventsCompanion(
+            state: Value(SyncOutboxState.pending.name),
+            availableAt: Value(now),
+            updatedAt: Value(now),
+            lastError: const Value(
+              'Lần đồng bộ trước bị gián đoạn; đã xếp lại tác vụ.',
+            ),
+          ),
+        );
   }
 
-  Future<void> markSending(SyncOutboxEntry entry) async {
-    await _writeState(
-      entry.id,
-      SyncOutboxState.sending,
-      attemptCount: entry.attemptCount + 1,
-      clearError: true,
+  Future<bool> markSending(SyncOutboxEntry entry) async {
+    final now = DateTime.now();
+    final changed = await _db.customUpdate(
+      '''
+      UPDATE sync_outbox_events
+      SET state = ?,
+          attempt_count = attempt_count + 1,
+          available_at = ?,
+          updated_at = ?,
+          last_error = NULL
+      WHERE id = ?
+        AND state = ?
+        AND available_at <= ?
+      ''',
+      variables: [
+        Variable(SyncOutboxState.sending.name),
+        Variable(now),
+        Variable(now),
+        Variable(entry.id),
+        Variable(SyncOutboxState.pending.name),
+        Variable(now),
+      ],
+      updates: {_db.syncOutboxEvents},
     );
+    return changed == 1;
   }
 
   Future<void> markSent(SyncOutboxEntry entry) async {
@@ -107,7 +131,7 @@ class DriftSyncOutboxStore {
       entry.id,
       terminal ? SyncOutboxState.failed : SyncOutboxState.pending,
       attemptCount: attempts,
-      lastError: error.toString(),
+      lastError: safeErrorMessage(error),
       availableAt: DateTime.now().add(Duration(minutes: delayMinutes)),
     );
   }

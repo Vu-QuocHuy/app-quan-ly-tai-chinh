@@ -31,7 +31,7 @@ class GroupExpenseSplit {
     this.settledAt,
   });
 
-  final String userId;
+  final String? userId;
   final int amountMinor;
   final DateTime? settledAt;
 
@@ -42,7 +42,7 @@ class GroupExpense {
   const GroupExpense({
     required this.id,
     required this.groupId,
-    required this.payerId,
+    this.payerId,
     required this.description,
     required this.totalMinor,
     required this.createdAt,
@@ -51,11 +51,29 @@ class GroupExpense {
 
   final String id;
   final String groupId;
-  final String payerId;
+  final String? payerId;
   final String description;
   final int totalMinor;
   final DateTime createdAt;
   final List<GroupExpenseSplit> splits;
+}
+
+class GroupAuditEvent {
+  const GroupAuditEvent({
+    required this.id,
+    required this.eventType,
+    required this.createdAt,
+    this.actorId,
+    this.targetUserId,
+    this.expenseId,
+  });
+
+  final String id;
+  final String eventType;
+  final DateTime createdAt;
+  final String? actorId;
+  final String? targetUserId;
+  final String? expenseId;
 }
 
 class GroupDetails {
@@ -63,9 +81,11 @@ class GroupDetails {
     required this.group,
     required this.members,
     required this.expenses,
+    required this.auditEvents,
   });
 
   final ExpenseGroup group;
   final List<GroupMember> members;
   final List<GroupExpense> expenses;
+  final List<GroupAuditEvent> auditEvents;
 }

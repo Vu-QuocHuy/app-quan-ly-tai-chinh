@@ -24,7 +24,7 @@ class SyncRunSummary {
 }
 
 class SyncCoordinator {
-  const SyncCoordinator({
+  SyncCoordinator({
     required SyncEngine upload,
     required SyncIdentityProvider identity,
     required SyncPullCoordinator? download,
@@ -37,8 +37,19 @@ class SyncCoordinator {
   final SyncIdentityProvider _identity;
   final SyncPullCoordinator? _download;
   final List<SyncPullCoordinator> referenceDownloads;
+  Future<SyncRunSummary>? _inFlight;
 
-  Future<SyncRunSummary> runOnce({int batchSize = 50}) async {
+  Future<SyncRunSummary> runOnce({int batchSize = 50}) {
+    final inFlight = _inFlight;
+    if (inFlight != null) return inFlight;
+    final operation = _runOnce(batchSize: batchSize);
+    _inFlight = operation;
+    return operation.whenComplete(() {
+      if (identical(_inFlight, operation)) _inFlight = null;
+    });
+  }
+
+  Future<SyncRunSummary> _runOnce({required int batchSize}) async {
     final upload = await _upload.runOnce(batchSize: batchSize);
     if (!upload.configured || !upload.signedIn) {
       return SyncRunSummary(upload: upload);

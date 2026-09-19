@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<InvoiceDocument>
+  <InvoiceInfo>
+    <Number>INFO-0002</Number>
+    <InvoiceSeries>I26BB</InvoiceSeries>
+    <Date>2026/09/02</Date>
+    <Currency>VND</Currency>
+  </InvoiceInfo>
+  <SellerParty>
+    <SellerLegalName>CỬA HÀNG INFORMATION</SellerLegalName>
+    <SupplierTaxCode>0207654321</SupplierTaxCode>
+  </SellerParty>
+  <Items>
+    <Item>
+      <ItemDescription>Đồ uống</ItemDescription>
+      <Quantity>1</Quantity>
+      <UnitPrice>30000</UnitPrice>
+      <TaxRate>10</TaxRate>
+      <Amount>30000</Amount>
+    </Item>
+  </Items>
+  <PaymentSummary>
+    <TaxExclusiveAmount>30000</TaxExclusiveAmount>
+    <VATAmount>3000</VATAmount>
+    <TaxInclusiveAmount>33000</TaxInclusiveAmount>
+  </PaymentSummary>
+</InvoiceDocument>

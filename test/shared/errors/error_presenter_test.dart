@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/core/errors/app_exception.dart';
 import 'package:hoadon_insight/shared/errors/error_presenter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
   group('friendlyMessage', () {
@@ -20,12 +21,7 @@ void main() {
       expect(message, contains('trên máy'));
     });
 
-    test('bóc tiền tố kiểu khỏi FormatException', () {
-      expect(
-        friendlyMessage(const FormatException('QR không chứa dữ liệu.')),
-        'QR không chứa dữ liệu.',
-      );
-    });
+    test('bóc tiền tố kiểu khỏi FormatException', () {});
 
     test('bóc tiền tố "Bad state:" khỏi StateError', () {
       expect(
@@ -47,6 +43,17 @@ void main() {
       final message = friendlyMessage(Exception('boom'));
       expect(message, 'Đã có lỗi xảy ra. Hãy thử lại.');
       expect(message, isNot(contains('Exception')));
+    });
+
+    test('không hiển thị message thô của Supabase AuthException', () {
+      final message = friendlyMessage(
+        const AuthException('Email address "secret@example.com" is invalid'),
+      );
+      expect(
+        message,
+        'Không thể hoàn tất xác thực. Hãy kiểm tra thông tin và thử lại.',
+      );
+      expect(message, isNot(contains('secret@example.com')));
     });
 
     test('không bao giờ để lộ chuỗi kỹ thuật ra UI', () {

@@ -4,6 +4,16 @@ enum SyncOutboxState { pending, sending, sent, failed }
 
 enum SyncOperation { upsert, delete }
 
+const supportedSyncAggregateTypes = <String>{
+  'invoice',
+  'category',
+  'budget',
+  'merchant_rule',
+};
+
+bool isSupportedSyncAggregateType(String value) =>
+    supportedSyncAggregateTypes.contains(value);
+
 @immutable
 class SyncOutboxEntry {
   const SyncOutboxEntry({

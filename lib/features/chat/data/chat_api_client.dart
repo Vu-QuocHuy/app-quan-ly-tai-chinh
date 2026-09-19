@@ -22,6 +22,7 @@ class ChatApiClient {
     required String question,
     required Iterable<ChatMessage> history,
     required Iterable<ChatFact> facts,
+    bool allowExternalData = true,
   }) async {
     if (!isConfigured) {
       throw const NetworkException('Chatbot backend chưa được cấu hình.');
@@ -37,6 +38,7 @@ class ChatApiClient {
       'history': ChatPrivacyPolicy.historyForExternal(history)
           .map((message) => {'role': message.role.name, 'text': message.text})
           .toList(growable: false),
+      'allowExternalData': allowExternalData,
     };
     final data = await _supabaseFunctions!.invoke(
       body,

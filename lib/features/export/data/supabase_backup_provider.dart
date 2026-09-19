@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../domain/backup_provider.dart';
 
 class CloudBackupEntry {
@@ -38,9 +39,17 @@ class SupabaseBackupProvider implements BackupProvider {
     if (artifact.type != BackupArtifactType.encrypted) {
       throw StateError('Cloud backup chỉ nhận tệp backup đã mã hóa.');
     }
+    if (artifact.bytes.isEmpty ||
+        artifact.bytes.length > AppConstants.maxImportBytes) {
+      throw StateError('Backup phải có kích thước từ 1 đến 15 MB.');
+    }
+    final fileName = artifact.fileName.trim();
+    if (!_isSafeBackupFileName(fileName)) {
+      throw StateError('Tên tệp backup không hợp lệ.');
+    }
 
     final stamp = DateTime.now().toUtc().microsecondsSinceEpoch;
-    final path = '${user.id}/$stamp-${artifact.fileName}';
+    final path = '${user.id}/$stamp-$fileName';
     await _client.storage
         .from(bucketName)
         .uploadBinary(
@@ -66,15 +75,19 @@ class SupabaseBackupProvider implements BackupProvider {
           ),
         );
     return files
-        .where((file) => file.name.endsWith('.hdbak'))
-        .map(
-          (file) => CloudBackupEntry(
+        .where((file) => _isSafeBackupFileName(file.name))
+        .map((file) {
+          final rawSize = file.metadata?['size'];
+          final sizeBytes = rawSize is num && rawSize.isFinite
+              ? rawSize.toInt()
+              : null;
+          return CloudBackupEntry(
             path: '${user.id}/${file.name}',
             fileName: _displayName(file.name),
             createdAt: DateTime.tryParse(file.createdAt ?? ''),
-            sizeBytes: (file.metadata?['size'] as num?)?.toInt(),
-          ),
-        )
+            sizeBytes: sizeBytes,
+          );
+        })
         .toList(growable: false);
   }
 
@@ -92,6 +105,12 @@ class SupabaseBackupProvider implements BackupProvider {
     Duration retention = const Duration(days: 90),
     int maxFiles = 20,
   }) async {
+    if (retention < Duration.zero) {
+      throw ArgumentError.value(retention, 'retention');
+    }
+    if (maxFiles < 1 || maxFiles > 100) {
+      throw ArgumentError.value(maxFiles, 'maxFiles');
+    }
     final entries = await list(limit: 100);
     final cutoff = DateTime.now().toUtc().subtract(retention);
     final paths = <String>[];
@@ -118,10 +137,23 @@ class SupabaseBackupProvider implements BackupProvider {
 
   void _validateOwnedPath(String path) {
     final user = _requireUser();
-    if (!path.startsWith('${user.id}/') || path.contains('..')) {
+    final prefix = '${user.id}/';
+    final fileName = path.startsWith(prefix)
+        ? path.substring(prefix.length)
+        : '';
+    if (!_isSafeBackupFileName(fileName)) {
       throw StateError('Đường dẫn backup không thuộc tài khoản hiện tại.');
     }
   }
+
+  static bool _isSafeBackupFileName(String value) =>
+      value.isNotEmpty &&
+      value.length <= 200 &&
+      value.endsWith('.hdbak') &&
+      !value.contains('/') &&
+      !value.contains('\\') &&
+      !value.contains('..') &&
+      !value.contains(RegExp(r'[\u0000-\u001F\u007F]'));
 
   static String _displayName(String storedName) {
     final separator = storedName.indexOf('-');

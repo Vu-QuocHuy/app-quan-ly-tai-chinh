@@ -7,11 +7,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Feedback is intentionally local: it is a personal presentation preference,
 /// not financial data that needs to be synchronized between devices.
 class AnomalyFeedbackStore {
-  const AnomalyFeedbackStore({this.maxEntries = 200});
+  const AnomalyFeedbackStore({this.maxEntries = 200, this.scope});
 
   static const storageKey = 'insights.anomaly_feedback.v1';
 
   final int maxEntries;
+  final String? scope;
+
+  String get _storageKey =>
+      scope == null ? storageKey : '$storageKey.${scope!.trim()}';
 
   Future<Set<String>> loadDismissedIds() async {
     return (await _loadOrdered()).toSet();
@@ -19,7 +23,7 @@ class AnomalyFeedbackStore {
 
   Future<List<String>> _loadOrdered() async {
     final preferences = await SharedPreferences.getInstance();
-    final raw = preferences.getString(storageKey);
+    final raw = preferences.getString(_storageKey);
     if (raw == null || raw.isEmpty) return <String>[];
     try {
       final decoded = jsonDecode(raw);
@@ -37,7 +41,7 @@ class AnomalyFeedbackStore {
       ..insert(0, invoiceId);
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(
-      storageKey,
+      _storageKey,
       jsonEncode(ids.take(maxEntries).toList()),
     );
   }
@@ -47,14 +51,20 @@ class AnomalyFeedbackStore {
       ..remove(invoiceId);
     final preferences = await SharedPreferences.getInstance();
     if (ids.isEmpty) {
-      await preferences.remove(storageKey);
+      await preferences.remove(_storageKey);
     } else {
-      await preferences.setString(storageKey, jsonEncode(ids.toList()));
+      await preferences.setString(_storageKey, jsonEncode(ids.toList()));
     }
   }
 
   Future<void> clear() async {
     final preferences = await SharedPreferences.getInstance();
-    await preferences.remove(storageKey);
+    await preferences.remove(_storageKey);
+  }
+
+  Future<void> clearAll({bool includeLegacy = false}) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove(_storageKey);
+    if (includeLegacy && scope != null) await preferences.remove(storageKey);
   }
 }

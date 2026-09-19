@@ -164,6 +164,13 @@ class ImportCoordinator {
         // Classification is an enrichment step; import must remain offline-first.
       }
     }
+    categoryId ??= result.invoice.categoryId;
+    final availableCategoryIds = categories
+        .map((category) => category.id)
+        .toSet();
+    if (categoryId != null && !availableCategoryIds.contains(categoryId)) {
+      categoryId = availableCategoryIds.contains('other') ? 'other' : null;
+    }
     final resolvedResult = ExtractionResult(
       invoice: result.invoice.copyWith(
         categoryId: categoryId,
@@ -177,7 +184,9 @@ class ImportCoordinator {
     final exact = hash == null
         ? null
         : await _repository.findBySourceHash(hash);
-    final existing = await _repository.watchInvoiceSummaries().first;
+    final existing = await _repository.findDuplicateCandidates(
+      resolvedResult.invoice,
+    );
     final fuzzy = exact == null
         ? _duplicateDetector.findLikelyDuplicate(
             resolvedResult.invoice,

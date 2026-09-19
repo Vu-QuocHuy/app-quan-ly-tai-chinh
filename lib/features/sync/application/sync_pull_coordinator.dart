@@ -26,6 +26,15 @@ class SyncPullCoordinator {
     int batchSize = 50,
     int maxPages = 10,
   }) async {
+    if (!isSupportedSyncAggregateType(aggregateType)) {
+      throw FormatException('Aggregate không hỗ trợ: $aggregateType');
+    }
+    if (userId.trim().isEmpty) {
+      throw const FormatException('Tài khoản đồng bộ không hợp lệ.');
+    }
+    if (batchSize < 1 || maxPages < 1) {
+      throw const FormatException('Tham số đồng bộ không hợp lệ.');
+    }
     var cursor = await _cursors.read(
       userId: userId,
       aggregateType: aggregateType,
@@ -47,9 +56,31 @@ class SyncPullCoordinator {
         hasMore = false;
         break;
       }
+      _validatePage(page, cursor);
 
       for (final change in page.changes) {
         if (aggregateType == 'invoice') {
+          if (change.operation == 'delete') {
+            final existing = await _repository.findById(change.id);
+            if (existing == null || change.revision >= existing.revision) {
+              await _repository.deleteRemoteInvoice(
+                change.id,
+                revision: change.revision,
+                updatedAt: change.updatedAt,
+                deletedAt: _optionalDate(change.payload['deletedAt']),
+              );
+              applied++;
+            } else {
+              skipped++;
+            }
+            cursor = change.cursor;
+            await _cursors.write(
+              userId: userId,
+              aggregateType: aggregateType,
+              cursor: cursor,
+            );
+            continue;
+          }
           final incoming = InvoiceSyncCodec.fromPayload({
             ...change.payload,
             'id': change.payload['id'] ?? change.id,
@@ -95,6 +126,65 @@ class SyncPullCoordinator {
       conflicts: conflicts,
       hasMore: hasMore,
     );
+  }
+
+  void _validatePage(SyncPullPage page, SyncCursor? cursor) {
+    var previous = cursor;
+    for (final change in page.changes) {
+      if (change.aggregateType != aggregateType ||
+          !isSupportedSyncAggregateType(change.aggregateType)) {
+        throw const FormatException('Delta record sai aggregate.');
+      }
+      if (change.id.trim().isEmpty || change.revision < 1) {
+        throw const FormatException('Delta record không hợp lệ.');
+      }
+      if (change.operation != 'upsert' && change.operation != 'delete') {
+        throw const FormatException('Delta operation không hợp lệ.');
+      }
+      final payloadId = change.payload['id'];
+      if (aggregateType == 'invoice' &&
+          payloadId != null &&
+          (payloadId is! String || payloadId.trim() != change.id)) {
+        throw const FormatException('Delta invoice sai id.');
+      }
+      if (aggregateType == 'invoice' && change.operation == 'delete') {
+        final deletedAt = change.payload['deletedAt'];
+        if (deletedAt != null &&
+            (deletedAt is! String || DateTime.tryParse(deletedAt) == null)) {
+          throw const FormatException('Invoice tombstone không hợp lệ.');
+        }
+      }
+      if (aggregateType != 'invoice') {
+        if (payloadId is! String || payloadId.trim().isEmpty) {
+          throw const FormatException('Reference delta thiếu id.');
+        }
+      }
+      if (previous != null && !_isAfter(change.cursor, previous)) {
+        throw const FormatException('Delta cursor không tăng dần.');
+      }
+      previous = change.cursor;
+    }
+  }
+
+  bool _isAfter(SyncCursor current, SyncCursor previous) {
+    final currentTime = current.updatedAt;
+    final previousTime = previous.updatedAt;
+    if (currentTime == null || previousTime == null) return false;
+    final timeComparison = currentTime.compareTo(previousTime);
+    if (timeComparison != 0) return timeComparison > 0;
+    return (current.updatedId ?? '').compareTo(previous.updatedId ?? '') > 0;
+  }
+
+  DateTime? _optionalDate(Object? value) {
+    if (value == null) return null;
+    if (value is! String) {
+      throw const FormatException('Invoice tombstone không hợp lệ.');
+    }
+    final result = DateTime.tryParse(value);
+    if (result == null) {
+      throw const FormatException('Invoice tombstone không hợp lệ.');
+    }
+    return result.toLocal();
   }
 
   Future<void> _applyReference(SyncPullChange change) async {
@@ -148,8 +238,6 @@ class SyncPullCoordinator {
         left.categoryId != right.categoryId ||
         left.notes != right.notes ||
         !_sameList(left.tags, right.tags) ||
-        left.createdAt != right.createdAt ||
-        left.updatedAt != right.updatedAt ||
         left.confirmedAt != right.confirmedAt ||
         left.deletedAt != right.deletedAt ||
         !_sameLines(left.lines, right.lines) ||
@@ -177,7 +265,8 @@ class SyncPullCoordinator {
           a.quantity != b.quantity ||
           a.unitPriceMinor != b.unitPriceMinor ||
           a.taxRate != b.taxRate ||
-          a.totalMinor != b.totalMinor) {
+          a.totalMinor != b.totalMinor ||
+          a.categoryId != b.categoryId) {
         return false;
       }
     }

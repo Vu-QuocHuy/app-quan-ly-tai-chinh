@@ -13,9 +13,8 @@
 /// gì để đăng nhập, nên chặn ở đây làm app không dùng được và mâu thuẫn với
 /// lời hứa local-first trong README.
 ///
-/// Có cloud nhưng chưa đăng nhập vẫn dùng được mọi thứ local. Chỉ route THẬT SỰ
-/// cần phiên mới bị chặn. Đăng nhập là một banner bỏ được, không phải một bức
-/// tường ở màn hình đầu tiên.
+/// Khi cloud đã cấu hình, mọi route chứa dữ liệu người dùng đều cần phiên đăng
+/// nhập. Chỉ trang tài khoản được mở để thực hiện đăng nhập.
 String? authRedirect({
   required String location,
   required bool isConfigured,
@@ -27,10 +26,8 @@ String? authRedirect({
     return isAuthRoute ? '/' : null;
   }
 
-  /// `/settings/account` cố ý KHÔNG nằm trong danh sách: nó chính là nơi người
-  /// dùng tới để đăng nhập, và nó dựng cùng widget với `/auth`.
-  const cloudOnly = {'/settings/conflicts'};
-  if (!isSignedIn && cloudOnly.contains(location)) return '/auth';
+  const accountRoutes = {'/auth', '/settings/account'};
+  if (!isSignedIn && !accountRoutes.contains(location)) return '/auth';
 
   if (isSignedIn && isAuthRoute) return '/';
   return null;

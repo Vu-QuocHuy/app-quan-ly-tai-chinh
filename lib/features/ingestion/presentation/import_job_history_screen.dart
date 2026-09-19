@@ -201,6 +201,13 @@ class _ImportJobCard extends StatelessWidget {
                 ),
               ),
             ],
+            if (job.state == ImportJobState.awaitingReview) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Đã trích xuất; mở lại để kiểm tra và lưu hóa đơn.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
             if (job.canRetry) ...[
               const SizedBox(height: 12),
               Align(
@@ -261,6 +268,11 @@ _JobPresentation _presentation(ImportJobState state) => switch (state) {
     Icons.sync,
     (context) => context.finance.syncPending.color,
   ),
+  ImportJobState.awaitingReview => _JobPresentation(
+    'Chờ xác nhận',
+    Icons.fact_check_outlined,
+    (context) => context.finance.syncPending.color,
+  ),
   ImportJobState.succeeded => _JobPresentation(
     'Hoàn tất',
     Icons.check_circle_outline,
@@ -280,7 +292,9 @@ _JobPresentation _presentation(ImportJobState state) => switch (state) {
 
 /// Tone tương ứng cho `StatusPill` — icon + chữ luôn đi kèm màu.
 StatusTone jobStatusTone(ImportJobState state) => switch (state) {
-  ImportJobState.queued || ImportJobState.running => StatusTone.info,
+  ImportJobState.queued ||
+  ImportJobState.running ||
+  ImportJobState.awaitingReview => StatusTone.info,
   ImportJobState.succeeded => StatusTone.safe,
   ImportJobState.retryScheduled => StatusTone.warn,
   ImportJobState.failed => StatusTone.danger,

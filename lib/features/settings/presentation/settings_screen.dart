@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/config/feature_flags.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/month_utils.dart';
 import '../../export/application/invoice_export_service.dart';
@@ -25,6 +26,8 @@ class SettingsScreen extends ConsumerWidget {
     final budgetAlerts = ref.watch(budgetAlertsEnabledProvider);
     final backupRecords = ref.watch(backupRecordsProvider);
     final authUser = ref.watch(authUserProvider);
+    final featureFlags =
+        ref.watch(featureFlagsProvider).value ?? FeatureFlags.defaults;
     final supabaseConfigured = ref.watch(supabaseClientProvider) != null;
     final aiStatus = authUser.when(
       data: (user) => supabaseConfigured && user != null
@@ -258,14 +261,17 @@ class SettingsScreen extends ConsumerWidget {
                         ),
                         title: const Text('Đồng bộ đám mây'),
                         subtitle: Text(
-                          health.cloudConfigured
+                          !featureFlags.cloudSync
+                              ? 'Đồng bộ đang tạm tắt theo cấu hình rollout.'
+                              : health.cloudConfigured
                               ? '${health.pendingCount} thay đổi đang chờ · ${health.failedCount} lỗi'
                               : '${health.pendingCount} thay đổi đã lưu trong outbox; cần cấu hình tài khoản và cloud gateway để gửi.',
                         ),
-                        trailing: health.cloudConfigured
+                        trailing:
+                            featureFlags.cloudSync && health.cloudConfigured
                             ? const Icon(Icons.sync)
                             : null,
-                        onTap: health.cloudConfigured
+                        onTap: featureFlags.cloudSync && health.cloudConfigured
                             ? () => _syncNow(context, ref)
                             : null,
                       ),
@@ -669,6 +675,15 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _syncNow(BuildContext context, WidgetRef ref) async {
+    final flags = ref.read(featureFlagsProvider).value ?? FeatureFlags.defaults;
+    if (!flags.cloudSync) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đồng bộ đang tạm tắt theo cấu hình rollout.'),
+        ),
+      );
+      return;
+    }
     try {
       await ref.read(syncOutboxStoreProvider).retryFailed();
       final result = await ref.read(syncEngineProvider).runOnce();
@@ -694,24 +709,50 @@ class SettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     bool enabled,
   ) async {
-    if (enabled) {
-      final granted = await ref
-          .read(budgetNotificationServiceProvider)
-          .requestPermission();
-      if (!granted) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Chưa được cấp quyền thông báo. Hãy bật quyền trong cài đặt hệ thống.',
+    try {
+      final notificationService = ref.read(budgetNotificationServiceProvider);
+      if (enabled) {
+        final granted = await notificationService.requestPermission();
+        if (!granted) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Chưa được cấp quyền thông báo. Hãy bật quyền trong cài đặt hệ thống.',
+              ),
             ),
-          ),
-        );
-        return;
+          );
+          return;
+        }
       }
+      await ref.read(budgetAlertPreferencesProvider).setEnabled(enabled);
+      if (!enabled) {
+        try {
+          await notificationService.cancelBudgetNotifications();
+        } on Object catch (error) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Đã tắt cảnh báo mới; không thể xóa thông báo cũ: '
+                  '${friendlyMessage(error)}',
+                ),
+              ),
+            );
+          }
+        }
+      }
+      ref.invalidate(budgetAlertsEnabledProvider);
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Không thể cập nhật thông báo: ${friendlyMessage(error)}',
+          ),
+        ),
+      );
     }
-    await ref.read(budgetAlertPreferencesProvider).setEnabled(enabled);
-    ref.invalidate(budgetAlertsEnabledProvider);
   }
 }
 

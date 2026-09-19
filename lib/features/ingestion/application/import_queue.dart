@@ -1,13 +1,25 @@
 import 'import_coordinator.dart';
 
+enum ImportQueueDecision { completed, deferred }
+
 typedef ImportQueueOutcomeHandler =
-    Future<void> Function(ImportQueueJob job, ImportOutcome outcome);
+    Future<ImportQueueDecision> Function(
+      ImportQueueJob job,
+      ImportOutcome outcome,
+    );
 
 class ImportQueueJob {
-  const ImportQueueJob({required this.fileName, required this.operation});
+  const ImportQueueJob({
+    required this.fileName,
+    required this.operation,
+    this.onCompleted,
+    this.onDeferred,
+  });
 
   final String fileName;
   final Future<ImportOutcome> Function() operation;
+  final Future<void> Function()? onCompleted;
+  final Future<void> Function()? onDeferred;
 }
 
 class ImportQueueProgress {
@@ -42,12 +54,14 @@ class ImportQueueSummary {
     required this.total,
     required this.succeeded,
     required this.failures,
+    this.deferred = 0,
     this.cancelled = false,
   });
 
   final int total;
   final int succeeded;
   final List<ImportQueueFailure> failures;
+  final int deferred;
   final bool cancelled;
 
   int get failed => failures.length;
@@ -81,15 +95,17 @@ class ImportQueueController {
     _cancelRequested = false;
     final failures = <ImportQueueFailure>[];
     var succeeded = 0;
+    var deferred = 0;
     try {
       for (var index = 0; index < pending.length; index++) {
         if (_cancelRequested) break;
         final job = pending[index];
-        onProgress(
+        _notifyProgress(
+          onProgress,
           ImportQueueProgress(
             currentIndex: index + 1,
             total: pending.length,
-            completed: succeeded,
+            completed: succeeded + deferred,
             currentFileName: job.fileName,
             failureCount: failures.length,
             isRunning: true,
@@ -97,19 +113,26 @@ class ImportQueueController {
         );
         try {
           final outcome = await job.operation();
-          await onOutcome(job, outcome);
-          succeeded++;
+          final decision = await onOutcome(job, outcome);
+          if (decision == ImportQueueDecision.completed) {
+            await job.onCompleted?.call();
+            succeeded++;
+          } else {
+            await job.onDeferred?.call();
+            deferred++;
+          }
         } on Object catch (error) {
           final failure = ImportQueueFailure(job: job, error: error);
           failures.add(failure);
-          onFailure?.call(failure);
+          _notifyFailure(onFailure, failure);
         }
       }
-      onProgress(
+      _notifyProgress(
+        onProgress,
         ImportQueueProgress(
           currentIndex: 0,
           total: pending.length,
-          completed: succeeded,
+          completed: succeeded + deferred,
           currentFileName: null,
           failureCount: failures.length,
           isRunning: false,
@@ -118,11 +141,35 @@ class ImportQueueController {
       return ImportQueueSummary(
         total: pending.length,
         succeeded: succeeded,
+        deferred: deferred,
         failures: List.unmodifiable(failures),
         cancelled: _cancelRequested,
       );
     } finally {
       _isRunning = false;
+    }
+  }
+
+  void _notifyProgress(
+    void Function(ImportQueueProgress progress) callback,
+    ImportQueueProgress progress,
+  ) {
+    try {
+      callback(progress);
+    } on Object {
+      return;
+    }
+  }
+
+  void _notifyFailure(
+    void Function(ImportQueueFailure failure)? callback,
+    ImportQueueFailure failure,
+  ) {
+    if (callback == null) return;
+    try {
+      callback(failure);
+    } on Object {
+      return;
     }
   }
 }

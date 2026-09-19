@@ -1,0 +1,55 @@
+name: Production health check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check public backend health
+        env:
+          SUPABASE_FUNCTION_URL: ${{ secrets.SUPABASE_FUNCTION_URL }}
+          HEALTHCHECK_SECRET: ${{ secrets.HEALTHCHECK_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_FUNCTION_URL" ]; then
+            echo "Thiếu GitHub Secret SUPABASE_FUNCTION_URL."
+            exit 1
+          fi
+          if [ "${#HEALTHCHECK_SECRET}" -lt 32 ]; then
+            echo "Thiếu hoặc HEALTHCHECK_SECRET quá ngắn; cần tối thiểu 32 ký tự."
+            exit 1
+          fi
+          base_url="${SUPABASE_FUNCTION_URL%/}"
+          case "$base_url" in
+            https://*) ;;
+            *)
+              echo "SUPABASE_FUNCTION_URL production phải dùng HTTPS."
+              exit 1
+              ;;
+          esac
+          response="$(curl --fail --silent --show-error --max-time 15 --retry 2 --retry-delay 2 "${base_url}/functions/v1/health")"
+          case "$response" in
+            *'"ok":true'*'"service":"finance-backend"'*) ;;
+            *)
+              echo "Backend health response không hợp lệ."
+              exit 1
+              ;;
+          esac
+          readiness="$(curl --fail --silent --show-error --max-time 15 --retry 2 --retry-delay 2 \
+            -H "X-Health-Secret: $HEALTHCHECK_SECRET" \
+            "${base_url}/functions/v1/health?check=readiness")"
+          case "$readiness" in
+            *'"ok":true'*'"service":"finance-backend"'*) ;;
+            *)
+              echo "Backend readiness response không hợp lệ."
+              exit 1
+              ;;
+          esac

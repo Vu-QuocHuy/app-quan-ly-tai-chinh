@@ -34,10 +34,9 @@ Nhập hóa đơn
 - Dashboard tháng, ngân sách theo danh mục và cảnh báo vượt ngân sách.
 - Không để API key hoặc secret trong ứng dụng Flutter.
 
-### Tính năng có điều kiện
+### Tính năng đã loại khỏi phạm vi
 
-- QR lookup chỉ được đưa vào MVP nếu hoàn thành proof-of-concept ổn định trước cuối tuần 6.
-- Nếu QR phụ thuộc trang bên thứ ba không ổn định, phát hành dưới nhãn `Experimental` và không dùng làm đường demo chính.
+- QR đã được loại khỏi MVP/production để tránh phụ thuộc provider bên thứ ba. Người dùng sử dụng XML, PDF text, OCR ảnh hoặc nhập thủ công.
 
 ### Ngoài phạm vi MVP
 
@@ -111,7 +110,7 @@ Stack dự kiến:
 | Immutable models | Freezed + JSON serialization |
 | HTTP | Dio hoặc HTTP client có interceptor |
 | File/camera | `file_picker`, `image_picker` hoặc `camera` |
-| OCR/barcode | Flutter plugin bọc ML Kit |
+| OCR | Flutter plugin bọc ML Kit |
 | Background job | WorkManager; isolate cho CPU-bound Dart code |
 | Chart | `fl_chart` |
 | Secure local values | secure storage |
@@ -131,7 +130,6 @@ API
   -> rate limiting
   -> extraction service
   -> classification service
-  -> QR provider adapters
   -> audit/metrics
 ```
 
@@ -141,7 +139,6 @@ API tối thiểu:
 |---|---|
 | `POST /v1/extractions/ocr-text` | Nhận OCR text, trả dữ liệu theo schema |
 | `POST /v1/classifications` | Phân loại merchant chưa có mapping |
-| `POST /v1/qr/resolve` | Tra cứu QR qua provider adapter, experimental |
 | `GET /health` | Health check cho CI/demo |
 
 Mọi request tạo extraction phải có `requestId`/idempotency key. Log không được chứa ảnh gốc, toàn bộ OCR text, MST cá nhân hoặc dữ liệu thanh toán nhạy cảm.
@@ -152,7 +149,7 @@ Mọi request tạo extraction phải có `requestId`/idempotency key. Log khôn
 Input
   -> fingerprint SHA-256
   -> source detector
-  -> adapter XML | PDF text | QR | OCR
+  -> adapter XML | PDF text | OCR
   -> canonical normalizer
   -> deterministic validation
   -> duplicate detector
@@ -182,7 +179,7 @@ AI structured output chỉ bảo đảm hình dạng dữ liệu. Các kiểm tr
 - `issuedAt`, `timezone`.
 - `currencyCode`.
 - `subtotalMinor`, `taxMinor`, `totalMinor`: integer, không dùng `double`.
-- `sourceType`: `xml`, `pdfText`, `qr`, `imageOcr`, `manual`.
+- `sourceType`: `xml`, `pdfText`, `imageOcr`, `manual`.
 - `sourceHash`: SHA-256 phục vụ idempotency.
 - `status`: `queued`, `extracting`, `validating`, `needsReview`, `confirmed`, `failed`.
 - `categoryId`.
@@ -250,7 +247,7 @@ Quy ước:
 - [x] `XML-006 P0` Deterministic validator và trạng thái `needsReview`.
 - [x] `XML-007 P0` Màn hình review/edit/confirm.
 - [x] `XML-008 P0` Lưu transaction Invoice + lines + evidence vào Drift.
-- [ ] `XML-009 P1` Thêm adapter/schema variants thứ hai và thứ ba.
+- [x] `XML-009 P1` Thêm adapter/schema variants thứ hai và thứ ba.
 - [~] `XML-010 P1` Fixture tests và báo cáo parse accuracy.
 
 ### Epic D — Image OCR + AI vertical slice
@@ -290,18 +287,9 @@ Quy ước:
 - [x] `DBO-003 P1` So sánh tháng hiện tại/tháng trước và cảnh báo vượt ngân sách.
 - [~] `DBO-004 P2` Dự báo cuối tháng và nhận diện recurring expense (đã có engine, SQL window, UI và unit test; chờ debug thiết bị).
 
-### Epic G — QR experimental
+### Epic G — QR (đã loại khỏi phạm vi)
 
-- [~] `QR-001 P1` Đọc QR on-device và phân loại payload URL/text (đã có camera + ML Kit + parser, chưa tra cứu provider).
-- [ ] `QR-002 P1` Thiết kế provider adapter và SSRF-safe URL allowlist ở backend.
-- [ ] `QR-003 P1` Proof-of-concept với một provider thực.
-- [ ] `QR-004 P2` Cache, timeout, circuit breaker và provider thứ hai.
-- [~] `QR-005 P2` Cached demo fixture và nhãn `Experimental` (đã có nhãn/guard UX, chưa có fixture provider).
-
-Decision gate cuối tuần 6:
-
-- Nếu success rate trên fixture/provider đã chọn >= 90% và không phụ thuộc thao tác CAPTCHA, tiếp tục QR-004/005.
-- Nếu không đạt, đóng scope QR ở proof-of-concept và chuyển nguồn lực sang hardening P0/P1.
+QR không được triển khai trong MVP/production. Luồng nhập liệu chính là XML, PDF text, OCR ảnh và nhập thủ công; không cần provider/API QR.
 
 ### Epic H — Security, quality và release
 
@@ -314,17 +302,17 @@ Decision gate cuối tuần 6:
 - [x] `QA-002 P0` Widget tests cho review form và validation errors.
 - [~] `QA-003 P0` Integration tests cho XML và OCR happy path.
 - [~] `QA-004 P1` Đã test chatbot chưa cấu hình/timeout, backup rỗng/sai UTF-8 và PDF sai chữ ký; API quota, PDF engine corrupt/password và process restart trên thiết bị còn pending.
-- [~] `REL-001 P1` Staging build, Crashlytics, performance traces và release checklist.
+- [~] `REL-001 P1` Đã có staging build, `AppErrorReporter` bắt lỗi Flutter/async đã redact, telemetry private `client_error_events` và release checklist; còn dashboard/alert, performance traces, provider ngoài và xác minh rollout.
 - [~] `REL-002 P1` Demo dataset, kịch bản demo chính và fallback không cần mạng.
 
 ### Epic I — Data scale và hiệu năng local
 
 - [x] `SCALE-DB-001 P0` Drift schema v2: search text, notes, tags, revision, sync state và soft-delete.
 - [x] `SCALE-DB-002 P0` Migration test v1 -> v2, backfill search text và index cho list/dashboard/job.
-- [x] `SCALE-DB-003 P0` Lọc kết hợp và tìm kiếm chạy trong SQL, không nạp toàn bộ danh sách vào Dart.
+- [x] `SCALE-DB-003 P0` Lọc kết hợp, tìm kiếm và truy vấn ứng viên trùng chạy trong SQL, không nạp toàn bộ danh sách vào Dart.
 - [x] `SCALE-DB-004 P0` Cursor pagination ổn định theo `updatedAt + id`, giới hạn tối đa mỗi page.
 - [x] `SCALE-DB-005 P0` Dashboard dùng SQL aggregation theo tháng/category/ngày.
-- [ ] `SCALE-DB-006 P1` Benchmark 10k/50k/100k hóa đơn trên thiết bị cấu hình thấp và lưu artifact CI.
+- [~] `SCALE-DB-006 P1` Đã thêm benchmark tìm kiếm SQLite ở 10k/50k/100k dòng và lưu log làm artifact CI; còn chạy trên thiết bị cấu hình thấp.
 - [ ] `SCALE-DB-007 P1` Chuyển tìm kiếm sang SQLite FTS5 khi benchmark LIKE vượt ngưỡng 150 ms.
 - [ ] `SCALE-DB-008 P2` Chính sách archive dữ liệu cũ và VACUUM có kiểm soát theo dung lượng thực tế.
 
@@ -335,16 +323,16 @@ Decision gate cuối tuần 6:
 - [x] `BACKUP-003 P0` Parser restore có partial failure report và unit test regression.
 - [~] `BACKUP-004 P1` Backup mã hóa bằng khóa người dùng và kiểm tra integrity checksum (đã có AES-256-GCM, PBKDF2-HMAC-SHA256, checksum envelope và luồng nhập mật khẩu; còn debug thiết bị, secure storage/key rotation cho cloud).
 - [~] `BACKUP-005 P1` Export Excel/PDF có template báo cáo; đã có CSV tương thích Excel và PDF local gồm tổng quan, ngân sách, danh mục, danh sách hóa đơn; không dùng làm chứng từ thuế chính thức.
-- [~] `BACKUP-006 P2` Đã có local provider, catalog metadata và private Supabase provider chỉ nhận `.hdbak`, gồm upload/list/download/preview/restore/delete và retention file thực tế 90 ngày/tối đa 20 file; scheduler và restore drill trên thiết bị còn pending.
+- [~] `BACKUP-006 P2` Đã có local provider, catalog metadata và private Supabase provider chỉ nhận `.hdbak`, gồm upload/list/download/preview/restore/delete, retention file thực tế 90 ngày/tối đa 20 file và worker scheduler dọn tự động; restore drill trên thiết bị còn pending.
 
 ### Epic K — Job reliability, notification và vận hành offline
 
-- [~] `JOB-001 P0` Persist import job, trạng thái, số lần thử, exponential backoff và phục hồi job bị gián đoạn (chờ process-restart/device test).
+- [~] `JOB-001 P0` Persist import job, insert/claim nguyên tử, queue manifest/file tạm scope theo user, số lần thử, exponential backoff và phục hồi job stale sau gián đoạn (chờ process-restart/device test).
 - [~] `JOB-002 P0` Màn hình lịch sử import, lỗi rút gọn và thao tác retry ngay (chờ debug thiết bị).
 - [x] `JOB-003 P1` Tự compact outbox pending theo aggregate để không tăng vô hạn khi sửa nhiều lần.
 - [x] `NOTIF-001 P1` Budget alert policy 80%/vượt mức, dedup key và preference bật/tắt.
-- [~] `NOTIF-002 P1` Local notification Android/iOS, permission UX và deep-link vào ngân sách (đã có service, permission runtime, dedup, trigger từ dashboard và route `/budgets`; còn debug thiết bị/background reliability).
-- [ ] `JOB-004 P1` WorkManager/background execution có constraint mạng/pin và giới hạn thời gian.
+- [~] `NOTIF-002 P1` Local notification Android/iOS, permission UX, dedup tuần tự hóa sau khi hiển thị thành công, deep-link vào ngân sách và trigger từ dashboard đã có; worker nền cũng kiểm tra cảnh báo, iOS đã khai báo identifier cho BGTaskScheduler, còn debug thiết bị.
+- [~] `JOB-004 P1` Worker nền định kỳ Android/iOS có constraint mạng/pin/bộ nhớ, retry exponential, timeout 25 giây và đóng DB an toàn; iOS đã khai báo identifier cho BGTaskScheduler, còn kiểm thử lịch chạy thực tế trên thiết bị.
 - [~] `JOB-005 P2` Import job vượt retry budget có trạng thái terminal, replay từng job/hàng loạt và dọn lịch sử thành công; dead-letter/replay cho cloud job còn pending.
 
 ### Epic L — Auth và cloud sync
@@ -352,14 +340,14 @@ Decision gate cuối tuần 6:
 - [x] `SYNC-001 P1` Soft-delete, revision và transactional outbox cho thay đổi hóa đơn.
 - [x] `SYNC-002 P1` `SyncIdentityProvider`/`SyncGateway` abstraction, health state và sync engine theo batch.
 - [x] `SYNC-003 P1` Recovery event đang `sending`, retry backoff, terminal failure và cleanup event đã gửi.
-- [~] `AUTH-001 P1` Supabase Auth email/password, sign-out, đổi mật khẩu và email khôi phục đã có; OAuth, account linking và account deletion còn pending.
-- [~] `SYNC-004 P1` Supabase PostgreSQL gateway thật, RPC nguyên tử, RLS và private Storage đã triển khai; còn debug thiết bị và telemetry production.
+- [x] `AUTH-001 P1` Supabase Auth email/password, sign-out, đổi mật khẩu, email khôi phục, account deletion, OAuth Google và account linking đã có; khi cloud bật, route dữ liệu bắt buộc đăng nhập; việc bật provider/redirect trên Dashboard vẫn cần cấu hình release.
+- [~] `SYNC-004 P1` Supabase PostgreSQL gateway thật, RPC nguyên tử, RLS, private Storage, server-owned cursor timestamp, khóa đồng bộ upload/pull, codec strict ở biên cloud, local database scope theo user và telemetry sync private đã triển khai; còn debug thiết bị và kiểm tra dashboard production.
 - [x] `SYNC-005 P1` Pull delta bằng cursor, idempotency server, tombstone reference và conflict state theo revision; đã có màn hình chọn bản cloud/local.
 - [x] `SYNC-008 P1` Auto sync khi app resume, sync sau đăng nhập và local cursor theo user.
 - [x] `SYNC-009 P1` Outbox và RPC push cho danh mục, ngân sách và merchant rule; cloud seed danh mục mặc định đã có.
 - [x] `SYNC-010 P1` Conflict snapshot, resolve local/cloud và requeue revision mới.
 - [x] `SYNC-011 P1` Delta pull cho category, budget và merchant rule bằng cursor riêng từng aggregate.
-- [ ] `SYNC-006 P2` Shared wallet, role thành viên và audit trail append-only.
+- [x] `SYNC-006 P2` Shared wallet, role owner/member, audit trail append-only và quản lý quyền thành viên (chuyển quyền, xóa thành viên, rời/xóa nhóm) đã có.
 - [x] `SYNC-007 P2` PostgreSQL Supabase schema cho invoice, line, evidence, category, budget và merchant rule; local Drift vẫn là nguồn đọc offline.
 
 ### Epic M — Intelligence và product scale
@@ -367,14 +355,14 @@ Decision gate cuối tuần 6:
 - [~] `DATA-001 P1` Notes/tags có edit, detail, search (seller/MST/số hóa đơn/ghi chú/tag), export và restore (chờ widget/device debug).
 - [x] `INSIGHT-001 P1` Forecast cuối tháng và recurring detection có unit test xác định.
 - [~] `INSIGHT-002 P1` Cảnh báo chi tiêu bất thường với baseline giải thích được và feedback false-positive (đã có baseline merchant, severity, explanation, dashboard/chat và lưu feedback báo nhầm local; test thiết bị còn pending).
-- [~] `AI-JOB-001 P1` Async extraction API: submit/status/result/cancel với idempotency key (đã có mobile contract/client scaffold; backend endpoint còn pending).
-- [ ] `AI-JOB-002 P1` Worker queue, timeout budget, dead-letter queue và replay tool phía backend.
-- [ ] `AI-JOB-003 P1` Model/prompt version, evaluation gate và cost budget theo môi trường/người dùng.
+- [x] `AI-JOB-001 P1` Async extraction API: submit/status/result/cancel/retry với idempotency key, input private Storage và mobile client typed.
+- [x] `AI-JOB-002 P1` Worker queue, timeout budget, retry, terminal dead-letter state, replay job thất bại qua endpoint owner và retention input giới hạn; cancel/timeout cũng giữ cơ chế cleanup orphan an toàn.
+- [~] `AI-JOB-003 P1` Model/prompt version, quota AI minute/day và cost units ngày/tháng atomically theo user đã có; override budget private và cost accounting theo provider thực tế vẫn cần chốt sau khi có usage metadata/evaluation.
 - [x] `SEARCH-001 P2` Hỏi đáp chi tiêu có citation về hóa đơn nguồn, không tự suy diễn số liệu (chat UI, local query offline, Supabase Edge Function `ai-api`, lịch sử local và connector tỷ giá; câu hỏi local không gọi AI).
 - [x] `SEARCH-002 P2` Bộ tool read-only cho chatbot: tool được tách theo summary, budget, insights, categories, recent và search; chỉ tool phù hợp được gọi, facts invoice-level bị chặn trước khi ra ngoài.
-- [~] `SEARCH-003 P2` Quản lý nguồn bên ngoài: đã có allowlist tiền tệ, attribution, timeout, cache TTL và feature flag cho connector tỷ giá; quota/audit nhiều provider còn pending.
-- [ ] `OPS-001 P1` Crash/performance monitoring, redaction audit, SLO và dashboard latency/error/cost.
-- [ ] `OPS-002 P1` Remote config/feature flag cho QR, AI provider, sync và rollout theo phần trăm.
+- [~] `SEARCH-003 P2` Quản lý nguồn bên ngoài: đã có allowlist tiền tệ, attribution, timeout, cache TTL giới hạn 30 phút, feature flag và fallback Frankfurter cho connector tỷ giá; audit provider định kỳ còn pending.
+- [~] `OPS-001 P1` Edge AI có log action/status/error/latency đã redact, metric private theo user qua RPC, quota/cost budget theo user, giới hạn body, allowlist origin tùy chọn, readiness kiểm tra dependency, view aggregate p95 theo giờ và SLO theo ngày; sync cũng có metric private và SLO daily; crash monitoring và dashboard quản trị hoàn chỉnh còn pending.
+- [x] `OPS-002 P1` Remote config/feature flag cho AI provider, sync và rollout theo phần trăm; cache 24 giờ, RLS read-only và fallback offline.
 
 ## 7. Roadmap 8 tuần
 
@@ -385,8 +373,8 @@ Decision gate cuối tuần 6:
 | 3 | XML variants và backend skeleton | XML-009..010, BE-001..002, APP-006..007 |
 | 4 | Ảnh -> OCR -> AI -> review -> lưu | OCR-001..004, AI-001..003 |
 | 5 | PDF text, category cache, duplicate | PDF-002..005, CAT-001..003, DUP-001..002 |
-| 6 | Dashboard và budget hoàn chỉnh | DBO-001..003, QR-001..003, QR decision gate |
-| 7 | Hardening hoặc QR mở rộng nếu qua gate | SEC-001..005, QA-001..004, QR-004..005 |
+| 6 | Dashboard và budget hoàn chỉnh | DBO-001..003 |
+| 7 | Hardening và kiểm thử release | SEC-001..005, QA-001..004 |
 | 8 | Release candidate và demo ổn định | REL-001..002, sửa bug, đo metric, tài liệu bảo vệ |
 
 Checkpoint cuối mỗi tuần:
@@ -402,7 +390,7 @@ Checkpoint cuối mỗi tuần:
 |---|---|---|
 | A — Flutter/UI lead | App foundation, design system, navigation, review UI | Dashboard, accessibility |
 | B — Ingestion lead | XML, PDF, OCR/native plugins, normalization | Fixture và parser tests |
-| C — Backend/AI lead | Backend, Gemini, security, QR adapters | Observability và quota |
+| C — Backend/AI lead | Backend, Gemini và security | Observability và quota |
 | D — Data/QA lead | Drift, repository, duplicate, analytics, test automation | CI và release evidence |
 
 Không chia dự án thành bốn khối chỉ ghép vào cuối kỳ. Mỗi tuần chọn một vertical slice; A-D cùng thống nhất contract rồi mỗi người hoàn thành phần của mình để slice chạy end-to-end.
@@ -476,7 +464,6 @@ test/fixtures/
 | OCR tiếng Việt sai | Dữ liệu sai | Review UI, field confidence, ground-truth evaluation |
 | AI trả JSON đúng nhưng giá trị sai | Sai tài chính | Deterministic validation, tolerance, human confirmation |
 | Gemini timeout/quota | Luồng bị chặn | Timeout, retry giới hạn, cached demo, manual fallback |
-| QR bị CAPTCHA/chặn bot | Demo hỏng | Decision gate, experimental scope, không làm đường demo chính |
 | PDF plugin không ổn định | Trễ roadmap | Spike tuần 1, chỉ cam kết text-layer PDF |
 | Drift/Firestore sync phức tạp | Conflict dữ liệu | Không làm multi-device sync trong MVP |
 | Lộ dữ liệu hóa đơn | Rủi ro bảo mật | Local-first, consent upload, redacted logs, deletion controls |
@@ -520,7 +507,7 @@ Thứ tự cho buổi làm việc đầu tiên:
 4. Chạy spike PDF trên Flutter (`PDF-001`) để loại rủi ro plugin sớm.
 5. Sau khi schema được duyệt, thực hiện `APP-001` và scaffold dự án.
 
-Không bắt đầu UI dashboard, QR hoặc prompt tuning trước khi `PRD-004` hoàn tất.
+Không bắt đầu UI dashboard hoặc prompt tuning trước khi `PRD-004` hoàn tất.
 
 ## 15. Scale gates sau MVP
 
@@ -535,4 +522,4 @@ Không chuyển kiến trúc chỉ theo số người dùng đăng ký. Mỗi b�
 | Reporting | SQLite/Firestore không đáp ứng báo cáo chéo workspace | Read model/PostgreSQL; giữ ingestion path độc lập |
 | Team/workspace | Có nhu cầu chia sẻ thật và audit bắt buộc | Multi-tenant boundary, RBAC, append-only audit và retention policy |
 
-Thứ tự thực hiện gần nhất sau vòng debug thiết bị: `BACKUP-002` -> `JOB-001/002` -> `DATA-001/DBO-004` -> benchmark `SCALE-DB-006` -> cấu hình `AUTH-001/SYNC-004`. QR provider và AI async chỉ chạy song song khi fixture/evaluation gate đã sẵn sàng.
+Thứ tự thực hiện gần nhất: deploy và kiểm thử các migration mới -> debug thiết bị cho `BACKUP-002` và `JOB-001/002` -> kiểm tra dashboard production và crash monitoring -> `DATA-001/DBO-004` -> benchmark `SCALE-DB-006`.

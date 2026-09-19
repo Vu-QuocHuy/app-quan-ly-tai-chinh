@@ -1,16 +1,19 @@
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/config/feature_flags.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/providers/app_providers.dart';
 import '../../features/ingestion/application/import_coordinator.dart';
 import '../../features/ingestion/application/import_queue.dart';
 import '../../features/ingestion/data/pending_import_store.dart';
-import '../../features/ingestion/data/qr_scanner_service.dart';
+import '../../features/ingestion/domain/import_job.dart';
 import '../../features/ingestion/presentation/import_source_sheet.dart';
 import '../../shared/errors/error_presenter.dart';
 import '../../shared/widgets/reading_pane.dart';
@@ -33,14 +36,16 @@ class _AppShellState extends ConsumerState<AppShell>
   int _importTotal = 0;
   String? _importFileName;
   final _importQueue = ImportQueueController();
-  final _pendingImportStore = PendingImportStore();
   Timer? _retryTimer;
+
+  PendingImportStore get _pendingImportStore =>
+      ref.read(pendingImportStoreProvider);
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    unawaited(_resumePendingImports());
+    if (!kIsWeb) unawaited(_resumePendingImports());
     unawaited(_syncCloud());
   }
 
@@ -53,11 +58,16 @@ class _AppShellState extends ConsumerState<AppShell>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) unawaited(_syncCloud());
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_syncCloud());
+      if (!kIsWeb) unawaited(_resumePendingImports());
+    }
   }
 
   Future<void> _syncCloud() async {
     if (_isSyncing || !mounted) return;
+    final flags = ref.read(featureFlagsProvider).value ?? FeatureFlags.defaults;
+    if (!flags.cloudSync) return;
     _isSyncing = true;
     try {
       await ref.read(syncCoordinatorProvider).runOnce();
@@ -212,8 +222,6 @@ class _AppShellState extends ConsumerState<AppShell>
       case ImportSource.manual:
         final draft = ref.read(importCoordinatorProvider).createManualDraft();
         if (mounted) context.push('/review', extra: draft);
-      case ImportSource.qr:
-        await _scanQr();
     }
   }
 
@@ -223,10 +231,46 @@ class _AppShellState extends ConsumerState<AppShell>
       allowedExtensions: const ['xml', 'pdf'],
     );
     if (files.isEmpty) return;
+    if (kIsWeb) {
+      final inputs = <({String fileName, Uint8List bytes})>[];
+      for (final file in files) {
+        final fileLength = await file.length();
+        if (fileLength <= 0 || fileLength > AppConstants.maxImportBytes) {
+          _showMessage('${file.name}: File phải có kích thước từ 1 đến 15 MB.');
+          continue;
+        }
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty || bytes.length > AppConstants.maxImportBytes) {
+          _showMessage('${file.name}: Không thể đọc file đã chọn.');
+          continue;
+        }
+        inputs.add((fileName: file.name, bytes: bytes));
+      }
+      if (inputs.isEmpty) return;
+      final coordinator = ref.read(importCoordinatorProvider);
+      await _runImportBatch(
+        fileNames: inputs
+            .map((input) => input.fileName)
+            .toList(growable: false),
+        operation: (index) {
+          final input = inputs[index];
+          return coordinator.importFile(
+            bytes: input.bytes,
+            fileName: input.fileName,
+          );
+        },
+      );
+      return;
+    }
     final pending = <PendingImport>[];
     for (final file in files) {
+      final fileLength = await file.length();
+      if (fileLength <= 0 || fileLength > AppConstants.maxImportBytes) {
+        _showMessage('${file.name}: File phải có kích thước từ 1 đến 15 MB.');
+        continue;
+      }
       final bytes = await file.readAsBytes();
-      if (bytes.isEmpty) {
+      if (bytes.isEmpty || bytes.length > AppConstants.maxImportBytes) {
         _showMessage('${file.name}: Không thể đọc file đã chọn.');
         continue;
       }
@@ -242,6 +286,8 @@ class _AppShellState extends ConsumerState<AppShell>
     await _runImportBatch(
       fileNames: pending.map((item) => item.fileName).toList(growable: false),
       operation: (index) => _processPendingImport(pending[index]),
+      onCompleted: (index) => _completePendingImport(pending[index]),
+      onDeferred: (index) => _deferPendingImport(pending[index]),
     );
   }
 
@@ -252,9 +298,30 @@ class _AppShellState extends ConsumerState<AppShell>
       maxWidth: 2400,
     );
     if (image == null) return;
+    await _importImageFile(image);
+  }
+
+  Future<void> _importImageFile(XFile image) async {
+    final imageLength = await image.length();
+    if (imageLength <= 0 || imageLength > AppConstants.maxImportBytes) {
+      _showMessage('Ảnh phải có kích thước từ 1 đến 15 MB.');
+      return;
+    }
     final bytes = await image.readAsBytes();
-    if (bytes.isEmpty) {
+    if (bytes.isEmpty || bytes.length > AppConstants.maxImportBytes) {
       _showMessage('Không thể đọc ảnh đã chọn.');
+      return;
+    }
+    if (kIsWeb) {
+      final coordinator = ref.read(importCoordinatorProvider);
+      await _runImportBatch(
+        fileNames: [image.name],
+        operation: (_) => coordinator.importImage(
+          bytes: bytes,
+          fileName: image.name,
+          imagePath: image.name,
+        ),
+      );
       return;
     }
     final pending = await _pendingImportStore.enqueue(
@@ -266,75 +333,8 @@ class _AppShellState extends ConsumerState<AppShell>
     await _runImportBatch(
       fileNames: [pending.fileName],
       operation: (_) => _processPendingImport(pending),
-    );
-  }
-
-  Future<void> _scanQr() async {
-    final image = await ImagePicker().pickImage(
-      source: ImageSource.camera,
-      imageQuality: 100,
-      maxWidth: 3000,
-    );
-    if (image == null || !mounted) return;
-    try {
-      final payload = await QrScannerService().scanFile(image.path);
-      if (!mounted) return;
-      if (payload == null) {
-        _showMessage(
-          'Không tìm thấy mã QR trong ảnh. Hãy thử lại với khung hình rõ hơn.',
-        );
-        return;
-      }
-      await _showQrResult(payload);
-    } on FormatException catch (error) {
-      if (mounted) _showMessage(friendlyMessage(error));
-    } on Object catch (error) {
-      if (mounted) _showMessage('Không thể đọc QR: ${friendlyMessage(error)}');
-    }
-  }
-
-  Future<void> _showQrResult(QrPayload payload) {
-    return showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.qr_code_2, size: 28),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Đã đọc mã QR',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              SelectableText(payload.rawValue),
-              const SizedBox(height: 12),
-              Text(
-                payload.kind == QrPayloadKind.url
-                    ? 'Đây là URL của nhà cung cấp. Tra cứu online sẽ chỉ bật sau khi cấu hình allowlist backend an toàn.'
-                    : 'Đây là mã QR dạng text; chưa đủ dữ liệu để tự tạo hóa đơn.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(sheetContext),
-                  child: const Text('Đóng'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      onCompleted: (_) => _completePendingImport(pending),
+      onDeferred: (_) => _deferPendingImport(pending),
     );
   }
 
@@ -357,8 +357,7 @@ class _AppShellState extends ConsumerState<AppShell>
               fileName: item.fileName,
               localPath: await _pendingImportStore.filePath(item),
             );
-      await jobs.markSucceeded(item.id);
-      await _pendingImportStore.remove(item);
+      await jobs.markAwaitingReview(item.id);
       return outcome;
     } on Object catch (error) {
       await jobs.markFailed(item.id, error);
@@ -369,15 +368,18 @@ class _AppShellState extends ConsumerState<AppShell>
 
   Future<void> _resumePendingImports() async {
     await Future<void>.delayed(Duration.zero);
-    if (!mounted || _isImporting) return;
+    if (kIsWeb || !mounted || _isImporting) return;
     try {
       final stored = await _pendingImportStore.list();
       final jobs = ref.read(importJobStoreProvider);
-      for (final item in stored) {
-        await jobs.ensureQueued(item);
-      }
       final pending = <PendingImport>[];
       for (final item in stored) {
+        final job = await jobs.find(item.id);
+        if (job?.state == ImportJobState.succeeded) {
+          await _pendingImportStore.remove(item);
+          continue;
+        }
+        await jobs.ensureQueued(item);
         if (await jobs.isRunnable(item.id)) pending.add(item);
       }
       if (pending.isEmpty || !mounted) {
@@ -390,6 +392,8 @@ class _AppShellState extends ConsumerState<AppShell>
       await _runImportBatch(
         fileNames: pending.map((item) => item.fileName).toList(growable: false),
         operation: (index) => _processPendingImport(pending[index]),
+        onCompleted: (index) => _completePendingImport(pending[index]),
+        onDeferred: (index) => _deferPendingImport(pending[index]),
       );
       _schedulePendingResume();
     } on Object catch (error) {
@@ -413,6 +417,8 @@ class _AppShellState extends ConsumerState<AppShell>
   Future<void> _runImportBatch({
     required List<String> fileNames,
     required Future<ImportOutcome> Function(int index) operation,
+    Future<void> Function(int index)? onCompleted,
+    Future<void> Function(int index)? onDeferred,
   }) async {
     if (fileNames.isEmpty || !mounted) return;
     final jobs = List<ImportQueueJob>.generate(
@@ -420,6 +426,8 @@ class _AppShellState extends ConsumerState<AppShell>
       (index) => ImportQueueJob(
         fileName: fileNames[index],
         operation: () => operation(index),
+        onCompleted: onCompleted == null ? null : () => onCompleted(index),
+        onDeferred: onDeferred == null ? null : () => onDeferred(index),
       ),
       growable: false,
     );
@@ -453,6 +461,11 @@ class _AppShellState extends ConsumerState<AppShell>
         _showMessage(
           'Đã hủy import; các file chưa chạy vẫn có thể tiếp tục sau.',
         );
+      } else if (mounted && summary.deferred > 0) {
+        _showMessage(
+          'Đã giữ ${summary.deferred} hóa đơn chờ bạn xác nhận.'
+          '${summary.failed > 0 ? ' Có file lỗi cần thử lại.' : ''}',
+        );
       } else if (mounted && summary.total > 1) {
         _showMessage(
           summary.failed == 0
@@ -477,12 +490,12 @@ class _AppShellState extends ConsumerState<AppShell>
     _showMessage('Đang hủy sau khi hoàn tất file hiện tại…');
   }
 
-  Future<void> _openImportOutcome(ImportOutcome outcome) async {
-    if (!mounted) return;
+  Future<ImportQueueDecision> _openImportOutcome(ImportOutcome outcome) async {
+    if (!mounted) return ImportQueueDecision.deferred;
     if (outcome.exactDuplicate != null) {
       _showMessage('Hóa đơn này đã có trong danh sách.');
       await context.push('/invoices/${outcome.exactDuplicate!.id}');
-      return;
+      return ImportQueueDecision.completed;
     }
     if (outcome.likelyDuplicate != null) {
       _showMessage('Có một hóa đơn tương tự. Hãy kiểm tra trước khi lưu.');
@@ -492,7 +505,27 @@ class _AppShellState extends ConsumerState<AppShell>
         'Đã dùng bộ trích xuất offline. Hãy kiểm tra kỹ các trường trước khi lưu.',
       );
     }
-    await context.push('/review', extra: outcome.result.invoice);
+    final saved = await context.push<bool>(
+      '/review',
+      extra: outcome.result.invoice,
+    );
+    return saved == true
+        ? ImportQueueDecision.completed
+        : ImportQueueDecision.deferred;
+  }
+
+  Future<void> _completePendingImport(PendingImport item) async {
+    final jobs = ref.read(importJobStoreProvider);
+    await jobs.markSucceeded(item.id);
+    try {
+      await _pendingImportStore.remove(item);
+    } on Object {
+      _schedulePendingResume();
+    }
+  }
+
+  Future<void> _deferPendingImport(PendingImport item) {
+    return ref.read(importJobStoreProvider).markAwaitingReview(item.id);
   }
 
   void _showMessage(String message, {bool isError = false}) {

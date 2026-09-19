@@ -90,4 +90,46 @@ void main() {
     expect(records, hasLength(1));
     expect(records.single.fileName, 'current.hdbak');
   });
+
+  test('keeps backup metadata isolated by account scope', () async {
+    const userOne = BackupCatalogStore(scope: 'user-1');
+    const userTwo = BackupCatalogStore(scope: 'user-2');
+
+    await userOne.record(
+      BackupRecord(
+        type: BackupRecordType.encrypted,
+        fileName: 'private.hdbak',
+        createdAt: DateTime(2026, 8, 1),
+      ),
+    );
+
+    expect(await userTwo.load(), isEmpty);
+    expect((await userOne.load()).single.fileName, 'private.hdbak');
+  });
+
+  test(
+    'clearAll removes scoped metadata without touching legacy or another account',
+    () async {
+      const legacy = BackupCatalogStore();
+      const userOne = BackupCatalogStore(scope: 'user-1');
+      const userTwo = BackupCatalogStore(scope: 'user-2');
+      final record = BackupRecord(
+        type: BackupRecordType.encrypted,
+        fileName: 'private.hdbak',
+        createdAt: DateTime(2026, 8, 1),
+      );
+
+      await legacy.record(record);
+      await userOne.record(record);
+      await userTwo.record(record);
+      await userOne.clearAll();
+
+      expect((await legacy.load()).single.fileName, 'private.hdbak');
+      expect(await userOne.load(), isEmpty);
+      expect((await userTwo.load()).single.fileName, 'private.hdbak');
+
+      await userOne.clearAll(includeLegacy: true);
+      expect(await legacy.load(), isEmpty);
+    },
+  );
 }

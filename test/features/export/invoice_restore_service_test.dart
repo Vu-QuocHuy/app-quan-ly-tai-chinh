@@ -48,6 +48,26 @@ void main() {
     expect(preview.invoices.single.lines.single.id, 'line-restore');
   });
 
+  test('maps unknown line categories to other during restore', () {
+    final categorized = invoice.copyWith(
+      lines: const [
+        InvoiceLineEntity(
+          id: 'line-categorized',
+          description: 'Đồ dùng',
+          totalMinor: 100000,
+          categoryId: 'unknown-line-category',
+        ),
+      ],
+    );
+    final preview = InvoiceRestoreParser.parse(
+      InvoiceExportFormatter.toJson([categorized]),
+      fileName: 'backup.json',
+      categoryIds: const {'food', 'other'},
+    );
+
+    expect(preview.invoices.single.lines.single.categoryId, 'other');
+  });
+
   test('skips duplicate ids and source hashes', () {
     final second = invoice.copyWith(
       sellerName: 'Trùng hash',
@@ -85,6 +105,34 @@ void main() {
     expect(preview.readyCount, 1);
     expect(preview.invalidCount, 1);
     expect(preview.issues.single, contains('sellerName'));
+  });
+
+  test('rejects duplicate nested ids and non-integer amounts per entry', () {
+    final payload =
+        jsonDecode(InvoiceExportFormatter.toJson([invoice]))
+            as Map<String, dynamic>;
+    payload.remove('checksumSha256');
+    final entry = (payload['invoices'] as List).first as Map<String, dynamic>;
+    entry['totalMinor'] = 100.5;
+    (entry['lines'] as List).add((entry['lines'] as List).first);
+
+    final preview = InvoiceRestoreParser.parse(
+      jsonEncode(payload),
+      fileName: 'backup.json',
+    );
+
+    expect(preview.readyCount, 0);
+    expect(preview.invalidCount, 1);
+    expect(preview.issues.single, contains('totalMinor'));
+
+    entry['totalMinor'] = 100000;
+    final duplicatePreview = InvoiceRestoreParser.parse(
+      jsonEncode(payload),
+      fileName: 'backup.json',
+    );
+    expect(duplicatePreview.readyCount, 0);
+    expect(duplicatePreview.invalidCount, 1);
+    expect(duplicatePreview.issues.single, contains('ID dòng hàng'));
   });
 
   test('rejects unsupported backup formats', () {
@@ -146,5 +194,41 @@ void main() {
       ),
       throwsFormatException,
     );
+  });
+
+  test('rejects oversized backup payloads before parsing', () async {
+    final oversized = Uint8List(15 * 1024 * 1024 + 1);
+
+    await expectLater(
+      const InvoiceRestoreService().previewBytes(
+        bytes: oversized,
+        fileName: 'oversized.hdbak',
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('rejects backups with excessive nested collections', () {
+    final payload =
+        jsonDecode(InvoiceExportFormatter.toJson([invoice]))
+            as Map<String, dynamic>;
+    payload.remove('checksumSha256');
+    final entry = (payload['invoices'] as List).first as Map<String, dynamic>;
+    entry['lines'] = List.generate(
+      201,
+      (index) => {
+        'id': 'line-$index',
+        'description': 'Dòng hàng',
+        'totalMinor': 100,
+      },
+    );
+
+    final preview = InvoiceRestoreParser.parse(
+      jsonEncode(payload),
+      fileName: 'too-many-lines.json',
+    );
+    expect(preview.readyCount, 0);
+    expect(preview.invalidCount, 1);
+    expect(preview.issues.single, contains('200 dòng hàng'));
   });
 }

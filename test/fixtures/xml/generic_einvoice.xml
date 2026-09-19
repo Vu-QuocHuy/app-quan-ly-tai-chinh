@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<InvoiceData>
+  <General>
+    <InvoiceNo>GEN-0001</InvoiceNo>
+    <Series>G26AA</Series>
+    <IssueDate>2026-09-01</IssueDate>
+    <CurrencyCode>VND</CurrencyCode>
+  </General>
+  <SellerInformation>
+    <SupplierName>CÔNG TY GENERIC</SupplierName>
+    <TaxIdentificationNumber>0101234567</TaxIdentificationNumber>
+  </SellerInformation>
+  <Items>
+    <ProductLine>
+      <ProductName>Hàng tiêu dùng</ProductName>
+      <InvoicedQuantity>2</InvoicedQuantity>
+      <PriceAmount>25000</PriceAmount>
+      <VATRate>8%</VATRate>
+      <LineExtensionAmount>50000</LineExtensionAmount>
+    </ProductLine>
+  </Items>
+  <AmountSummary>
+    <NetAmount>50000</NetAmount>
+    <VATAmount>4000</VATAmount>
+    <PayableAmount>54000</PayableAmount>
+  </AmountSummary>
+</InvoiceData>

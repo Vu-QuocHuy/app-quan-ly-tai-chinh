@@ -507,7 +507,6 @@ class _InvoiceEmptyState extends StatelessWidget {
 IconData _sourceIcon(InvoiceSourceType source) => switch (source) {
   InvoiceSourceType.xml => Icons.data_object,
   InvoiceSourceType.pdfText => Icons.picture_as_pdf_outlined,
-  InvoiceSourceType.qr => Icons.qr_code,
   InvoiceSourceType.imageOcr => Icons.document_scanner_outlined,
   InvoiceSourceType.manual => Icons.edit_note,
 };
@@ -515,7 +514,6 @@ IconData _sourceIcon(InvoiceSourceType source) => switch (source) {
 String _sourceLabel(InvoiceSourceType source) => switch (source) {
   InvoiceSourceType.xml => 'XML',
   InvoiceSourceType.pdfText => 'PDF',
-  InvoiceSourceType.qr => 'QR',
   InvoiceSourceType.imageOcr => 'Ảnh OCR',
   InvoiceSourceType.manual => 'Thủ công',
 };

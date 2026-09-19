@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:drift/drift.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/errors/app_exception.dart';
 import '../domain/import_job.dart';
 import 'pending_import_store.dart';
 
@@ -28,35 +29,44 @@ class DriftImportJobStore {
   }
 
   Future<void> ensureQueued(PendingImport pending) async {
-    final existing = await find(pending.id);
-    if (existing == null) {
-      final now = DateTime.now();
-      await _db
-          .into(_db.importJobs)
-          .insert(
-            ImportJobsCompanion.insert(
-              id: pending.id,
-              fileName: pending.fileName,
-              kind: pending.kind.name,
-              createdAt: now,
-              updatedAt: now,
-            ),
-          );
-      return;
-    }
-    if (existing.state == ImportJobState.running) {
-      final now = DateTime.now();
-      await (_db.update(
-        _db.importJobs,
-      )..where((row) => row.id.equals(pending.id))).write(
-        ImportJobsCompanion(
-          state: Value(ImportJobState.retryScheduled.name),
-          nextRetryAt: Value(now),
-          updatedAt: Value(now),
-          lastError: const Value('Tác vụ bị gián đoạn khi ứng dụng đóng.'),
-        ),
-      );
-    }
+    final now = DateTime.now();
+    await _db.customInsert(
+      '''
+      INSERT INTO import_jobs (id, file_name, kind, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO NOTHING
+      ''',
+      variables: [
+        Variable(pending.id),
+        Variable(pending.fileName),
+        Variable(pending.kind.name),
+        Variable(now),
+        Variable(now),
+      ],
+      updates: {_db.importJobs},
+    );
+    await _db.customUpdate(
+      '''
+      UPDATE import_jobs
+      SET state = ?,
+          next_retry_at = ?,
+          updated_at = ?,
+          last_error = ?
+      WHERE id = ?
+        AND state = ?
+        AND updated_at < ?
+      ''',
+      variables: [
+        Variable(ImportJobState.retryScheduled.name),
+        Variable(now),
+        Variable(now),
+        Variable('Tác vụ bị gián đoạn khi ứng dụng đóng.'),
+        Variable(pending.id),
+        Variable(ImportJobState.running.name),
+        Variable(now.subtract(const Duration(minutes: 10))),
+      ],
+      updates: {_db.importJobs},
+    );
   }
 
   Future<bool> isRunnable(String id, {DateTime? at}) async {
@@ -68,38 +78,77 @@ class DriftImportJobStore {
       ImportJobState.retryScheduled =>
         job.nextRetryAt == null || !job.nextRetryAt!.isAfter(now),
       ImportJobState.running ||
+      ImportJobState.awaitingReview ||
       ImportJobState.succeeded ||
       ImportJobState.failed => false,
     };
   }
 
   Future<bool> markRunning(String id) async {
-    final job = await find(id);
-    if (job == null || !await isRunnable(id)) return false;
     final now = DateTime.now();
-    await (_db.update(_db.importJobs)..where((row) => row.id.equals(id))).write(
-      ImportJobsCompanion(
-        state: Value(ImportJobState.running.name),
-        attemptCount: Value(job.attemptCount + 1),
-        lastError: const Value(null),
-        nextRetryAt: const Value(null),
-        updatedAt: Value(now),
-      ),
+    final changed = await _db.customUpdate(
+      '''
+      UPDATE import_jobs
+      SET state = ?,
+          attempt_count = attempt_count + 1,
+          last_error = NULL,
+          next_retry_at = NULL,
+          updated_at = ?,
+          completed_at = NULL
+      WHERE id = ?
+        AND (
+          state = ?
+          OR (
+            state = ?
+            AND (next_retry_at IS NULL OR next_retry_at <= ?)
+          )
+        )
+      ''',
+      variables: [
+        Variable(ImportJobState.running.name),
+        Variable(now),
+        Variable(id),
+        Variable(ImportJobState.queued.name),
+        Variable(ImportJobState.retryScheduled.name),
+        Variable(now),
+      ],
+      updates: {_db.importJobs},
     );
-    return true;
+    return changed == 1;
   }
 
   Future<void> markSucceeded(String id) async {
     final now = DateTime.now();
-    await (_db.update(_db.importJobs)..where((row) => row.id.equals(id))).write(
-      ImportJobsCompanion(
-        state: Value(ImportJobState.succeeded.name),
-        lastError: const Value(null),
-        nextRetryAt: const Value(null),
-        updatedAt: Value(now),
-        completedAt: Value(now),
-      ),
-    );
+    await (_db.update(_db.importJobs)..where(
+          (row) =>
+              row.id.equals(id) & row.state.equals(ImportJobState.running.name),
+        ))
+        .write(
+          ImportJobsCompanion(
+            state: Value(ImportJobState.succeeded.name),
+            lastError: const Value(null),
+            nextRetryAt: const Value(null),
+            updatedAt: Value(now),
+            completedAt: Value(now),
+          ),
+        );
+  }
+
+  Future<void> markAwaitingReview(String id) async {
+    final now = DateTime.now();
+    await (_db.update(_db.importJobs)..where(
+          (row) =>
+              row.id.equals(id) & row.state.equals(ImportJobState.running.name),
+        ))
+        .write(
+          ImportJobsCompanion(
+            state: Value(ImportJobState.awaitingReview.name),
+            lastError: const Value(null),
+            nextRetryAt: const Value(null),
+            updatedAt: Value(now),
+            completedAt: const Value(null),
+          ),
+        );
   }
 
   Future<void> markFailed(String id, Object error) async {
@@ -108,35 +157,46 @@ class DriftImportJobStore {
     final now = DateTime.now();
     final exhausted = job.attemptCount >= job.maxAttempts;
     final delaySeconds = 30 * pow(2, max(0, job.attemptCount - 1)).toInt();
-    await (_db.update(_db.importJobs)..where((row) => row.id.equals(id))).write(
-      ImportJobsCompanion(
-        state: Value(
-          exhausted
-              ? ImportJobState.failed.name
-              : ImportJobState.retryScheduled.name,
-        ),
-        lastError: Value(error.toString()),
-        nextRetryAt: Value(
-          exhausted ? null : now.add(Duration(seconds: delaySeconds)),
-        ),
-        updatedAt: Value(now),
-        completedAt: Value(exhausted ? now : null),
-      ),
-    );
+    await (_db.update(_db.importJobs)..where(
+          (row) =>
+              row.id.equals(id) & row.state.equals(ImportJobState.running.name),
+        ))
+        .write(
+          ImportJobsCompanion(
+            state: Value(
+              exhausted
+                  ? ImportJobState.failed.name
+                  : ImportJobState.retryScheduled.name,
+            ),
+            lastError: Value(safeErrorMessage(error)),
+            nextRetryAt: Value(
+              exhausted ? null : now.add(Duration(seconds: delaySeconds)),
+            ),
+            updatedAt: Value(now),
+            completedAt: Value(exhausted ? now : null),
+          ),
+        );
   }
 
   Future<void> retryNow(String id) async {
     final now = DateTime.now();
-    await (_db.update(_db.importJobs)..where((row) => row.id.equals(id))).write(
-      ImportJobsCompanion(
-        state: Value(ImportJobState.queued.name),
-        attemptCount: const Value(0),
-        lastError: const Value(null),
-        nextRetryAt: const Value(null),
-        completedAt: const Value(null),
-        updatedAt: Value(now),
-      ),
-    );
+    await (_db.update(_db.importJobs)..where(
+          (row) =>
+              row.id.equals(id) &
+              (row.state.equals(ImportJobState.awaitingReview.name) |
+                  row.state.equals(ImportJobState.failed.name) |
+                  row.state.equals(ImportJobState.retryScheduled.name)),
+        ))
+        .write(
+          ImportJobsCompanion(
+            state: Value(ImportJobState.queued.name),
+            attemptCount: const Value(0),
+            lastError: const Value(null),
+            nextRetryAt: const Value(null),
+            completedAt: const Value(null),
+            updatedAt: Value(now),
+          ),
+        );
   }
 
   Future<int> retryAllFailed() async {
@@ -160,6 +220,8 @@ class DriftImportJobStore {
       _db.importJobs,
     )..where((row) => row.state.equals(ImportJobState.succeeded.name))).go();
   }
+
+  Future<int> clear() => _db.delete(_db.importJobs).go();
 
   Future<Duration?> delayUntilNextRetry() async {
     final query = _db.select(_db.importJobs)

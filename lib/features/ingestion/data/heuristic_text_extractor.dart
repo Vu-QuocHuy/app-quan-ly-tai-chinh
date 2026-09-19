@@ -107,11 +107,17 @@ class HeuristicTextExtractor implements InvoiceExtractor {
     final raw = _match(text, RegExp(r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{4})\b'));
     if (raw == null) return null;
     final parts = raw.split(RegExp(r'[/.-]'));
-    return DateTime(
+    final date = DateTime(
       int.parse(parts[2]),
       int.parse(parts[1]),
       int.parse(parts[0]),
     );
+    if (date.year != int.parse(parts[2]) ||
+        date.month != int.parse(parts[1]) ||
+        date.day != int.parse(parts[0])) {
+      return null;
+    }
+    return date;
   }
 
   String? _match(String text, RegExp expression) =>

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/config/feature_flags.dart';
 import '../../../core/providers/app_providers.dart';
 import '../domain/chat_models.dart';
 import '../../../shared/errors/error_presenter.dart';
@@ -44,6 +45,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final api = ref.watch(chatApiClientProvider);
+    final flags =
+        ref.watch(featureFlagsProvider).value ?? FeatureFlags.defaults;
     return Scaffold(
       appBar: AppBar(
         title: const Column(
@@ -67,14 +70,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            if (!api.isConfigured)
+            if (!api.isConfigured || !flags.onlineAi)
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: AppCallout(
                   icon: Icons.offline_bolt_outlined,
                   message:
                       'Chế độ local: câu hỏi về dữ liệu đã lưu vẫn hoạt động. '
-                      'Đăng nhập Supabase để bật Gemini và dữ liệu bên ngoài.',
+                      'Gemini và dữ liệu bên ngoài đang tắt hoặc chưa cấu hình.',
                 ),
               ),
             if (_connectionNote != null)
@@ -269,12 +272,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final local = await ref.read(localChatAssistantProvider).answer(question);
       var reply = local;
       final api = ref.read(chatApiClientProvider);
-      if (api.isConfigured && local.facts.isEmpty) {
+      final flags =
+          ref.read(featureFlagsProvider).value ?? FeatureFlags.defaults;
+      if (flags.onlineAi && api.isConfigured && local.facts.isEmpty) {
         try {
           reply = await api.ask(
             question: question,
             history: _messages,
             facts: local.facts,
+            allowExternalData: flags.externalRates,
           );
         } on Object catch (_) {
           if (mounted) {

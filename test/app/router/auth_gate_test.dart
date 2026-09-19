@@ -48,8 +48,33 @@ void main() {
     });
 
     group('có cloud nhưng chưa đăng nhập', () {
-      test('các tab chính vẫn dùng được', () {
-        for (final route in ['/', '/invoices', '/budgets', '/settings']) {
+      test('mọi route dữ liệu đều bị chặn', () {
+        for (final route in [
+          '/',
+          '/invoices',
+          '/invoices/invoice-1',
+          '/budgets',
+          '/groups',
+          '/settings',
+          '/settings/import-jobs',
+          '/settings/conflicts',
+          '/chat',
+          '/review',
+        ]) {
+          expect(
+            authRedirect(
+              location: route,
+              isConfigured: true,
+              isSignedIn: false,
+            ),
+            '/auth',
+            reason: '$route phải yêu cầu phiên đăng nhập',
+          );
+        }
+      });
+
+      test('trang đăng nhập và tài khoản vẫn tới được', () {
+        for (final route in ['/auth', '/settings/account']) {
           expect(
             authRedirect(
               location: route,
@@ -57,31 +82,8 @@ void main() {
               isSignedIn: false,
             ),
             isNull,
-            reason: '$route chạy hoàn toàn bằng dữ liệu local',
           );
         }
-      });
-
-      test('chỉ route thật sự cần phiên mới bị chặn', () {
-        expect(
-          authRedirect(
-            location: '/settings/conflicts',
-            isConfigured: true,
-            isSignedIn: false,
-          ),
-          '/auth',
-        );
-      });
-
-      test('/settings/account tới được để người dùng đăng nhập', () {
-        expect(
-          authRedirect(
-            location: '/settings/account',
-            isConfigured: true,
-            isSignedIn: false,
-          ),
-          isNull,
-        );
       });
     });
 

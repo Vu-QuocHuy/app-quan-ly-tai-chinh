@@ -20,7 +20,7 @@ Yêu cầu Flutter `3.47.1`, Dart `3.12+`, Android SDK và JDK 17.
 
 ```bash
 flutter pub get
-dart run build_runner build --delete-conflicting-outputs
+dart run build_runner build
 dart format lib test
 flutter analyze
 flutter test
@@ -45,9 +45,20 @@ Trong app, mở **Cài đặt → Tài khoản và đồng bộ** để đăng k
 OCR và SQLite vẫn hoạt động offline; các thay đổi hóa đơn được giữ trong outbox
 và đẩy lên Supabase khi người dùng đăng nhập rồi bấm **Đồng bộ ngay**. Khi mở
 lại app, hệ thống tự chạy best-effort sync; dữ liệu cloud mới được tải theo
-cursor delta và không tạo vòng lặp outbox. Danh mục, ngân sách và quy tắc merchant
+cursor delta dùng timestamp do server sở hữu và không tạo vòng lặp outbox. Danh mục, ngân sách và quy tắc merchant
 cũng đi qua outbox, được áp dụng atomically bằng RPC riêng và tải ngược theo
 cursor delta có tombstone.
+
+Checklist deploy staging/production nằm tại
+`docs/PRODUCTION_RELEASE_CHECKLIST.md`; không đưa secret vào file hoặc Git.
+
+Trên Android/iOS, app đăng ký tác vụ nền định kỳ có ràng buộc mạng, pin và bộ
+nhớ để đồng bộ outbox/pull dữ liệu và kiểm tra cảnh báo ngân sách. Hệ điều hành
+có thể trì hoãn tác vụ; OCR/import vẫn tiếp tục ở foreground và chỉ hoàn tất
+sau khi người dùng xem lại, xác nhận.
+Khi cloud được cấu hình, dữ liệu Drift local được mở trong database riêng theo
+tài khoản; phiên đã đăng xuất dùng một database cô lập để không lộ dữ liệu của
+tài khoản trước.
 
 Nếu hai thiết bị sửa cùng một hóa đơn ở cùng `revision`, app giữ bản local,
 lưu snapshot cloud và đánh dấu `conflict` để không âm thầm ghi đè dữ liệu. Mở
@@ -59,6 +70,13 @@ Thay đổi schema cloud phải tạo migration mới, kiểm tra rồi mới đ
 ```bash
 npx supabase db push --dry-run
 npx supabase db push
+```
+
+Đo hiệu năng SQLite với dữ liệu giả lập trước khi quyết định bật FTS5 hoặc
+archive dữ liệu cũ:
+
+```bash
+flutter test tool/benchmark_local_database.dart
 ```
 
 ## Fine-tune OCR hóa đơn Việt Nam
@@ -79,8 +97,16 @@ AI chỉ được gọi khi người dùng đã đăng nhập Supabase. Gemini A
 
 ```bash
 supabase link --project-ref YOUR_PROJECT_REF
+supabase db push
 supabase secrets set GEMINI_API_KEY=your_gemini_key
+supabase secrets set AI_MAX_REQUESTS_PER_MINUTE=30
+supabase secrets set AI_MAX_REQUESTS_PER_DAY=500
+supabase secrets set AI_WORKER_SECRET=at-least-32-random-characters
+supabase secrets set HEALTHCHECK_SECRET=another-at-least-32-random-characters
 supabase functions deploy ai-api
+supabase functions deploy delete-account
+supabase functions deploy ai-worker
+supabase functions deploy health
 ```
 
 Chạy app:
@@ -94,9 +120,53 @@ Mặc định lệnh trên chạy flavor `dev`. Với staging hoặc production,
 
 Sau khi backend đã cấu hình `GEMINI_API_KEY`, app có thể hỏi bằng tiếng Việt các câu hỏi ngoài phạm vi dữ liệu local. Các câu hỏi về tổng chi, danh mục, ngân sách, so sánh tháng, hóa đơn gần đây và khoản chi định kỳ được trả lời trực tiếp từ tool local; nếu Gemini được gọi, dữ liệu hóa đơn cấp dòng không được gửi đi.
 
-Các câu hỏi tỷ giá như “tỷ giá USD/VND hôm nay” sẽ dùng connector ExchangeRate-API ở backend và trả về citation. Provider này là dữ liệu tham khảo, cập nhật theo lịch của nhà cung cấp; không dùng làm chứng từ hoặc quyết định tài chính tự động.
+Các câu hỏi tỷ giá như “tỷ giá USD/VND hôm nay” sẽ dùng connector ExchangeRate-API ở backend và trả về citation; một số cặp tiền có fallback Frankfurter. Đây là dữ liệu tham khảo, cập nhật theo lịch của nhà cung cấp; không dùng làm chứng từ hoặc quyết định tài chính tự động.
 
 Function `ai-api` bật `verify_jwt = true`; chỉ phiên Supabase hợp lệ mới được gọi Gemini.
+Khi đưa web lên production, có thể khóa origin bằng `AI_ALLOWED_ORIGINS`, ví dụ
+`https://app.example.com`; nên đặt thêm `AI_REQUIRE_ORIGIN_ALLOWLIST=true` và
+`DELETE_ACCOUNT_REQUIRE_ORIGIN_ALLOWLIST=true` cùng allowlist tương ứng.
+Không đặt API key Gemini hoặc service role vào Flutter.
+Luồng trích xuất bất đồng bộ dùng `extract_submit/status/cancel/retry`, lưu input
+trong bucket private `ai-inputs`, và cần scheduler gọi `ai-worker` bằng secret nội bộ.
+Có thể dùng GitHub Actions định kỳ trong `.github/workflows/ai-worker.yml`; hãy
+đặt `SUPABASE_FUNCTION_URL` và `AI_WORKER_SECRET` trong GitHub Actions Secrets.
+Workflow `.github/workflows/production-health.yml` kiểm tra endpoint health và
+readiness mỗi 15 phút; cần cấu hình GitHub Secrets `SUPABASE_FUNCTION_URL` và
+`HEALTHCHECK_SECRET` trùng Supabase secret. URL và secret không được ghi vào log.
+
+Feature flags được quản lý trong bảng `app_feature_flags` sau khi chạy migration.
+Ví dụ rollout AI cho 25% user production:
+
+```sql
+insert into public.app_feature_flags (environment, key, enabled, rollout_percentage)
+values ('production', 'online_ai', true, 25)
+on conflict (environment, key) do update set
+  enabled = excluded.enabled,
+  rollout_percentage = excluded.rollout_percentage,
+  updated_at = now();
+```
+
+### OAuth Google tùy chọn
+
+Mã nguồn đã có đăng nhập Google, liên kết và gỡ liên kết identity. Để bật, vào
+Supabase Dashboard → Authentication → Providers → Google, cấu hình OAuth client
+ở Google Cloud, rồi thêm redirect URL sau vào Supabase:
+
+```text
+hoadoninsight://login-callback
+```
+
+Khi chạy Android/iOS, truyền thêm redirect URI (không phải secret):
+
+```bash
+flutter run --dart-define-from-file=config/supabase.local.json \
+  --dart-define=SUPABASE_OAUTH_REDIRECT_URI=hoadoninsight://login-callback
+```
+
+Trên Chrome có thể bỏ qua biến này để Supabase trả về trang hiện tại. Nếu chưa
+cấu hình Google Provider, nút Google sẽ báo lỗi cấu hình thay vì làm hỏng đăng
+nhập email/mật khẩu.
 
 ## Nguồn nhập hỗ trợ
 
@@ -104,20 +174,24 @@ Function `ai-api` bật `verify_jwt = true`; chỉ phiên Supabase hợp lệ m�
 - PDF có text layer: đọc tối đa 100 trang; PDF scan được hướng sang camera/ảnh OCR.
 - Ảnh/camera: ML Kit OCR on-device, sau đó AI structured extraction nếu cấu hình; lỗi mạng tự fallback offline.
 - Nhập tay: luôn sẵn sàng khi không có file/ảnh.
-- QR: để ở nhãn Experimental và chưa bật cho đến khi có provider hợp pháp, ổn định.
 
 ## Quản lý dữ liệu và vận hành
 
 - Export toàn bộ dữ liệu hóa đơn ra JSON đầy đủ, CSV tương thích Excel/Google Sheets hoặc PDF báo cáo tham khảo gồm tổng quan, ngân sách, danh mục và danh sách hóa đơn.
 - Có thể xuất backup mã hóa `.hdbak` bằng mật khẩu người dùng (AES-256-GCM + PBKDF2-HMAC-SHA256); khi khôi phục, ứng dụng kiểm tra checksum/integrity trước khi ghi dữ liệu.
 - Có thể tải backup `.hdbak` đã mã hóa lên bucket private `invoice-backups` của Supabase; app hỗ trợ xem danh sách, tải để xem trước/khôi phục, xóa và tự dọn bản quá 90 ngày hoặc vượt 20 file. Đường dẫn được giới hạn theo user và không upload plaintext.
+- Có thể xóa vĩnh viễn tài khoản; backend xóa Auth, dữ liệu cloud liên quan và tệp private, sau đó ứng dụng dọn dữ liệu local, lịch sử chat và hàng đợi import.
 - Có thể chỉnh sửa danh sách hàng hóa/dịch vụ ngay trong màn hình kiểm tra trước khi xác nhận.
 - Import nhiều file chạy tuần tự, có tiến độ, tiếp tục các file còn dang dở sau khi app bị đóng và có thể hủy giữa chừng.
 - Dashboard cảnh báo khi đã dùng từ 80% ngân sách hoặc vượt ngân sách.
 - Android/iOS có local notification cho cảnh báo ngân sách, chống gửi lặp theo tháng/mức cảnh báo; chạm notification mở thẳng màn hình Ngân sách. Quyền thông báo chỉ được xin khi người dùng bật tùy chọn.
 - Merchant chưa có quy tắc local có thể được phân loại qua Supabase Edge Function khi đã đăng nhập; lỗi mạng vẫn giữ luồng offline-first.
 - Supabase Auth email/password, PostgreSQL RLS theo người dùng và bucket riêng tư `receipt-images`; đồng bộ push/pull áp dụng hóa đơn, dòng hàng, evidence, danh mục, ngân sách và quy tắc merchant.
-- Dữ liệu nhóm chỉ hiển thị cho thành viên nhóm; các RPC kiểm tra membership, tổng phần chia và yêu cầu user xác nhận trước khi ghi khoản chi.
+- Dữ liệu nhóm chỉ hiển thị cho thành viên nhóm; các RPC kiểm tra membership, tổng phần chia và yêu cầu user xác nhận trước khi ghi khoản chi. Thành viên có vai trò owner/member và lịch sử hoạt động append-only.
+- Quota AI theo user được ghi atomically ở Supabase sau khi deploy migration; log vận hành chỉ giữ action, trạng thái, mã lỗi và latency đã redact.
+- AI có cost units theo tác vụ (`classify=1`, `chat=2`, `extract=5`), giới hạn ngày/tháng và override từng user trong bảng private; async job cũng bị khóa ngay tại RPC.
+- Sync có metric vận hành private chỉ gồm hướng, aggregate, trạng thái, latency và batch size; không ghi payload hóa đơn. SLO daily chỉ dành cho `service_role`.
+- Remote flags chỉ là cơ chế rollout, không phải security boundary; RLS, JWT và secret backend vẫn luôn phải bật.
 
 ## Chất lượng và bảo mật
 

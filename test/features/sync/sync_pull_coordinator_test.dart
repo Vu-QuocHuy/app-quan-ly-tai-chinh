@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/core/database/app_database.dart';
@@ -93,6 +94,206 @@ void main() {
     expect(conflicts.single.remote.sellerName, 'Remote Store');
   });
 
+  test('marks equal-revision line category changes as a conflict', () async {
+    final localTime = DateTime.utc(2026, 8, 31, 2, 30);
+    await repository.saveInvoice(
+      InvoiceEntity(
+        id: 'line-category-conflict',
+        sellerName: 'Local Store',
+        currencyCode: 'VND',
+        subtotalMinor: 100,
+        taxMinor: 0,
+        totalMinor: 100,
+        sourceType: InvoiceSourceType.manual,
+        status: InvoiceStatus.confirmed,
+        createdAt: localTime,
+        updatedAt: localTime,
+        lines: const [
+          InvoiceLineEntity(
+            id: 'line-1',
+            description: 'Coffee',
+            totalMinor: 100,
+            categoryId: 'food',
+          ),
+        ],
+      ),
+    );
+    final gateway = _RecordingPullGateway([
+      SyncPullChange(
+        id: 'line-category-conflict',
+        updatedAt: localTime,
+        revision: 1,
+        payload: {
+          'id': 'line-category-conflict',
+          'sellerName': 'Local Store',
+          'currencyCode': 'VND',
+          'subtotalMinor': 100,
+          'taxMinor': 0,
+          'totalMinor': 100,
+          'sourceType': 'manual',
+          'status': 'confirmed',
+          'createdAt': localTime.toIso8601String(),
+          'updatedAt': localTime.toIso8601String(),
+          'lines': [
+            {
+              'id': 'line-1',
+              'description': 'Coffee',
+              'totalMinor': 100,
+              'categoryId': 'shopping',
+            },
+          ],
+          'evidence': <Object?>[],
+          'tags': <Object?>[],
+        },
+      ),
+    ]);
+    final coordinator = SyncPullCoordinator(
+      repository: repository,
+      cursors: DriftSyncCursorStore(database),
+      gateway: gateway,
+    );
+
+    final result = await coordinator.runOnce(userId: 'user-1');
+
+    expect(result.conflicts, 1);
+    expect(
+      (await repository.findById('line-category-conflict'))?.syncState,
+      InvoiceSyncState.conflict,
+    );
+  });
+
+  test(
+    'applies a minimal remote invoice tombstone without creating an outbox event',
+    () async {
+      final localTime = DateTime.utc(2026, 8, 31, 2);
+      final deletedAt = localTime.add(const Duration(minutes: 1));
+      await repository.saveInvoice(
+        InvoiceEntity(
+          id: 'deleted-remotely',
+          sellerName: 'Local Store',
+          currencyCode: 'VND',
+          subtotalMinor: 100,
+          taxMinor: 0,
+          totalMinor: 100,
+          sourceType: InvoiceSourceType.manual,
+          status: InvoiceStatus.confirmed,
+          createdAt: localTime,
+          updatedAt: localTime,
+        ),
+      );
+      final gateway = _RecordingPullGateway([
+        SyncPullChange(
+          id: 'deleted-remotely',
+          updatedAt: deletedAt,
+          revision: 2,
+          operation: 'delete',
+          payload: {
+            'id': 'deleted-remotely',
+            'deletedAt': deletedAt.toIso8601String(),
+          },
+        ),
+      ]);
+      final coordinator = SyncPullCoordinator(
+        repository: repository,
+        cursors: DriftSyncCursorStore(database),
+        gateway: gateway,
+      );
+
+      final result = await coordinator.runOnce(userId: 'user-1');
+
+      expect(result.applied, 1);
+      expect(await repository.findById('deleted-remotely'), isNull);
+      final raw = await database
+          .customSelect(
+            'SELECT sync_state, revision, deleted_at FROM invoices WHERE id = ?',
+            variables: [Variable<String>('deleted-remotely')],
+          )
+          .getSingle();
+      expect(raw.read<String>('sync_state'), 'synced');
+      expect(raw.read<int>('revision'), 2);
+      expect(raw.read<DateTime>('deleted_at'), isNotNull);
+      expect(
+        await database
+            .customSelect('SELECT COUNT(*) AS count FROM sync_outbox_events')
+            .getSingle()
+            .then((row) => row.read<int>('count')),
+        0,
+      );
+
+      await repository.saveRemoteInvoice(
+        InvoiceEntity(
+          id: 'deleted-remotely',
+          sellerName: 'Stale Store',
+          currencyCode: 'VND',
+          subtotalMinor: 100,
+          taxMinor: 0,
+          totalMinor: 100,
+          sourceType: InvoiceSourceType.manual,
+          status: InvoiceStatus.confirmed,
+          createdAt: localTime,
+          updatedAt: localTime,
+          revision: 1,
+        ),
+      );
+      expect(await repository.findById('deleted-remotely'), isNull);
+    },
+  );
+
+  test(
+    'does not create a conflict when only server timestamps differ',
+    () async {
+      final localTime = DateTime.utc(2026, 8, 31, 2);
+      final serverTime = localTime.add(const Duration(minutes: 5));
+      await repository.saveInvoice(
+        InvoiceEntity(
+          id: 'same-content',
+          sellerName: 'Same Store',
+          currencyCode: 'VND',
+          subtotalMinor: 100,
+          taxMinor: 0,
+          totalMinor: 100,
+          sourceType: InvoiceSourceType.manual,
+          status: InvoiceStatus.confirmed,
+          createdAt: localTime,
+          updatedAt: localTime,
+        ),
+      );
+      final gateway = _RecordingPullGateway([
+        SyncPullChange(
+          id: 'same-content',
+          updatedAt: serverTime,
+          revision: 1,
+          payload: {
+            'id': 'same-content',
+            'sellerName': 'Same Store',
+            'currencyCode': 'VND',
+            'subtotalMinor': 100,
+            'taxMinor': 0,
+            'totalMinor': 100,
+            'sourceType': 'manual',
+            'status': 'confirmed',
+            'createdAt': localTime.toIso8601String(),
+            'updatedAt': serverTime.toIso8601String(),
+            'lines': <Object?>[],
+            'evidence': <Object?>[],
+            'tags': <Object?>[],
+          },
+        ),
+      ]);
+      final coordinator = SyncPullCoordinator(
+        repository: repository,
+        cursors: DriftSyncCursorStore(database),
+        gateway: gateway,
+      );
+
+      final result = await coordinator.runOnce(userId: 'user-1');
+
+      expect(result.conflicts, 0);
+      expect(result.applied, 1);
+      expect(await repository.watchInvoiceConflicts().first, isEmpty);
+    },
+  );
+
   test(
     'applies a remote reference delta without creating a local outbox event',
     () async {
@@ -134,6 +335,58 @@ void main() {
       );
     },
   );
+
+  test('rejects a page whose cursor is not strictly increasing', () async {
+    final firstTime = DateTime.utc(2026, 8, 31, 4);
+    final gateway = _RecordingPullGateway([
+      _change(
+        id: 'remote-1',
+        revision: 1,
+        sellerName: 'First',
+        updatedAt: firstTime,
+      ),
+      _change(
+        id: 'remote-2',
+        revision: 1,
+        sellerName: 'Second',
+        updatedAt: firstTime.subtract(const Duration(minutes: 1)),
+      ),
+    ]);
+    final coordinator = SyncPullCoordinator(
+      repository: repository,
+      cursors: DriftSyncCursorStore(database),
+      gateway: gateway,
+    );
+
+    await expectLater(
+      coordinator.runOnce(userId: 'user-1'),
+      throwsA(isA<FormatException>()),
+    );
+    expect(await repository.findById('remote-1'), isNull);
+  });
+
+  test('rejects a reference delta without an entity id', () async {
+    final gateway = _RecordingPullGateway([
+      SyncPullChange(
+        id: '1',
+        aggregateType: 'category',
+        updatedAt: DateTime.utc(2026, 8, 31, 5),
+        revision: 1,
+        payload: {'name': 'Missing id'},
+      ),
+    ]);
+    final coordinator = SyncPullCoordinator(
+      repository: repository,
+      cursors: DriftSyncCursorStore(database),
+      gateway: gateway,
+      aggregateType: 'category',
+    );
+
+    await expectLater(
+      coordinator.runOnce(userId: 'user-1'),
+      throwsA(isA<FormatException>()),
+    );
+  });
 }
 
 SyncPullChange _change({

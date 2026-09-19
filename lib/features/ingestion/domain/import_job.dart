@@ -1,6 +1,13 @@
 import 'package:flutter/foundation.dart';
 
-enum ImportJobState { queued, running, succeeded, retryScheduled, failed }
+enum ImportJobState {
+  queued,
+  running,
+  awaitingReview,
+  succeeded,
+  retryScheduled,
+  failed,
+}
 
 @immutable
 class ImportJobEntity {
@@ -31,5 +38,7 @@ class ImportJobEntity {
   final DateTime? completedAt;
 
   bool get canRetry =>
-      state == ImportJobState.failed || state == ImportJobState.retryScheduled;
+      state == ImportJobState.awaitingReview ||
+      state == ImportJobState.failed ||
+      state == ImportJobState.retryScheduled;
 }

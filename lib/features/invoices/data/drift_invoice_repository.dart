@@ -176,20 +176,129 @@ class DriftInvoiceRepository implements InvoiceRepository {
   }
 
   @override
+  Future<List<InvoiceEntity>> findDuplicateCandidates(
+    InvoiceEntity candidate,
+  ) async {
+    final predicates = <Expression<bool>>[];
+    if (candidate.sellerTaxCode?.trim().isNotEmpty == true) {
+      predicates.add(
+        _db.invoices.sellerTaxCode.equals(candidate.sellerTaxCode!),
+      );
+    }
+    if (candidate.invoiceNumber?.trim().isNotEmpty == true) {
+      predicates.add(
+        _db.invoices.invoiceNumber.equals(candidate.invoiceNumber!),
+      );
+    }
+    if (candidate.totalMinor > 0) {
+      predicates.add(_db.invoices.totalMinor.equals(candidate.totalMinor));
+    }
+    final candidateDate = candidate.issuedAt ?? candidate.createdAt;
+    final start = DateTime(
+      candidateDate.year,
+      candidateDate.month,
+      candidateDate.day,
+    );
+    predicates.add(
+      _dateInRange(_db.invoices, start, start.add(const Duration(days: 1))),
+    );
+    if (predicates.isEmpty) return const [];
+
+    final matching = predicates.reduce((left, right) => left | right);
+    final query = _db.select(_db.invoices)
+      ..where((row) => row.deletedAt.isNull() & matching)
+      ..orderBy([
+        (row) => OrderingTerm.desc(row.updatedAt),
+        (row) => OrderingTerm.desc(row.id),
+      ])
+      ..limit(200);
+    return (await query.get()).map(_fromRow).toList(growable: false);
+  }
+
+  @override
   Future<void> saveInvoice(InvoiceEntity invoice) async {
     await _db.transaction(() => _saveInvoice(invoice));
   }
 
   @override
   Future<void> saveRemoteInvoice(InvoiceEntity invoice) async {
-    await _db.transaction(
-      () => _saveInvoice(
+    await _db.transaction(() async {
+      final existing = await (_db.select(
+        _db.invoices,
+      )..where((row) => row.id.equals(invoice.id))).getSingleOrNull();
+      if (existing != null && invoice.revision < existing.revision) return;
+      await _saveInvoice(
         invoice,
         enqueueSync: false,
         syncState: InvoiceSyncState.synced,
         revisionOverride: invoice.revision,
-      ),
-    );
+      );
+      await _discardRemoteOutbox(invoice.id, invoice.revision);
+    });
+  }
+
+  @override
+  Future<void> deleteRemoteInvoice(
+    String id, {
+    required int revision,
+    required DateTime updatedAt,
+    DateTime? deletedAt,
+  }) async {
+    if (id.trim().isEmpty || revision < 1) {
+      throw const FormatException('Invoice tombstone không hợp lệ.');
+    }
+    await _db.transaction(() async {
+      final existing = await (_db.select(
+        _db.invoices,
+      )..where((row) => row.id.equals(id))).getSingleOrNull();
+      if (existing != null && revision < existing.revision) return;
+      final tombstoneAt = deletedAt ?? updatedAt;
+      if (existing == null) {
+        await _db
+            .into(_db.invoices)
+            .insert(
+              InvoicesCompanion(
+                id: Value(id),
+                sellerName: const Value('Đã xóa'),
+                currencyCode: const Value('VND'),
+                subtotalMinor: const Value(0),
+                taxMinor: const Value(0),
+                totalMinor: const Value(0),
+                sourceType: const Value('manual'),
+                status: const Value('failed'),
+                searchText: const Value(''),
+                tagsJson: const Value('[]'),
+                createdAt: Value(updatedAt),
+                updatedAt: Value(updatedAt),
+                syncState: const Value('synced'),
+                revision: Value(revision),
+                deletedAt: Value(tombstoneAt),
+              ),
+            );
+      } else {
+        await (_db.update(
+          _db.invoices,
+        )..where((row) => row.id.equals(id))).write(
+          InvoicesCompanion(
+            updatedAt: Value(updatedAt),
+            sourceHash: const Value(null),
+            syncState: const Value('synced'),
+            revision: Value(revision),
+            deletedAt: Value(tombstoneAt),
+          ),
+        );
+      }
+      await (_db.delete(
+        _db.invoiceLines,
+      )..where((row) => row.invoiceId.equals(id))).go();
+      await (_db.delete(
+        _db.fieldEvidences,
+      )..where((row) => row.invoiceId.equals(id))).go();
+      await (_db.delete(
+        _db.invoiceConflicts,
+      )..where((row) => row.invoiceId.equals(id))).go();
+      await _discardRemoteOutbox(id, revision);
+    });
   }
 
   @override
@@ -393,9 +502,13 @@ class DriftInvoiceRepository implements InvoiceRepository {
   Future<void> deleteAllUserData() async {
     await _db.transaction(() async {
       await _db.delete(_db.extractionAttempts).go();
+      await _db.delete(_db.invoiceConflicts).go();
       await _db.delete(_db.invoices).go();
       await _db.delete(_db.budgets).go();
       await _db.delete(_db.merchantRules).go();
+      await (_db.delete(
+        _db.categories,
+      )..where((category) => category.isSystem.equals(false))).go();
       await _db.delete(_db.syncOutboxEvents).go();
       await _db.delete(_db.syncCursors).go();
       await _db.delete(_db.importJobs).go();
@@ -451,6 +564,9 @@ class DriftInvoiceRepository implements InvoiceRepository {
       await (_db.update(_db.invoices)
             ..where((row) => row.categoryId.equals(id)))
           .write(const InvoicesCompanion(categoryId: Value('other')));
+      await (_db.update(_db.invoiceLines)
+            ..where((row) => row.categoryId.equals(id)))
+          .write(const InvoiceLinesCompanion(categoryId: Value('other')));
       await (_db.delete(
         _db.budgets,
       )..where((row) => row.categoryId.equals(id))).go();
@@ -611,7 +727,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
               fieldName: item.fieldName,
               rawValue: item.rawValue,
               normalizedValue: item.normalizedValue,
-              source: InvoiceSourceType.values.byName(item.sourceType),
+              source: _sourceTypeFromName(item.sourceType),
               confidence: item.confidence,
               correctedByUser: item.correctedByUser,
             ),
@@ -636,7 +752,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
       subtotalMinor: row.subtotalMinor,
       taxMinor: row.taxMinor,
       totalMinor: row.totalMinor,
-      sourceType: InvoiceSourceType.values.byName(row.sourceType),
+      sourceType: _sourceTypeFromName(row.sourceType),
       sourceHash: row.sourceHash,
       status: InvoiceStatus.values.byName(row.status),
       categoryId: row.categoryId,
@@ -681,7 +797,12 @@ class DriftInvoiceRepository implements InvoiceRepository {
       query.where((row) => row.status.equals(filter.status!.name));
     }
     if (filter.sourceType != null) {
-      query.where((row) => row.sourceType.equals(filter.sourceType!.name));
+      final sourceName = filter.sourceType!.name;
+      query.where(
+        (row) => sourceName == InvoiceSourceType.imageOcr.name
+            ? row.sourceType.equals(sourceName) | row.sourceType.equals('qr')
+            : row.sourceType.equals(sourceName),
+      );
     }
     if (filter.minTotalMinor != null) {
       query.where(
@@ -698,6 +819,11 @@ class DriftInvoiceRepository implements InvoiceRepository {
       (row) => OrderingTerm.desc(row.id),
     ]);
     return query;
+  }
+
+  InvoiceSourceType _sourceTypeFromName(String name) {
+    if (name == 'qr') return InvoiceSourceType.imageOcr;
+    return InvoiceSourceType.values.byName(name);
   }
 
   Expression<bool> _dateInRange(
@@ -940,6 +1066,23 @@ class DriftInvoiceRepository implements InvoiceRepository {
         now: stored.updatedAt,
       );
     }
+  }
+
+  Future<void> _discardRemoteOutbox(String aggregateId, int revision) async {
+    await _db.customUpdate(
+      '''
+      DELETE FROM sync_outbox_events
+      WHERE aggregate_type = ?
+        AND aggregate_id = ?
+        AND revision <= ?
+      ''',
+      variables: [
+        Variable<String>('invoice'),
+        Variable<String>(aggregateId),
+        Variable<int>(revision),
+      ],
+      updates: {_db.syncOutboxEvents},
+    );
   }
 
   Future<void> _enqueueSync({

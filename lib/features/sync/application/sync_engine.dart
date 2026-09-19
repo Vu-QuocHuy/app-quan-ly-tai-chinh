@@ -16,7 +16,7 @@ class SyncRunResult {
 }
 
 class SyncEngine {
-  const SyncEngine({
+  SyncEngine({
     required DriftSyncOutboxStore store,
     required SyncIdentityProvider identity,
     required SyncGateway gateway,
@@ -27,10 +27,21 @@ class SyncEngine {
   final DriftSyncOutboxStore _store;
   final SyncIdentityProvider _identity;
   final SyncGateway _gateway;
+  Future<SyncRunResult>? _inFlight;
 
   bool get isConfigured => _gateway.isConfigured;
 
-  Future<SyncRunResult> runOnce({int batchSize = 50}) async {
+  Future<SyncRunResult> runOnce({int batchSize = 50}) {
+    final inFlight = _inFlight;
+    if (inFlight != null) return inFlight;
+    final operation = _runOnce(batchSize: batchSize);
+    _inFlight = operation;
+    return operation.whenComplete(() {
+      if (identical(_inFlight, operation)) _inFlight = null;
+    });
+  }
+
+  Future<SyncRunResult> _runOnce({required int batchSize}) async {
     if (!_gateway.isConfigured) {
       return const SyncRunResult(pushed: 0, failed: 0, configured: false);
     }
@@ -44,7 +55,7 @@ class SyncEngine {
     var pushed = 0;
     var failed = 0;
     for (final entry in entries) {
-      await _store.markSending(entry);
+      if (!await _store.markSending(entry)) continue;
       try {
         await _gateway.push(userId, entry);
         await _store.markSent(entry);

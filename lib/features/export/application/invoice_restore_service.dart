@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:crypto/crypto.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../invoices/domain/invoice_repository.dart';
 import 'encrypted_backup_service.dart';
@@ -43,6 +44,9 @@ class InvoiceRestoreService {
     );
     if (files.isEmpty) return null;
     final file = files.single;
+    if (await file.length() > AppConstants.maxImportBytes) {
+      throw const FormatException('Tệp backup vượt quá giới hạn 15 MB.');
+    }
     final existing = await repository.watchInvoiceSummaries().first;
     return previewBytes(
       bytes: await file.readAsBytes(),
@@ -67,6 +71,9 @@ class InvoiceRestoreService {
   }) async {
     if (bytes.isEmpty) {
       throw const FormatException('Không thể đọc nội dung tệp backup.');
+    }
+    if (bytes.length > AppConstants.maxImportBytes) {
+      throw const FormatException('Tệp backup vượt quá giới hạn 15 MB.');
     }
     String content;
     try {
@@ -98,6 +105,13 @@ class InvoiceRestoreService {
 }
 
 abstract final class InvoiceRestoreParser {
+  static const _maxSafeInteger = 9007199254740991;
+  static const _maxContentCharacters = AppConstants.maxImportBytes;
+  static const _maxInvoices = 5000;
+  static const _maxLinesPerInvoice = 200;
+  static const _maxEvidencePerInvoice = 200;
+  static const _maxTagsPerInvoice = 50;
+
   static InvoiceRestorePreview parse(
     String content, {
     required String fileName,
@@ -105,6 +119,9 @@ abstract final class InvoiceRestoreParser {
     Set<String> existingSourceHashes = const {},
     Set<String> categoryIds = const {},
   }) {
+    if (content.length > _maxContentCharacters) {
+      throw const FormatException('Tệp backup vượt quá giới hạn 15 MB.');
+    }
     final decoded = jsonDecode(content);
     if (decoded is! Map<String, Object?>) {
       throw const FormatException('Tệp JSON phải có cấu trúc object.');
@@ -122,9 +139,16 @@ abstract final class InvoiceRestoreParser {
     if (rawInvoices is! List) {
       throw const FormatException('Bản sao lưu không có danh sách hóa đơn.');
     }
+    if (rawInvoices.length > _maxInvoices) {
+      throw const FormatException(
+        'Bản sao lưu vượt quá 5.000 hóa đơn cho mỗi lần khôi phục.',
+      );
+    }
 
     final knownIds = {...existingIds};
     final knownHashes = {...existingSourceHashes};
+    final knownLineIds = <String>{};
+    final knownEvidenceIds = <String>{};
     final invoices = <InvoiceEntity>[];
     final issues = <String>[];
     var duplicates = 0;
@@ -143,8 +167,22 @@ abstract final class InvoiceRestoreParser {
           duplicates++;
           continue;
         }
+        final lineIds = invoice.lines.map((line) => line.id).toSet();
+        if (lineIds.length != invoice.lines.length ||
+            lineIds.any(knownLineIds.contains)) {
+          throw const FormatException('ID dòng hàng bị trùng trong backup.');
+        }
+        final evidenceIds = invoice.evidence.map((item) => item.id).toSet();
+        if (evidenceIds.length != invoice.evidence.length ||
+            evidenceIds.any(knownEvidenceIds.contains)) {
+          throw const FormatException(
+            'ID bằng chứng dữ liệu bị trùng trong backup.',
+          );
+        }
         knownIds.add(invoice.id);
         if (sourceHash != null) knownHashes.add(sourceHash);
+        knownLineIds.addAll(lineIds);
+        knownEvidenceIds.addAll(evidenceIds);
         invoices.add(invoice);
       } on Object catch (error) {
         invalid++;
@@ -199,36 +237,35 @@ abstract final class InvoiceRestoreParser {
       subtotalMinor: _requiredInt(map, 'subtotalMinor'),
       taxMinor: _requiredInt(map, 'taxMinor'),
       totalMinor: _requiredInt(map, 'totalMinor'),
-      sourceType: _enumValue(
-        InvoiceSourceType.values,
-        _requiredString(map, 'sourceType'),
-        'sourceType',
-      ),
+      sourceType: _invoiceSourceType(_requiredString(map, 'sourceType')),
       sourceHash: _optionalString(map, 'sourceHash'),
       status: _enumValue(
         InvoiceStatus.values,
         _requiredString(map, 'status'),
         'status',
       ),
-      categoryId:
-          categoryId == null ||
-              categoryIds.isEmpty ||
-              categoryIds.contains(categoryId)
-          ? categoryId
-          : 'other',
+      categoryId: _mapCategory(categoryId, categoryIds),
       notes: _optionalString(map, 'notes'),
       tags: _stringList(map['tags']),
       createdAt: _requiredDate(map, 'createdAt'),
       updatedAt: now,
       confirmedAt: _optionalDate(map, 'confirmedAt'),
-      lines: _lines(map['lines']),
+      lines: _lines(map['lines'], categoryIds),
       evidence: _evidence(map['evidence']),
     );
   }
 
-  static List<InvoiceLineEntity> _lines(Object? value) {
+  static List<InvoiceLineEntity> _lines(
+    Object? value,
+    Set<String> categoryIds,
+  ) {
     if (value == null) return const [];
     if (value is! List) throw const FormatException('lines không hợp lệ.');
+    if (value.length > _maxLinesPerInvoice) {
+      throw const FormatException(
+        'Một hóa đơn vượt quá 200 dòng hàng được hỗ trợ.',
+      );
+    }
     return value
         .map((raw) {
           if (raw is! Map<String, Object?>) {
@@ -241,15 +278,33 @@ abstract final class InvoiceRestoreParser {
             unitPriceMinor: _optionalInt(raw, 'unitPriceMinor'),
             taxRate: _optionalDouble(raw, 'taxRate'),
             totalMinor: _requiredInt(raw, 'totalMinor'),
+            categoryId: _mapCategory(
+              _optionalString(raw, 'categoryId'),
+              categoryIds,
+            ),
           );
         })
         .toList(growable: false);
+  }
+
+  static String? _mapCategory(String? categoryId, Set<String> categoryIds) {
+    if (categoryId == null ||
+        categoryIds.isEmpty ||
+        categoryIds.contains(categoryId)) {
+      return categoryId;
+    }
+    return 'other';
   }
 
   static List<FieldEvidenceEntity> _evidence(Object? value) {
     if (value == null) return const [];
     if (value is! List) {
       throw const FormatException('evidence không hợp lệ.');
+    }
+    if (value.length > _maxEvidencePerInvoice) {
+      throw const FormatException(
+        'Một hóa đơn vượt quá 200 bằng chứng dữ liệu được hỗ trợ.',
+      );
     }
     return value
         .map((raw) {
@@ -261,11 +316,7 @@ abstract final class InvoiceRestoreParser {
             fieldName: _requiredString(raw, 'fieldName'),
             rawValue: _optionalString(raw, 'rawValue'),
             normalizedValue: _requiredString(raw, 'normalizedValue'),
-            source: _enumValue(
-              InvoiceSourceType.values,
-              _requiredString(raw, 'source'),
-              'evidence.source',
-            ),
+            source: _invoiceSourceType(_requiredString(raw, 'source')),
             confidence: _requiredDouble(raw, 'confidence'),
             correctedByUser: raw['correctedByUser'] == true,
           );
@@ -290,20 +341,28 @@ abstract final class InvoiceRestoreParser {
   }
 
   static int _requiredInt(Map<String, Object?> map, String key) {
-    final value = map[key];
-    if (value is! num || !value.isFinite) {
+    final value = _safeInteger(map[key]);
+    if (value == null) {
       throw FormatException('$key không hợp lệ.');
     }
-    return value.toInt();
+    return value;
   }
 
   static int? _optionalInt(Map<String, Object?> map, String key) {
-    final value = map[key];
-    if (value == null) return null;
-    if (value is! num || !value.isFinite) {
+    final rawValue = map[key];
+    if (rawValue == null) return null;
+    final value = _safeInteger(rawValue);
+    if (value == null) {
       throw FormatException('$key không hợp lệ.');
     }
-    return value.toInt();
+    return value;
+  }
+
+  static int? _safeInteger(Object? value) {
+    if (value is! num || !value.isFinite || value != value.toInt()) {
+      return null;
+    }
+    return value.abs() <= _maxSafeInteger ? value.toInt() : null;
   }
 
   static double _requiredDouble(Map<String, Object?> map, String key) {
@@ -343,6 +402,9 @@ abstract final class InvoiceRestoreParser {
     if (value is! List || value.any((item) => item is! String)) {
       throw const FormatException('tags không hợp lệ.');
     }
+    if (value.length > _maxTagsPerInvoice) {
+      throw const FormatException('Một hóa đơn vượt quá 50 thẻ được hỗ trợ.');
+    }
     return value.cast<String>().toList(growable: false);
   }
 
@@ -355,6 +417,11 @@ abstract final class InvoiceRestoreParser {
       if (value.name == name) return value;
     }
     throw FormatException('$field không được hỗ trợ: $name.');
+  }
+
+  static InvoiceSourceType _invoiceSourceType(String name) {
+    if (name == 'qr') return InvoiceSourceType.imageOcr;
+    return _enumValue(InvoiceSourceType.values, name, 'sourceType');
   }
 
   static String _message(Object error) {

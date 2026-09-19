@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-enum InvoiceSourceType { xml, pdfText, qr, imageOcr, manual }
+enum InvoiceSourceType { xml, pdfText, imageOcr, manual }
 
 enum InvoiceStatus {
   queued,

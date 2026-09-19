@@ -43,7 +43,10 @@ void main() {
         ),
       ],
       onProgress: progress.add,
-      onOutcome: (job, _) async => events.add('saved:${job.fileName}'),
+      onOutcome: (job, _) async {
+        events.add('saved:${job.fileName}');
+        return ImportQueueDecision.completed;
+      },
     );
 
     expect(events, [
@@ -93,12 +96,71 @@ void main() {
         ),
       ],
       onProgress: (_) {},
-      onOutcome: (_, _) async {},
+      onOutcome: (_, _) async => ImportQueueDecision.completed,
     );
 
     expect(events, ['first']);
     expect(summary.cancelled, isTrue);
     expect(summary.succeeded, 1);
+  });
+
+  test('tracks deferred review decisions separately from failures', () async {
+    final events = <String>[];
+    final queue = ImportQueueController();
+    final outcome = ImportOutcome(
+      result: ExtractionResult(
+        invoice: _invoice(),
+        adapterName: 'test',
+        adapterVersion: '1.0.0',
+      ),
+    );
+
+    final summary = await queue.run(
+      jobs: [
+        ImportQueueJob(
+          fileName: 'review.xml',
+          operation: () async => outcome,
+          onDeferred: () async => events.add('deferred'),
+        ),
+      ],
+      onProgress: (_) {},
+      onOutcome: (_, _) async => ImportQueueDecision.deferred,
+    );
+
+    expect(events, ['deferred']);
+    expect(summary.succeeded, 0);
+    expect(summary.deferred, 1);
+    expect(summary.failed, 0);
+  });
+
+  test('ignores observer callback failures and completes the queue', () async {
+    final queue = ImportQueueController();
+    final summary = await queue.run(
+      jobs: [
+        ImportQueueJob(
+          fileName: 'broken.xml',
+          operation: () async => throw StateError('bad xml'),
+        ),
+        ImportQueueJob(
+          fileName: 'ok.xml',
+          operation: () async => ImportOutcome(
+            result: ExtractionResult(
+              invoice: _invoice(),
+              adapterName: 'test',
+              adapterVersion: '1.0.0',
+            ),
+          ),
+        ),
+      ],
+      onProgress: (_) => throw StateError('widget disposed'),
+      onFailure: (_) => throw StateError('snackbar disposed'),
+      onOutcome: (_, _) async => ImportQueueDecision.completed,
+    );
+
+    expect(summary.total, 2);
+    expect(summary.succeeded, 1);
+    expect(summary.failed, 1);
+    expect(queue.isRunning, isFalse);
   });
 }
 
