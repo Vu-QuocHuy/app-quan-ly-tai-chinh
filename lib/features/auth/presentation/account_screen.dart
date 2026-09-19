@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/theme/app_tokens.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/local_database_scope.dart';
 import '../../../core/providers/app_providers.dart';
@@ -36,6 +37,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   bool _registering = false;
   bool _busy = false;
   bool _obscurePassword = true;
+  String? _verificationEmail;
   String? _message;
   bool _messageIsError = false;
 
@@ -59,7 +61,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.gutter,
+                AppSpacing.xl,
+                AppSpacing.gutter,
+                AppSpacing.xxl,
+              ),
               children: [
                 if (client == null)
                   const _ConfigurationMissingCard()
@@ -88,161 +95,245 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   Widget _buildAuthForm(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Form(
       key: _formKey,
       autovalidateMode: AutovalidateMode.onUserInteraction,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(
-            Icons.cloud_sync_outlined,
-            size: 48,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _registering ? 'Tạo tài khoản' : 'Đăng nhập Supabase',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Đăng nhập hoặc tạo tài khoản để sử dụng ứng dụng và đồng bộ dữ liệu an toàn.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 24),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(
-                value: false,
-                icon: Icon(Icons.login),
-                label: Text('Đăng nhập'),
+          Center(
+            child: DecoratedBox(
+              decoration: ShapeDecoration(
+                color: scheme.primaryContainer,
+                shape: AppShapes.card,
               ),
-              ButtonSegment(
-                value: true,
-                icon: Icon(Icons.person_add_alt_1_outlined),
-                label: Text('Đăng ký'),
-              ),
-            ],
-            selected: {_registering},
-            onSelectionChanged: _busy
-                ? null
-                : (selection) {
-                    setState(() {
-                      _registering = selection.first;
-                      _message = null;
-                    });
-                  },
-          ),
-          const SizedBox(height: 20),
-          if (_message != null) ...[
-            Semantics(
-              liveRegion: true,
-              child: _StatusCard(
-                icon: _messageIsError
-                    ? Icons.error_outline
-                    : Icons.mark_email_read_outlined,
-                title: _messageIsError ? 'Có lỗi xảy ra' : 'Đã xử lý',
-                message: _message!,
-                isError: _messageIsError,
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-          TextFormField(
-            controller: _emailController,
-            enabled: !_busy,
-            keyboardType: TextInputType.emailAddress,
-            textInputAction: TextInputAction.next,
-            autofillHints: const [AutofillHints.email],
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              hintText: 'ban@example.com',
-              prefixIcon: Icon(Icons.email_outlined),
-            ),
-            validator: AuthValidators.email,
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _passwordController,
-            enabled: !_busy,
-            obscureText: _obscurePassword,
-            textInputAction: _registering
-                ? TextInputAction.next
-                : TextInputAction.done,
-            autofillHints: [
-              _registering ? AutofillHints.newPassword : AutofillHints.password,
-            ],
-            onFieldSubmitted: _registering || _busy ? null : (_) => _submit(),
-            decoration: InputDecoration(
-              labelText: 'Mật khẩu',
-              helperText: _registering ? 'Dùng ít nhất 8 ký tự.' : null,
-              prefixIcon: const Icon(Icons.lock_outline),
-              suffixIcon: IconButton(
-                tooltip: _obscurePassword ? 'Hiện mật khẩu' : 'Ẩn mật khẩu',
-                onPressed: _busy
-                    ? null
-                    : () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
-                icon: Icon(
-                  _obscurePassword
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
+              child: SizedBox(
+                width: 72,
+                height: 72,
+                child: Icon(
+                  Icons.cloud_sync_outlined,
+                  size: 36,
+                  color: scheme.onPrimaryContainer,
                 ),
               ),
             ),
-            validator: (value) {
-              if (value == null || value.isEmpty) return 'Hãy nhập mật khẩu.';
-              if (_registering && value.length < 8) {
-                return 'Mật khẩu cần ít nhất 8 ký tự.';
-              }
-              return null;
-            },
           ),
-          if (!_registering)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: _busy ? null : _sendPasswordReset,
-                child: const Text('Quên mật khẩu?'),
-              ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            'Đồng bộ chi tiêu an toàn',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.headlineSmall,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Dữ liệu vẫn được lưu trên thiết bị và sẽ đồng bộ với cloud khi bạn đăng nhập.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
             ),
-          if (_registering) ...[
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _confirmationController,
-              enabled: !_busy,
-              obscureText: _obscurePassword,
-              textInputAction: TextInputAction.done,
-              autofillHints: const [AutofillHints.newPassword],
-              onFieldSubmitted: _busy ? null : (_) => _submit(),
-              decoration: const InputDecoration(
-                labelText: 'Nhập lại mật khẩu',
-                prefixIcon: Icon(Icons.lock_reset_outlined),
-              ),
-              validator: (value) => value != _passwordController.text
-                  ? 'Hai mật khẩu chưa khớp.'
-                  : null,
-            ),
-          ],
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: _busy ? null : _submit,
-            icon: _busy
-                ? const ButtonSpinner()
-                : Icon(
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
                     _registering
-                        ? Icons.person_add_alt_1_outlined
-                        : Icons.login,
+                        ? 'Tạo tài khoản mới'
+                        : 'Chào mừng bạn trở lại',
+                    style: theme.textTheme.titleLarge,
                   ),
-            label: Text(_registering ? 'Tạo tài khoản' : 'Đăng nhập'),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    _registering
+                        ? 'Dùng email để lưu và đồng bộ dữ liệu của riêng bạn.'
+                        : 'Đăng nhập để tiếp tục quản lý chi tiêu của bạn.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Semantics(
+                    container: true,
+                    label: 'Chọn đăng nhập hoặc đăng ký',
+                    child: SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                          value: false,
+                          icon: Icon(Icons.login),
+                          label: Text('Đăng nhập'),
+                        ),
+                        ButtonSegment(
+                          value: true,
+                          icon: Icon(Icons.person_add_alt_1_outlined),
+                          label: Text('Đăng ký'),
+                        ),
+                      ],
+                      selected: {_registering},
+                      onSelectionChanged: _busy
+                          ? null
+                          : (selection) {
+                              setState(() {
+                                _registering = selection.first;
+                                _verificationEmail = null;
+                                _message = null;
+                              });
+                            },
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  if (_message != null) ...[
+                    Semantics(
+                      liveRegion: true,
+                      child: _StatusCard(
+                        icon: _messageIsError
+                            ? Icons.error_outline
+                            : Icons.mark_email_read_outlined,
+                        title: _messageIsError ? 'Có lỗi xảy ra' : 'Đã xử lý',
+                        message: _message!,
+                        isError: _messageIsError,
+                        actionLabel: _verificationEmail == null
+                            ? null
+                            : 'Gửi lại email xác nhận',
+                        onAction: _verificationEmail == null
+                            ? null
+                            : _resendSignupConfirmation,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                  ],
+                  TextFormField(
+                    controller: _emailController,
+                    enabled: !_busy,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    textCapitalization: TextCapitalization.none,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    autofillHints: const [AutofillHints.email],
+                    decoration: const InputDecoration(
+                      labelText: 'Email',
+                      hintText: 'ban@example.com',
+                      prefixIcon: Icon(Icons.email_outlined),
+                    ),
+                    validator: AuthValidators.email,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  TextFormField(
+                    controller: _passwordController,
+                    enabled: !_busy,
+                    obscureText: _obscurePassword,
+                    textInputAction: _registering
+                        ? TextInputAction.next
+                        : TextInputAction.done,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    autofillHints: [
+                      _registering
+                          ? AutofillHints.newPassword
+                          : AutofillHints.password,
+                    ],
+                    onFieldSubmitted: _registering || _busy
+                        ? null
+                        : (_) => _submit(),
+                    decoration: InputDecoration(
+                      labelText: 'Mật khẩu',
+                      helperText: _registering
+                          ? 'Tối thiểu 8 ký tự. Bạn có thể dùng trình quản lý mật khẩu.'
+                          : null,
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        tooltip: _obscurePassword
+                            ? 'Hiện mật khẩu'
+                            : 'Ẩn mật khẩu',
+                        onPressed: _busy
+                            ? null
+                            : () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Hãy nhập mật khẩu.';
+                      }
+                      if (_registering && value.length < 8) {
+                        return 'Mật khẩu cần ít nhất 8 ký tự.';
+                      }
+                      return null;
+                    },
+                  ),
+                  if (!_registering)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _busy ? null : _sendPasswordReset,
+                        child: const Text('Quên mật khẩu?'),
+                      ),
+                    ),
+                  if (_registering) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    TextFormField(
+                      controller: _confirmationController,
+                      enabled: !_busy,
+                      obscureText: _obscurePassword,
+                      textInputAction: TextInputAction.done,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      autofillHints: const [AutofillHints.newPassword],
+                      onFieldSubmitted: _busy ? null : (_) => _submit(),
+                      decoration: const InputDecoration(
+                        labelText: 'Nhập lại mật khẩu',
+                        prefixIcon: Icon(Icons.lock_reset_outlined),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Hãy nhập lại mật khẩu.';
+                        }
+                        return value != _passwordController.text
+                            ? 'Hai mật khẩu chưa khớp.'
+                            : null;
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.xl),
+                  FilledButton.icon(
+                    onPressed: _busy ? null : _submit,
+                    icon: _busy
+                        ? const ButtonSpinner()
+                        : Icon(
+                            _registering
+                                ? Icons.person_add_alt_1_outlined
+                                : Icons.login,
+                          ),
+                    label: Text(_registering ? 'Tạo tài khoản' : 'Đăng nhập'),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _signInWithGoogle,
+                    icon: const Icon(Icons.account_circle_outlined),
+                    label: const Text('Tiếp tục với Google'),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _signInWithGoogle,
-            icon: const Icon(Icons.account_circle_outlined),
-            label: const Text('Tiếp tục với Google'),
+          const SizedBox(height: AppSpacing.lg),
+          const AppCallout(
+            tone: CalloutTone.neutral,
+            icon: Icons.security_outlined,
+            title: 'Lưu trên máy, đồng bộ cloud',
+            message:
+                'Ứng dụng ưu tiên lưu dữ liệu trên thiết bị. Khi có mạng, các thay đổi sẽ được đồng bộ an toàn với tài khoản của bạn.',
           ),
         ],
       ),
@@ -259,10 +350,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           title: 'Đã kết nối Supabase',
           message: user.email ?? 'Tài khoản ${user.id}',
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         _buildIdentitySection(context),
         if (_message != null) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           Semantics(
             liveRegion: true,
             child: _StatusCard(
@@ -275,25 +366,38 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             ),
           ),
         ],
-        const SizedBox(height: 24),
+        const SizedBox(height: AppSpacing.xxl),
+        _SectionHeading(
+          icon: Icons.cloud_sync_outlined,
+          title: 'Dữ liệu và đồng bộ',
+          message:
+              'Đẩy thay đổi đang chờ lên cloud hoặc tải thay đổi mới về máy.',
+        ),
+        const SizedBox(height: AppSpacing.md),
         FilledButton.icon(
           onPressed: _busy ? null : _syncNow,
           icon: _busy ? const ButtonSpinner() : const Icon(Icons.sync),
           label: const Text('Đồng bộ ngay'),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.xxl),
+        _SectionHeading(
+          icon: Icons.shield_outlined,
+          title: 'Bảo mật tài khoản',
+          message: 'Quản lý mật khẩu, phiên đăng nhập và dữ liệu cloud.',
+        ),
+        const SizedBox(height: AppSpacing.md),
         OutlinedButton.icon(
           onPressed: _busy ? null : _changePassword,
           icon: const Icon(Icons.lock_reset_outlined),
           label: const Text('Đổi mật khẩu'),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.sm),
         OutlinedButton.icon(
           onPressed: _busy ? null : _signOut,
           icon: const Icon(Icons.logout),
           label: const Text('Đăng xuất'),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.sm),
         OutlinedButton.icon(
           onPressed: _busy ? null : _deleteAccount,
           style: OutlinedButton.styleFrom(
@@ -303,7 +407,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           icon: const Icon(Icons.delete_forever_outlined),
           label: const Text('Xóa tài khoản'),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         Text(
           'Đăng xuất không xóa dữ liệu đang lưu trên thiết bị. Xóa tài khoản sẽ xóa dữ liệu cloud và dữ liệu local liên quan.',
           textAlign: TextAlign.center,
@@ -401,9 +505,11 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     if (_formKey.currentState?.validate() != true) return;
     final auth = ref.read(supabaseAuthServiceProvider);
     if (auth == null) return;
+    final email = _emailController.text.trim();
     setState(() {
       _busy = true;
       _message = null;
+      _verificationEmail = null;
     });
     try {
       if (_registering) {
@@ -414,8 +520,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         if (!mounted) return;
         setState(() {
           _messageIsError = false;
+          _verificationEmail = response.session == null ? email : null;
           _message = response.session == null
-              ? 'Hãy kiểm tra email để xác nhận tài khoản, sau đó đăng nhập.'
+              ? 'Hãy kiểm tra email để xác nhận tài khoản, sau đó quay lại đăng nhập.'
               : 'Tài khoản đã được tạo và đăng nhập.';
         });
         if (response.session != null) await _runSync();
@@ -588,6 +695,46 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         _message = 'Đã gửi email khôi phục mật khẩu. Hãy kiểm tra hộp thư.';
       });
     } on AuthException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = true;
+        _message = friendlyMessage(error);
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _resendSignupConfirmation() async {
+    final email = (_verificationEmail ?? _emailController.text).trim();
+    if (AuthValidators.email(email) != null) {
+      setState(() {
+        _messageIsError = true;
+        _message = 'Hãy nhập lại email hợp lệ để gửi email xác nhận.';
+      });
+      return;
+    }
+    final auth = ref.read(supabaseAuthServiceProvider);
+    if (auth == null) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      await auth.resendSignupConfirmation(email);
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = false;
+        _verificationEmail = email;
+        _message = 'Đã gửi lại email xác nhận. Hãy kiểm tra cả thư mục spam.';
+      });
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = true;
+        _message = friendlyMessage(error);
+      });
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
@@ -958,47 +1105,79 @@ class _StatusCard extends StatelessWidget {
     required this.title,
     required this.message,
     this.isError = false,
+    this.actionLabel,
+    this.onAction,
   });
 
   final IconData icon;
   final String title;
   final String message;
   final bool isError;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final foreground = isError
-        ? colors.onErrorContainer
-        : colors.onPrimaryContainer;
-    return Card(
-      color: isError ? colors.errorContainer : colors.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: foreground),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: foreground,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(message, style: TextStyle(color: foreground)),
-                ],
+        ? Theme.of(context).colorScheme.onErrorContainer
+        : Theme.of(context).colorScheme.onSecondaryContainer;
+    return AppCallout(
+      icon: icon,
+      title: title,
+      message: message,
+      tone: isError ? CalloutTone.danger : CalloutTone.info,
+      actions: onAction == null
+          ? const []
+          : [
+              TextButton(
+                onPressed: onAction,
+                style: TextButton.styleFrom(foregroundColor: foreground),
+                child: Text(actionLabel!),
               ),
+            ],
+    );
+  }
+}
+
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: theme.colorScheme.primary),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Semantics(
+            container: true,
+            header: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: theme.textTheme.titleMedium),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  message,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

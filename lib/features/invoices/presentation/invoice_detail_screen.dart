@@ -11,6 +11,7 @@ import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/widgets/app_error_state.dart';
 import '../../../shared/widgets/app_empty_state.dart';
+import '../../sharing/presentation/invoice_share_dialog.dart';
 
 class InvoiceDetailScreen extends ConsumerWidget {
   const InvoiceDetailScreen({required this.invoiceId, super.key});
@@ -33,6 +34,12 @@ class InvoiceDetailScreen extends ConsumerWidget {
               onPressed: () => context.push('/review', extra: invoice),
               icon: const Icon(Icons.edit_outlined),
             ),
+            if (ref.watch(sharedBillServiceProvider) != null)
+              IconButton(
+                tooltip: 'Chia sẻ hóa đơn',
+                onPressed: () => _shareInvoice(context, ref, invoice),
+                icon: const Icon(Icons.share_outlined),
+              ),
             IconButton(
               tooltip: 'Xóa hóa đơn',
               onPressed: () => _deleteInvoice(context, ref, invoice),
@@ -67,6 +74,20 @@ class InvoiceDetailScreen extends ConsumerWidget {
         ),
       },
     );
+  }
+
+  Future<void> _shareInvoice(
+    BuildContext context,
+    WidgetRef ref,
+    InvoiceEntity invoice,
+  ) async {
+    final shared = await showInvoiceShareDialog(context, invoice);
+    if (shared != true || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Đã tạo chia sẻ hóa đơn trên cloud.')),
+    );
+    ref.invalidate(directBillSharesProvider);
+    ref.invalidate(expenseGroupsProvider);
   }
 
   Future<void> _deleteInvoice(

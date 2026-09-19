@@ -11,6 +11,7 @@
 - [x] Link đúng project staging/production bằng `supabase link --project-ref ...`.
 - [x] Chạy `supabase db push` và `supabase db lint --linked`.
 - [ ] Kiểm tra toàn bộ migration mới trong SQL Editor.
+- [ ] Apply và kiểm tra `20260918160000_bill_sharing.sql`: RPC chia sẻ team/direct, RLS snapshot và quyền thu hồi.
 - [ ] Kiểm tra RLS, private Storage và quyền `authenticated`/`service_role` trên các bảng và RPC.
 - [x] Deploy `ai-api`, `ai-worker`, `delete-account` và `health`.
 - [ ] Đặt `GEMINI_API_KEY`, `AI_WORKER_SECRET` và `HEALTHCHECK_SECRET` bằng Supabase Secrets.
@@ -42,6 +43,8 @@
 - [ ] Import ảnh OCR offline trên Android/iOS; kiểm tra job lỗi, retry và process restart.
 - [ ] Tạo backup mã hóa, upload/download/restore/delete và kiểm tra retention.
 - [ ] Tạo nhóm, chia đều/chia tùy chỉnh, settle, chuyển owner rồi xóa tài khoản owner.
+- [ ] Tạo chia sẻ hóa đơn vào team; kiểm tra thành viên chỉ thấy snapshot đã chia sẻ và phần chia khớp tổng tiền.
+- [ ] Gửi direct share tới tài khoản staging khác; kiểm tra pending/accept/decline/revoke và email chưa đăng ký.
 - [ ] Đăng nhập hai tài khoản staging trên hai thiết bị và kiểm tra sync, tombstone, conflict.
 - [ ] Gửi câu hỏi chatbot local và online; xác nhận dữ liệu invoice-level không bị gửi ra ngoài khi không cần.
 - [ ] Kiểm tra notification ngân sách, deep link và không còn notification sau sign-out.

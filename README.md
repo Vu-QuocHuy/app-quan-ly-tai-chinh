@@ -13,6 +13,7 @@
 - Câu trả lời từ dữ liệu local không gọi Gemini. Khi cần Gemini, client và Edge Function chỉ cho phép facts tổng hợp, loại bỏ invoice ID/merchant/kết quả tìm kiếm và ẩn thông tin định danh trong câu hỏi/lịch sử.
 - Connector tỷ giá chỉ gọi provider allowlist ở backend, có timeout và hiển thị nguồn cập nhật.
 - Nhóm chi tiêu dùng Supabase RLS: tạo/tham gia bằng mã mời, chia đều/theo số tiền/theo phần trăm, OCR hóa đơn để gán từng dòng cho thành viên và ghi nhận tất toán.
+- Có thể chia sẻ hóa đơn cá nhân vào team hoặc cho tài khoản khác bằng snapshot tối thiểu; hóa đơn gốc không bị công khai. Chia sẻ trực tiếp có hộp thư chờ chấp nhận và hỗ trợ thu hồi.
 
 ## Chạy app một lượt
 
@@ -51,6 +52,9 @@ cursor delta có tombstone.
 
 Checklist deploy staging/production nằm tại
 `docs/PRODUCTION_RELEASE_CHECKLIST.md`; không đưa secret vào file hoặc Git.
+
+Migration `20260918160000_bill_sharing.sql` bổ sung RPC/RLS cho chia sẻ hóa đơn;
+cần chạy `supabase db push` trước khi bật nút **Chia sẻ hóa đơn** ở production.
 
 Trên Android/iOS, app đăng ký tác vụ nền định kỳ khoảng 15 phút với ràng buộc có
 mạng và đủ bộ nhớ để đồng bộ outbox/pull dữ liệu và kiểm tra cảnh báo ngân sách.

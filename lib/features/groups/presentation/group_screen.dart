@@ -13,6 +13,7 @@ import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 import '../../../shared/widgets/app_empty_state.dart';
 import '../../invoices/domain/invoice_models.dart';
+import '../../sharing/domain/shared_bill_models.dart';
 import '../data/group_service.dart';
 import '../domain/group_balance_calculator.dart';
 import '../domain/group_models.dart';
@@ -59,6 +60,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
               child: _buildActions(context, service),
             ),
           ),
+          if (service != null)
+            const SliverToBoxAdapter(child: _DirectShareInbox()),
           if (service == null)
             const SliverFillRemaining(
               hasScrollBody: false,
@@ -180,6 +183,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
             onAddExpense: () => _addExpense(details),
             onAddReceipt: () => _addReceipt(details),
             onSettle: _settleShare,
+            onEditExpense: (expense) => _editExpense(details, expense),
+            onDeleteExpense: _deleteExpense,
             onSetMemberRole: (userId, role) =>
                 _setMemberRole(details.group.id, userId, role),
             onRemoveMember: (userId, displayName) =>
@@ -297,6 +302,42 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   Future<void> _settleShare(String expenseId) async {
     await _runGroupAction(() async {
       await ref.read(expenseGroupServiceProvider)!.settleMyShare(expenseId);
+      _reloadDetails();
+    });
+  }
+
+  Future<void> _editExpense(GroupDetails details, GroupExpense expense) async {
+    final draft = await showDialog<_NewExpenseDraft>(
+      context: context,
+      builder: (context) =>
+          _NewExpenseDialog(members: details.members, initialExpense: expense),
+    );
+    if (draft == null || !mounted) return;
+    await _runGroupAction(() async {
+      await ref
+          .read(expenseGroupServiceProvider)!
+          .updateCustomExpense(
+            expenseId: expense.id,
+            description: draft.description,
+            totalMinor: draft.totalMinor,
+            splitAmounts: draft.splitAmounts!,
+          );
+      _reloadDetails();
+    });
+  }
+
+  Future<void> _deleteExpense(GroupExpense expense) async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Xóa khoản chi?',
+      message: '“${expense.description}” sẽ bị xóa khỏi nhóm.',
+      confirmLabel: 'Xóa khoản chi',
+      icon: Icons.delete_outline,
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    await _runGroupAction(() async {
+      await ref.read(expenseGroupServiceProvider)!.deleteExpense(expense.id);
       _reloadDetails();
     });
   }
@@ -455,6 +496,8 @@ class _GroupDetails extends StatelessWidget {
     required this.onAddExpense,
     required this.onAddReceipt,
     required this.onSettle,
+    required this.onEditExpense,
+    required this.onDeleteExpense,
     required this.onSetMemberRole,
     required this.onRemoveMember,
     required this.onLeaveGroup,
@@ -466,6 +509,8 @@ class _GroupDetails extends StatelessWidget {
   final VoidCallback onAddExpense;
   final VoidCallback onAddReceipt;
   final Future<void> Function(String expenseId) onSettle;
+  final Future<void> Function(GroupExpense expense) onEditExpense;
+  final Future<void> Function(GroupExpense expense) onDeleteExpense;
   final Future<void> Function(String userId, String role) onSetMemberRole;
   final Future<void> Function(String userId, String displayName) onRemoveMember;
   final VoidCallback onLeaveGroup;
@@ -571,6 +616,11 @@ class _GroupDetails extends StatelessWidget {
             names: names,
             currentUserId: currentUserId,
             onSettle: onSettle,
+            canManage:
+                expense.payerId == currentUserId ||
+                details.group.ownerId == currentUserId,
+            onEdit: () => onEditExpense(expense),
+            onDelete: () => onDeleteExpense(expense),
           ),
         if (details.auditEvents.isNotEmpty) ...[
           const SizedBox(height: 20),
@@ -602,6 +652,8 @@ class _GroupDetails extends StatelessWidget {
       'member_removed' => '$actor đã xóa một thành viên',
       'member_left' => '$actor đã rời nhóm',
       'expense_created' => '$actor đã thêm khoản chi',
+      'expense_updated' => '$actor đã sửa khoản chi',
+      'expense_deleted' => '$actor đã xóa khoản chi',
       'expense_settled' => '$actor đã xác nhận phần chia',
       _ => 'Có hoạt động mới trong nhóm',
     };
@@ -628,6 +680,311 @@ class _GroupDetails extends StatelessWidget {
     return amount > 0
         ? 'được nhận ${MoneyFormatter.format(amount)}'
         : 'cần trả ${MoneyFormatter.format(-amount)}';
+  }
+}
+
+class _DirectShareInbox extends ConsumerWidget {
+  const _DirectShareInbox();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final shares = ref.watch(directBillSharesProvider);
+    return shares.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: LinearProgressIndicator(),
+      ),
+      error: (error, _) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: AppCallout(
+          tone: CalloutTone.warning,
+          message: 'Không tải được hộp thư chia sẻ: ${friendlyMessage(error)}',
+        ),
+      ),
+      data: (items) {
+        final service = ref.read(sharedBillServiceProvider);
+        if (service == null) return const SizedBox.shrink();
+        final visible = items
+            .where(
+              (item) => item.status == 'pending' || item.status == 'accepted',
+            )
+            .take(5)
+            .toList(growable: false);
+        if (visible.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Card(
+            color: Theme.of(context).colorScheme.tertiaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Hộp thư chia sẻ',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  for (final share in visible)
+                    _DirectShareTile(
+                      share: share,
+                      currentUserId: service.currentUserId,
+                      onView: () => _showShareDetails(context, share),
+                      onSaveToPersonal: () =>
+                          _saveShareToPersonalLedger(context, ref, share),
+                      onRespond: (action) async {
+                        try {
+                          if (action == 'revoke') {
+                            final confirmed = await showConfirmDialog(
+                              context,
+                              title: 'Thu hồi chia sẻ?',
+                              message:
+                                  'Người nhận sẽ không còn được xem hóa đơn này.',
+                              confirmLabel: 'Thu hồi',
+                              destructive: true,
+                              icon: Icons.link_off_outlined,
+                            );
+                            if (!confirmed || !context.mounted) return;
+                          }
+                          await service.respondToDirectShare(
+                            shareId: share.id,
+                            action: action,
+                          );
+                          ref.invalidate(directBillSharesProvider);
+                        } on Object catch (error) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(friendlyMessage(error))),
+                          );
+                        }
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showShareDetails(BuildContext context, DirectBillShare share) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(share.snapshot.sellerName),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (share.snapshot.invoiceNumber != null)
+                  Text('Số hóa đơn: ${share.snapshot.invoiceNumber}'),
+                if (share.snapshot.issuedAt != null)
+                  Text('Ngày: ${_formatShareDate(share.snapshot.issuedAt!)}'),
+                const SizedBox(height: 12),
+                for (final line in share.snapshot.lines)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text(line.description),
+                    trailing: Text(MoneyFormatter.format(line.totalMinor)),
+                  ),
+                const Divider(),
+                _shareMoneyRow('Tổng hóa đơn', share.totalMinor),
+                _shareMoneyRow('Phần của bạn', share.recipientAmountMinor),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveShareToPersonalLedger(
+    BuildContext context,
+    WidgetRef ref,
+    DirectBillShare share,
+  ) async {
+    final sourceHash = 'direct-share:${share.id}';
+    final repository = ref.read(invoiceRepositoryProvider);
+    try {
+      final existing = await repository.findBySourceHash(sourceHash);
+      if (existing != null) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Phần chi này đã có trong chi tiêu cá nhân.'),
+          ),
+        );
+        return;
+      }
+      final now = DateTime.now();
+      final seller = share.snapshot.sellerName.trim();
+      await repository.saveInvoice(
+        InvoiceEntity(
+          id: 'direct-share-${share.id}',
+          sellerName: seller.length <= 180 ? seller : seller.substring(0, 180),
+          sellerTaxCode: share.snapshot.sellerTaxCode,
+          invoiceNumber: share.snapshot.invoiceNumber,
+          issuedAt: share.snapshot.issuedAt ?? share.acceptedAt ?? now,
+          currencyCode: share.snapshot.currencyCode,
+          subtotalMinor: share.recipientAmountMinor,
+          taxMinor: 0,
+          totalMinor: share.recipientAmountMinor,
+          sourceType: InvoiceSourceType.manual,
+          sourceHash: sourceHash,
+          status: InvoiceStatus.confirmed,
+          notes: 'Khoản chi được chia sẻ trong hệ thống.',
+          tags: const ['chia-se'],
+          createdAt: now,
+          updatedAt: now,
+          confirmedAt: now,
+          lines: [
+            InvoiceLineEntity(
+              id: 'direct-share-line-${share.id}',
+              description: 'Phần chi được chia sẻ',
+              totalMinor: share.recipientAmountMinor,
+            ),
+          ],
+        ),
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Đã lưu phần chi vào chi tiêu cá nhân. Sẽ đồng bộ lên cloud.',
+          ),
+        ),
+      );
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(friendlyMessage(error))));
+    }
+  }
+
+  Widget _shareMoneyRow(String label, int value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          Text(MoneyFormatter.format(value)),
+        ],
+      ),
+    );
+  }
+
+  String _formatShareDate(DateTime value) {
+    final local = value.toLocal();
+    return '${local.day.toString().padLeft(2, '0')}/'
+        '${local.month.toString().padLeft(2, '0')}/${local.year}';
+  }
+}
+
+class _DirectShareTile extends StatelessWidget {
+  const _DirectShareTile({
+    required this.share,
+    required this.currentUserId,
+    required this.onView,
+    required this.onSaveToPersonal,
+    required this.onRespond,
+  });
+
+  final DirectBillShare share;
+  final String currentUserId;
+  final VoidCallback onView;
+  final Future<void> Function() onSaveToPersonal;
+  final Future<void> Function(String action) onRespond;
+
+  @override
+  Widget build(BuildContext context) {
+    final incoming = share.ownerId != currentUserId;
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: .7),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                share.snapshot.sellerName,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                incoming
+                    ? 'Người gửi chia phần của bạn: ${MoneyFormatter.format(share.recipientAmountMinor)}'
+                    : share.isPending
+                    ? 'Đang chờ ${share.recipientEmail} chấp nhận'
+                    : 'Đã chia sẻ cho ${share.recipientEmail}',
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: onView,
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: const Text('Xem chi tiết'),
+                ),
+              ),
+              if (incoming && share.isPending)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => onRespond('decline'),
+                      child: const Text('Từ chối'),
+                    ),
+                    FilledButton.tonal(
+                      onPressed: () => onRespond('accept'),
+                      child: const Text('Chấp nhận'),
+                    ),
+                  ],
+                )
+              else if (share.isAccepted && incoming)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const Chip(
+                      avatar: Icon(Icons.check, size: 16),
+                      label: Text('Đã chấp nhận'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.tonalIcon(
+                      onPressed: onSaveToPersonal,
+                      icon: const Icon(Icons.add_card_outlined),
+                      label: const Text('Lưu vào chi tiêu'),
+                    ),
+                  ],
+                )
+              else if (!incoming && (share.isPending || share.isAccepted))
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => onRespond('revoke'),
+                    icon: const Icon(Icons.link_off_outlined),
+                    label: const Text('Thu hồi'),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -738,12 +1095,18 @@ class _ExpenseCard extends StatelessWidget {
     required this.names,
     required this.currentUserId,
     required this.onSettle,
+    required this.canManage,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   final GroupExpense expense;
   final Map<String, String> names;
   final String currentUserId;
   final Future<void> Function(String expenseId) onSettle;
+  final bool canManage;
+  final Future<void> Function() onEdit;
+  final Future<void> Function() onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -754,6 +1117,7 @@ class _ExpenseCard extends StatelessWidget {
         myShare != null &&
         !myShare.isSettled &&
         expense.payerId != currentUserId;
+    final hasSettlement = expense.splits.any((split) => split.isSettled);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -772,10 +1136,55 @@ class _ExpenseCard extends StatelessWidget {
                   MoneyFormatter.format(expense.totalMinor),
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
+                if (canManage && !hasSettlement)
+                  PopupMenuButton<String>(
+                    tooltip: 'Quản lý khoản chi',
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        onEdit();
+                      } else {
+                        onDelete();
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: ListTile(
+                          leading: Icon(Icons.edit_outlined),
+                          title: Text('Sửa khoản chi'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: ListTile(
+                          leading: Icon(Icons.delete_outline),
+                          title: Text('Xóa khoản chi'),
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
             const SizedBox(height: 6),
             Text('Người trả: ${names[expense.payerId] ?? 'Tài khoản đã xóa'}'),
+            if (expense.isSharedInvoice)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Row(
+                  children: [
+                    Icon(Icons.share_outlined, size: 16),
+                    SizedBox(width: 6),
+                    Text('Hóa đơn được chia sẻ từ hóa đơn cá nhân'),
+                  ],
+                ),
+              ),
+            if (hasSettlement)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'Đã có thanh toán: không thể sửa hoặc xóa. Hãy tạo khoản điều chỉnh mới nếu cần.',
+                ),
+              ),
             for (final split in expense.splits)
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -997,23 +1406,49 @@ class _InvoiceAllocationDialogState extends State<_InvoiceAllocationDialog> {
 }
 
 class _NewExpenseDialog extends StatefulWidget {
-  const _NewExpenseDialog({required this.members});
+  const _NewExpenseDialog({required this.members, this.initialExpense});
 
   final List<GroupMember> members;
+  final GroupExpense? initialExpense;
 
   @override
   State<_NewExpenseDialog> createState() => _NewExpenseDialogState();
 }
 
 class _NewExpenseDialogState extends State<_NewExpenseDialog> {
-  final _descriptionController = TextEditingController();
-  final _amountController = TextEditingController();
+  late final TextEditingController _descriptionController;
+  late final TextEditingController _amountController;
   final Map<String, TextEditingController> _splitControllers = {};
-  late final Set<String> _selectedIds = widget.members
-      .map((item) => item.userId)
-      .toSet();
-  GroupSplitMode? _customMode;
+  late final Set<String> _selectedIds;
+  late GroupSplitMode? _customMode;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialExpense;
+    _descriptionController = TextEditingController(text: initial?.description);
+    _amountController = TextEditingController(
+      text: initial?.totalMinor.toString(),
+    );
+    _selectedIds = initial == null
+        ? widget.members.map((item) => item.userId).toSet()
+        : initial.splits
+              .map((split) => split.userId)
+              .whereType<String>()
+              .toSet();
+    _customMode = initial == null ? null : GroupSplitMode.exact;
+    if (initial != null) {
+      for (final split in initial.splits) {
+        final userId = split.userId;
+        if (userId != null) {
+          _splitControllers[userId] = TextEditingController(
+            text: split.amountMinor.toString(),
+          );
+        }
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -1028,7 +1463,9 @@ class _NewExpenseDialogState extends State<_NewExpenseDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Thêm khoản chi'),
+      title: Text(
+        widget.initialExpense == null ? 'Thêm khoản chi' : 'Sửa khoản chi',
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1086,7 +1523,12 @@ class _NewExpenseDialogState extends State<_NewExpenseDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Hủy'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Tạo bản ghi')),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(
+            widget.initialExpense == null ? 'Tạo bản ghi' : 'Lưu thay đổi',
+          ),
+        ),
       ],
     );
   }
@@ -1158,7 +1600,9 @@ class _NewExpenseDialogState extends State<_NewExpenseDialog> {
         description: description,
         totalMinor: total,
         memberIds: _selectedIds.toList(growable: false),
-        splitAmounts: splitAmounts,
+        splitAmounts: widget.initialExpense == null
+            ? splitAmounts
+            : splitAmounts!,
       ),
     );
   }

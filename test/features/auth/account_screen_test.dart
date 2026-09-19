@@ -22,7 +22,7 @@ void main() {
     await tester.pumpWidget(_app(client));
     await tester.pump();
 
-    expect(find.text('Đăng nhập Supabase'), findsOneWidget);
+    expect(find.text('Đồng bộ chi tiêu an toàn'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Mật khẩu'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -37,7 +37,7 @@ void main() {
     await tester.pumpWidget(_app(client, textScale: 1.5));
     await tester.pump();
 
-    expect(find.text('Đăng nhập Supabase'), findsOneWidget);
+    expect(find.text('Đồng bộ chi tiêu an toàn'), findsOneWidget);
     expect(find.byType(Scrollable), findsWidgets);
     expect(tester.takeException(), isNull);
   });

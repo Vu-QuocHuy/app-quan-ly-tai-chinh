@@ -32,6 +32,10 @@ class SupabaseAuthService {
     return _client.auth.signUp(email: email.trim(), password: password);
   }
 
+  Future<void> resendSignupConfirmation(String email) async {
+    await _client.auth.resend(type: OtpType.signup, email: email.trim());
+  }
+
   Future<bool> signInWithGoogle() {
     return _client.auth.signInWithOAuth(
       OAuthProvider.google,
@@ -55,7 +59,10 @@ class SupabaseAuthService {
   }
 
   Future<void> sendPasswordResetEmail(String email) {
-    return _client.auth.resetPasswordForEmail(email.trim());
+    return _client.auth.resetPasswordForEmail(
+      email.trim(),
+      redirectTo: SupabaseBootstrap.oauthRedirectUri,
+    );
   }
 
   Future<UserResponse> updatePassword(String password) {

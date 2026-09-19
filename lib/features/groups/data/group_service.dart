@@ -64,7 +64,8 @@ class ExpenseGroupService {
       await _client
           .from('group_expenses')
           .select(
-            'id, group_id, payer_id, description, total_minor, created_at',
+            'id, group_id, payer_id, description, total_minor, created_at, '
+            'source_invoice_id, source_snapshot',
           )
           .eq('group_id', group.id)
           .order('created_at', ascending: false),
@@ -260,6 +261,53 @@ class ExpenseGroupService {
     );
   }
 
+  Future<void> updateCustomExpense({
+    required String expenseId,
+    required String description,
+    required int totalMinor,
+    required Map<String, int> splitAmounts,
+  }) async {
+    _requiredUuid(expenseId, 'expenseId');
+    _requiredString(description, 'description', 160, minLength: 2);
+    if (totalMinor < 1 || totalMinor > _maxSafeInteger) {
+      throw const FormatException('Tổng tiền khoản chi không hợp lệ.');
+    }
+    if (splitAmounts.isEmpty || splitAmounts.length > 100) {
+      throw const FormatException('Danh sách phần chia không hợp lệ.');
+    }
+    _validateMemberIds(splitAmounts.keys);
+    final splitTotal = splitAmounts.values.fold<int>(0, (sum, value) {
+      if (value < 0 ||
+          value > _maxSafeInteger ||
+          sum > _maxSafeInteger - value) {
+        throw const FormatException('Số tiền phần chia không hợp lệ.');
+      }
+      return sum + value;
+    });
+    if (splitTotal != totalMinor) {
+      throw const FormatException('Tổng phần chia phải bằng tổng khoản chi.');
+    }
+    await _client.rpc(
+      'update_group_expense_custom',
+      params: {
+        'p_expense_id': expenseId,
+        'p_description': description,
+        'p_total_minor': totalMinor,
+        'p_splits': splitAmounts.entries
+            .map((entry) => {'user_id': entry.key, 'amount_minor': entry.value})
+            .toList(growable: false),
+      },
+    );
+  }
+
+  Future<void> deleteExpense(String expenseId) async {
+    _requiredUuid(expenseId, 'expenseId');
+    await _client.rpc(
+      'delete_group_expense',
+      params: {'p_expense_id': expenseId},
+    );
+  }
+
   Future<void> setMemberRole({
     required String groupId,
     required String userId,
@@ -363,7 +411,28 @@ class ExpenseGroupService {
       totalMinor: totalMinor,
       createdAt: _requiredDate(map['created_at'], 'group_expense.createdAt'),
       splits: List.unmodifiable(splits),
+      sourceInvoiceId: _optionalSourceId(
+        map['source_invoice_id'],
+        'group_expense.sourceInvoiceId',
+      ),
+      sourceSnapshot: _optionalSnapshot(
+        map['source_snapshot'],
+        'group_expense.sourceSnapshot',
+      ),
     );
+  }
+
+  String? _optionalSourceId(Object? value, String field) {
+    if (value == null) return null;
+    return _requiredString(value, field, 128);
+  }
+
+  Map<String, dynamic>? _optionalSnapshot(Object? value, String field) {
+    if (value == null) return null;
+    if (value is! Map || value.keys.any((key) => key is! String)) {
+      throw FormatException('$field không hợp lệ.');
+    }
+    return Map<String, dynamic>.from(value);
   }
 
   GroupAuditEvent _auditEventFromMap(Map<String, dynamic> map) {

@@ -8,6 +8,8 @@ import '../../features/chat/domain/local_chat_assistant.dart';
 import '../../features/export/data/backup_catalog_store.dart';
 import '../../features/groups/data/group_service.dart';
 import '../../features/groups/domain/group_models.dart';
+import '../../features/sharing/data/shared_bill_service.dart';
+import '../../features/sharing/domain/shared_bill_models.dart';
 import '../../features/ingestion/application/import_coordinator.dart';
 import '../../features/ingestion/data/ai_extraction_client.dart';
 import '../../features/ingestion/data/ai_extraction_job_client.dart';
@@ -105,6 +107,17 @@ final expenseGroupServiceProvider = Provider<ExpenseGroupService?>((ref) {
   final client = ref.watch(supabaseClientProvider);
   return client == null ? null : ExpenseGroupService(client);
 });
+
+final sharedBillServiceProvider = Provider<SharedBillService?>((ref) {
+  final client = ref.watch(supabaseClientProvider);
+  return client == null ? null : SharedBillService(client);
+});
+
+final directBillSharesProvider =
+    FutureProvider.autoDispose<List<DirectBillShare>>((ref) {
+      final service = ref.watch(sharedBillServiceProvider);
+      return service?.listDirectShares() ?? const [];
+    });
 
 final expenseGroupsProvider = FutureProvider.autoDispose<List<ExpenseGroup>>((
   ref,

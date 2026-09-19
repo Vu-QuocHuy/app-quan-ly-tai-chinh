@@ -47,6 +47,8 @@ class GroupExpense {
     required this.totalMinor,
     required this.createdAt,
     required this.splits,
+    this.sourceInvoiceId,
+    this.sourceSnapshot,
   });
 
   final String id;
@@ -56,6 +58,10 @@ class GroupExpense {
   final int totalMinor;
   final DateTime createdAt;
   final List<GroupExpenseSplit> splits;
+  final String? sourceInvoiceId;
+  final Map<String, dynamic>? sourceSnapshot;
+
+  bool get isSharedInvoice => sourceInvoiceId != null;
 }
 
 class GroupAuditEvent {
