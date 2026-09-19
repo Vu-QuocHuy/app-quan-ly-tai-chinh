@@ -52,10 +52,13 @@ cursor delta có tombstone.
 Checklist deploy staging/production nằm tại
 `docs/PRODUCTION_RELEASE_CHECKLIST.md`; không đưa secret vào file hoặc Git.
 
-Trên Android/iOS, app đăng ký tác vụ nền định kỳ có ràng buộc mạng, pin và bộ
-nhớ để đồng bộ outbox/pull dữ liệu và kiểm tra cảnh báo ngân sách. Hệ điều hành
-có thể trì hoãn tác vụ; OCR/import vẫn tiếp tục ở foreground và chỉ hoàn tất
-sau khi người dùng xem lại, xác nhận.
+Trên Android/iOS, app đăng ký tác vụ nền định kỳ khoảng 15 phút với ràng buộc có
+mạng và đủ bộ nhớ để đồng bộ outbox/pull dữ liệu và kiểm tra cảnh báo ngân sách.
+Khi outbox có thay đổi trong lúc app đang mở, app cũng tự đồng bộ opportunistic
+và tiếp tục theo batch cho đến khi hết tác vụ đang chờ. Hệ điều hành vẫn có thể
+trì hoãn tác vụ nền; người dùng có thể bấm **Đồng bộ ngay** để chạy tức thì.
+OCR/import vẫn tiếp tục ở foreground và chỉ hoàn tất sau khi người dùng xem lại,
+xác nhận.
 Khi cloud được cấu hình, dữ liệu Drift local được mở trong database riêng theo
 tài khoản; phiên đã đăng xuất dùng một database cô lập để không lộ dữ liệu của
 tài khoản trước.

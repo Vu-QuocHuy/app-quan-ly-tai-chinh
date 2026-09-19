@@ -32,11 +32,13 @@ class _AppShellState extends ConsumerState<AppShell>
     with WidgetsBindingObserver {
   bool _isImporting = false;
   bool _isSyncing = false;
+  bool _syncRequestedWhileRunning = false;
   int _importIndex = 0;
   int _importTotal = 0;
   String? _importFileName;
   final _importQueue = ImportQueueController();
   Timer? _retryTimer;
+  DateTime? _lastAutoSyncAt;
 
   PendingImportStore get _pendingImportStore =>
       ref.read(pendingImportStoreProvider);
@@ -65,18 +67,45 @@ class _AppShellState extends ConsumerState<AppShell>
   }
 
   Future<void> _syncCloud() async {
-    if (_isSyncing || !mounted) return;
+    if (!mounted) return;
+    if (_isSyncing) {
+      _syncRequestedWhileRunning = true;
+      return;
+    }
     final flags = ref.read(featureFlagsProvider).value ?? FeatureFlags.defaults;
     if (!flags.cloudSync) return;
     _isSyncing = true;
     try {
-      await ref.read(syncCoordinatorProvider).runOnce();
+      do {
+        _syncRequestedWhileRunning = false;
+        await ref.read(syncCoordinatorProvider).runOnce(batchSize: 100);
+      } while (_syncRequestedWhileRunning && mounted);
     } on Object {
       // Manual sync exposes errors in the account screen. Resume sync is
       // best-effort so it never interrupts importing or offline usage.
     } finally {
       _isSyncing = false;
+      if (_syncRequestedWhileRunning && mounted) {
+        _syncRequestedWhileRunning = false;
+        unawaited(_syncCloud());
+      }
     }
+  }
+
+  void _requestAutoSync() {
+    if (!mounted) return;
+    if (_isSyncing) {
+      _syncRequestedWhileRunning = true;
+      return;
+    }
+    final now = DateTime.now();
+    final previous = _lastAutoSyncAt;
+    if (previous != null &&
+        now.difference(previous) < const Duration(seconds: 15)) {
+      return;
+    }
+    _lastAutoSyncAt = now;
+    unawaited(_syncCloud());
   }
 
   static const _destinations = [
@@ -109,6 +138,10 @@ class _AppShellState extends ConsumerState<AppShell>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(syncHealthProvider, (previous, next) {
+      final health = next.asData?.value;
+      if (health != null && health.pendingCount > 0) _requestAutoSync();
+    });
     ref.listen(importRetrySignalProvider, (previous, next) {
       if (!_isImporting) unawaited(_resumePendingImports());
     });

@@ -629,6 +629,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   Future<void> _runSync() async {
+    await ref.read(syncOutboxStoreProvider).retryFailed();
     final result = await ref.read(syncCoordinatorProvider).runOnce();
     if (!mounted) return;
     setState(() {

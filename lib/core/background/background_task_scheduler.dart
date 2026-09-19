@@ -44,11 +44,13 @@ class BackgroundTaskScheduler {
       await Workmanager().registerPeriodicTask(
         _uniqueTaskName,
         _taskName,
-        frequency: const Duration(hours: 6),
+        // Android accepts 15 minutes as the shortest periodic interval.
+        // iOS may still defer execution according to its background policy.
+        frequency: const Duration(minutes: 15),
         initialDelay: const Duration(minutes: 15),
         constraints: Constraints(
-          networkType: NetworkType.notRequired,
-          requiresBatteryNotLow: true,
+          networkType: NetworkType.connected,
+          requiresBatteryNotLow: false,
           requiresStorageNotLow: true,
         ),
         existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
