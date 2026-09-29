@@ -40,7 +40,6 @@ jobs:
           test -n "$ANDROID_KEY_PASSWORD"
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_PUBLISHABLE_KEY"
-          test -n "$SUPABASE_OAUTH_REDIRECT_URI"
       - name: Prepare signing keystore
         shell: bash
         run: |
@@ -51,7 +50,7 @@ jobs:
           echo "ANDROID_KEYSTORE_PATH=$keystore_path" >> "$GITHUB_ENV"
       - run: flutter pub get
       - run: dart run build_runner build --delete-conflicting-outputs
-      - name: Build signed production bundle
+      - name: Build signed internal bundle (production flavor)
         run: >-
           flutter build appbundle --release --flavor production
           --dart-define="SUPABASE_URL=$SUPABASE_URL"
@@ -59,7 +58,7 @@ jobs:
           --dart-define="SUPABASE_OAUTH_REDIRECT_URI=$SUPABASE_OAUTH_REDIRECT_URI"
       - uses: actions/upload-artifact@v4
         with:
-          name: hoadon-insight-production-aab
+          name: hoadon-insight-internal-aab
           path: build/app/outputs/bundle/productionRelease/*.aab
           if-no-files-found: error
           retention-days: 7

@@ -21,11 +21,14 @@ import '../../features/ingestion/data/pending_import_store.dart';
 import '../../features/ingestion/data/xml_invoice_extractor.dart';
 import '../../features/ingestion/domain/import_job.dart';
 import '../../features/invoices/data/drift_invoice_repository.dart';
+import '../../features/invoices/data/supabase_invoice_attachment_store.dart';
 import '../../features/invoices/domain/invoice_filters.dart';
 import '../../features/invoices/domain/invoice_models.dart';
 import '../../features/invoices/domain/invoice_repository.dart';
 import '../../features/notifications/data/budget_alert_preferences.dart';
 import '../../features/notifications/data/budget_notification_service.dart';
+import '../../features/payments/data/supabase_qr_payment_history_store.dart';
+import '../../features/settings/data/supabase_profile_preferences_store.dart';
 import '../../features/insights/data/anomaly_feedback_store.dart';
 import '../../features/sync/application/sync_engine.dart';
 import '../../features/sync/application/sync_coordinator.dart';
@@ -98,9 +101,38 @@ final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {
   return DriftInvoiceRepository(ref.watch(databaseProvider));
 });
 
+final invoiceAttachmentStoreProvider =
+    Provider<SupabaseInvoiceAttachmentStore?>((ref) {
+      final client = ref.watch(supabaseClientProvider);
+      return client == null ? null : SupabaseInvoiceAttachmentStore(client);
+    });
+
+final invoiceAttachmentsProvider = FutureProvider.autoDispose
+    .family<List<InvoiceAttachment>, String>((ref, invoiceId) {
+      final store = ref.watch(invoiceAttachmentStoreProvider);
+      if (store == null) return const [];
+      return store.list(invoiceId);
+    });
+
+final qrPaymentHistoryStoreProvider = Provider<SupabaseQrPaymentHistoryStore?>((
+  ref,
+) {
+  final client = ref.watch(supabaseClientProvider);
+  return client == null ? null : SupabaseQrPaymentHistoryStore(client);
+});
+
+final profilePreferencesStoreProvider =
+    Provider<SupabaseProfilePreferencesStore?>((ref) {
+      final client = ref.watch(supabaseClientProvider);
+      return client == null ? null : SupabaseProfilePreferencesStore(client);
+    });
+
 final chatHistoryStoreProvider = Provider<ChatHistoryStore>((ref) {
   final userId = ref.watch(authUserProvider).value?.id;
-  return ChatHistoryStore(scope: userId);
+  return ChatHistoryStore(
+    scope: userId,
+    client: ref.watch(supabaseClientProvider),
+  );
 });
 
 final expenseGroupServiceProvider = Provider<ExpenseGroupService?>((ref) {

@@ -55,6 +55,31 @@ void main() {
     expect((await userOne.load()).single.id, 'private');
   });
 
+  test('appends a new message locally without migrating old history', () async {
+    const store = ChatHistoryStore(scope: 'user-1');
+    final oldMessage = ChatMessage(
+      id: 'old-local',
+      role: ChatMessageRole.user,
+      text: 'Lịch sử cũ trên thiết bị',
+      createdAt: DateTime(2026, 8, 30),
+    );
+    final newMessage = ChatMessage(
+      id: 'new-local',
+      role: ChatMessageRole.user,
+      text: 'Tin nhắn mới',
+      createdAt: DateTime(2026, 9, 27),
+    );
+
+    await store.save([oldMessage]);
+    final savedToCloud = await store.append(newMessage);
+
+    expect(savedToCloud, isFalse);
+    expect((await store.load()).map((message) => message.id), [
+      'old-local',
+      'new-local',
+    ]);
+  });
+
   test(
     'clearAll removes scoped history without touching legacy or another account',
     () async {

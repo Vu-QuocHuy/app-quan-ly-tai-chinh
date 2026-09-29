@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Quản lý Tài chính dùng camera để chụp và nhận diện hóa đơn.</string>
+	<string>Quản lý Tài chính dùng camera để chụp hóa đơn và quét QR thanh toán.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Quản lý Tài chính cần truy cập ảnh bạn chọn để nhận diện hóa đơn.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

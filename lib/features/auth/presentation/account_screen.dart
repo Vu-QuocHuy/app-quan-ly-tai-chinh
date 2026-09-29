@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/database/app_database.dart';
@@ -54,42 +53,221 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     final client = ref.watch(supabaseClientProvider);
     final user = ref.watch(authUserProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Tài khoản và đồng bộ')),
+      appBar: AppBar(title: const Text('Tài khoản')),
       body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.gutter,
-                AppSpacing.xl,
-                AppSpacing.gutter,
-                AppSpacing.xxl,
+        child: client == null
+            ? _buildCenteredContent(const _ConfigurationMissingCard())
+            : user.when(
+                data: (currentUser) => currentUser == null
+                    ? _buildAuthExperience(context)
+                    : _buildCenteredContent(
+                        _buildSignedIn(context, currentUser),
+                      ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, _) => _buildCenteredContent(
+                  _StatusCard(
+                    icon: Icons.error_outline,
+                    title: 'Không đọc được phiên đăng nhập',
+                    message: friendlyMessage(error),
+                    isError: true,
+                  ),
+                ),
               ),
+      ),
+    );
+  }
+
+  Widget _buildCenteredContent(Widget child) {
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.gutter,
+            AppSpacing.xl,
+            AppSpacing.gutter,
+            AppSpacing.xxl,
+          ),
+          children: [child],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAuthExperience(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 900;
+        final pageGutter = constraints.maxWidth < AppBreakpoints.compact
+            ? AppSpacing.lg
+            : AppSpacing.gutter;
+        final content = isWide
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(child: _buildAuthIntro(context, expanded: true)),
+                  const SizedBox(width: AppSpacing.section),
+                  SizedBox(width: 440, child: _buildAuthForm(context)),
+                ],
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildAuthIntro(context, expanded: false),
+                  const SizedBox(height: AppSpacing.xl),
+                  _buildAuthForm(context),
+                ],
+              );
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            pageGutter,
+            AppSpacing.xl,
+            pageGutter,
+            AppSpacing.xxl,
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight > AppSpacing.section
+                  ? constraints.maxHeight - AppSpacing.section
+                  : 0,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: isWide ? 1120 : 480),
+                child: content,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAuthIntro(BuildContext context, {required bool expanded}) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final heroBackground = scheme.brightness == Brightness.light
+        ? scheme.primary
+        : scheme.primaryContainer;
+    final heroForeground = scheme.brightness == Brightness.light
+        ? scheme.onPrimary
+        : scheme.onPrimaryContainer;
+    final heroAccent = scheme.brightness == Brightness.light
+        ? scheme.tertiaryContainer
+        : scheme.tertiary;
+
+    return DecoratedBox(
+      decoration: ShapeDecoration(color: heroBackground, shape: AppShapes.card),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _AuthLinePainter(
+                  lineColor: heroForeground.withValues(alpha: 0.13),
+                  accentColor: heroAccent.withValues(alpha: 0.72),
+                  expanded: expanded,
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.all(expanded ? AppSpacing.xxl : AppSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                if (client == null)
-                  const _ConfigurationMissingCard()
-                else
-                  user.when(
-                    data: (currentUser) => currentUser == null
-                        ? _buildAuthForm(context)
-                        : _buildSignedIn(context, currentUser),
-                    loading: () => const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 64),
-                      child: Center(child: CircularProgressIndicator()),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DecoratedBox(
+                      decoration: ShapeDecoration(
+                        color: heroForeground,
+                        shape: AppShapes.control,
+                      ),
+                      child: SizedBox(
+                        width: 52,
+                        height: 52,
+                        child: Icon(
+                          Icons.account_balance_wallet_outlined,
+                          size: 26,
+                          color: heroBackground,
+                        ),
+                      ),
                     ),
-                    error: (error, _) => _StatusCard(
-                      icon: Icons.cloud_off_outlined,
-                      title: 'Không đọc được phiên đăng nhập',
-                      message: friendlyMessage(error),
-                      isError: true,
+                    const SizedBox(width: AppSpacing.md),
+                    Flexible(
+                      child: Text(
+                        'QUẢN LÝ CHI TIÊU',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: heroForeground.withValues(alpha: 0.82),
+                          letterSpacing: 1.1,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: expanded ? AppSpacing.section : AppSpacing.xl),
+                Text(
+                  expanded
+                      ? 'Chi tiêu rõ ràng.\nTài chính chủ động.'
+                      : 'Làm chủ chi tiêu,\ntừng ngày một.',
+                  style:
+                      (expanded
+                              ? theme.textTheme.displaySmall
+                              : theme.textTheme.headlineMedium)
+                          ?.copyWith(
+                            color: heroForeground,
+                            fontWeight: FontWeight.w700,
+                            height: 1.12,
+                            letterSpacing: -0.6,
+                          ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 460),
+                  child: Text(
+                    'Ghi nhận thu chi, theo dõi ngân sách và hiểu rõ hơn thói quen tài chính của bạn.',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: heroForeground.withValues(alpha: 0.82),
+                      height: 1.5,
                     ),
                   ),
+                ),
+                if (expanded) ...[
+                  const SizedBox(height: AppSpacing.section),
+                  _AuthBenefit(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'Theo dõi thu chi',
+                    subtitle: 'Biết tiền đến từ đâu và được sử dụng thế nào.',
+                    foregroundColor: heroForeground,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  _AuthBenefit(
+                    icon: Icons.savings_outlined,
+                    title: 'Kiểm soát ngân sách',
+                    subtitle: 'Chủ động đặt giới hạn cho từng danh mục.',
+                    foregroundColor: heroForeground,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  _AuthBenefit(
+                    icon: Icons.insights_outlined,
+                    title: 'Nhìn lại thói quen',
+                    subtitle: 'Theo dõi dòng tiền qua các báo cáo dễ hiểu.',
+                    foregroundColor: heroForeground,
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.xxl),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -97,245 +275,247 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   Widget _buildAuthForm(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final compact = MediaQuery.sizeOf(context).width < AppBreakpoints.compact;
     return Form(
       key: _formKey,
       autovalidateMode: AutovalidateMode.onUserInteraction,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: DecoratedBox(
-              decoration: ShapeDecoration(
-                color: scheme.primaryContainer,
-                shape: AppShapes.card,
-              ),
-              child: SizedBox(
-                width: 72,
-                height: 72,
-                child: Icon(
-                  Icons.cloud_sync_outlined,
-                  size: 36,
-                  color: scheme.onPrimaryContainer,
-                ),
-              ),
-            ),
+      child: Card(
+        color: scheme.cardSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppShapes.cardRadius,
+          side: BorderSide(color: scheme.outline, width: 1),
+        ),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            compact ? AppSpacing.lg : AppSpacing.xl,
+            AppSpacing.xl,
+            compact ? AppSpacing.lg : AppSpacing.xl,
+            AppSpacing.xl,
           ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            'Đồng bộ chi tiêu an toàn',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Dữ liệu vẫn được lưu trên thiết bị và sẽ đồng bộ với cloud khi bạn đăng nhập.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
-                    _registering
-                        ? 'Tạo tài khoản mới'
-                        : 'Chào mừng bạn trở lại',
-                    style: theme.textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    _registering
-                        ? 'Dùng email để lưu và đồng bộ dữ liệu của riêng bạn.'
-                        : 'Đăng nhập để tiếp tục quản lý chi tiêu của bạn.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
+                  DecoratedBox(
+                    decoration: ShapeDecoration(
+                      color: scheme.tertiaryContainer,
+                      shape: AppShapes.control,
+                    ),
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: Icon(
+                        _registering
+                            ? Icons.person_add_alt_1_outlined
+                            : Icons.login,
+                        color: scheme.onTertiaryContainer,
+                        size: AppIconSizes.md,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-                  Semantics(
-                    container: true,
-                    label: 'Chọn đăng nhập hoặc đăng ký',
-                    child: SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(
-                          value: false,
-                          icon: Icon(Icons.login),
-                          label: Text('Đăng nhập'),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _registering ? 'TÀI KHOẢN MỚI' : 'CHÀO MỪNG TRỞ LẠI',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.tertiary,
+                            letterSpacing: 0.9,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                        ButtonSegment(
-                          value: true,
-                          icon: Icon(Icons.person_add_alt_1_outlined),
-                          label: Text('Đăng ký'),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          _registering ? 'Tạo tài khoản' : 'Đăng nhập',
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ],
-                      selected: {_registering},
-                      onSelectionChanged: _busy
-                          ? null
-                          : (selection) {
-                              setState(() {
-                                _registering = selection.first;
-                                _verificationEmail = null;
-                                _message = null;
-                              });
-                            },
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  if (_message != null) ...[
-                    Semantics(
-                      liveRegion: true,
-                      child: _StatusCard(
-                        icon: _messageIsError
-                            ? Icons.error_outline
-                            : Icons.mark_email_read_outlined,
-                        title: _messageIsError ? 'Có lỗi xảy ra' : 'Đã xử lý',
-                        message: _message!,
-                        isError: _messageIsError,
-                        actionLabel: _verificationEmail == null
-                            ? null
-                            : 'Gửi lại email xác nhận',
-                        onAction: _verificationEmail == null
-                            ? null
-                            : _resendSignupConfirmation,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-                  TextFormField(
-                    controller: _emailController,
-                    enabled: !_busy,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    textCapitalization: TextCapitalization.none,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      hintText: 'ban@example.com',
-                      prefixIcon: Icon(Icons.email_outlined),
-                    ),
-                    validator: AuthValidators.email,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  TextFormField(
-                    controller: _passwordController,
-                    enabled: !_busy,
-                    obscureText: _obscurePassword,
-                    textInputAction: _registering
-                        ? TextInputAction.next
-                        : TextInputAction.done,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    autofillHints: [
-                      _registering
-                          ? AutofillHints.newPassword
-                          : AutofillHints.password,
-                    ],
-                    onFieldSubmitted: _registering || _busy
-                        ? null
-                        : (_) => _submit(),
-                    decoration: InputDecoration(
-                      labelText: 'Mật khẩu',
-                      helperText: _registering
-                          ? 'Tối thiểu 8 ký tự. Bạn có thể dùng trình quản lý mật khẩu.'
-                          : null,
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        tooltip: _obscurePassword
-                            ? 'Hiện mật khẩu'
-                            : 'Ẩn mật khẩu',
-                        onPressed: _busy
-                            ? null
-                            : () => setState(
-                                () => _obscurePassword = !_obscurePassword,
-                              ),
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                        ),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Hãy nhập mật khẩu.';
-                      }
-                      if (_registering && value.length < 8) {
-                        return 'Mật khẩu cần ít nhất 8 ký tự.';
-                      }
-                      return null;
-                    },
-                  ),
-                  if (!_registering)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: _busy ? null : _sendPasswordReset,
-                        child: const Text('Quên mật khẩu?'),
-                      ),
-                    ),
-                  if (_registering) ...[
-                    const SizedBox(height: AppSpacing.lg),
-                    TextFormField(
-                      controller: _confirmationController,
-                      enabled: !_busy,
-                      obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      autofillHints: const [AutofillHints.newPassword],
-                      onFieldSubmitted: _busy ? null : (_) => _submit(),
-                      decoration: const InputDecoration(
-                        labelText: 'Nhập lại mật khẩu',
-                        prefixIcon: Icon(Icons.lock_reset_outlined),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Hãy nhập lại mật khẩu.';
-                        }
-                        return value != _passwordController.text
-                            ? 'Hai mật khẩu chưa khớp.'
-                            : null;
-                      },
-                    ),
-                  ],
-                  const SizedBox(height: AppSpacing.xl),
-                  FilledButton.icon(
-                    onPressed: _busy ? null : _submit,
-                    icon: _busy
-                        ? const ButtonSpinner()
-                        : Icon(
-                            _registering
-                                ? Icons.person_add_alt_1_outlined
-                                : Icons.login,
-                          ),
-                    label: Text(_registering ? 'Tạo tài khoản' : 'Đăng nhập'),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : _signInWithGoogle,
-                    icon: const Icon(Icons.account_circle_outlined),
-                    label: const Text('Tiếp tục với Google'),
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                _registering
+                    ? 'Bắt đầu theo dõi thu chi của bạn.'
+                    : 'Đăng nhập để tiếp tục quản lý tài chính cá nhân.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Semantics(
+                container: true,
+                label: 'Chọn đăng nhập hoặc đăng ký',
+                child: SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Đăng nhập')),
+                    ButtonSegment(value: true, label: Text('Đăng ký')),
+                  ],
+                  selected: {_registering},
+                  onSelectionChanged: _busy
+                      ? null
+                      : (selection) {
+                          setState(() {
+                            _registering = selection.first;
+                            _verificationEmail = null;
+                            _message = null;
+                          });
+                        },
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              if (_message != null) ...[
+                Semantics(
+                  liveRegion: true,
+                  child: _StatusCard(
+                    icon: _messageIsError
+                        ? Icons.error_outline
+                        : Icons.mark_email_read_outlined,
+                    title: _messageIsError ? 'Có lỗi xảy ra' : 'Đã xử lý',
+                    message: _message!,
+                    isError: _messageIsError,
+                    actionLabel: _verificationEmail == null
+                        ? null
+                        : 'Gửi lại email xác nhận',
+                    onAction: _verificationEmail == null
+                        ? null
+                        : _resendSignupConfirmation,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              ],
+              TextFormField(
+                controller: _emailController,
+                enabled: !_busy,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                textCapitalization: TextCapitalization.none,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.email],
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  hintText: 'ban@example.com',
+                  prefixIcon: Icon(Icons.email_outlined),
+                ),
+                validator: AuthValidators.email,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              TextFormField(
+                controller: _passwordController,
+                enabled: !_busy,
+                obscureText: _obscurePassword,
+                textInputAction: _registering
+                    ? TextInputAction.next
+                    : TextInputAction.done,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: [
+                  _registering
+                      ? AutofillHints.newPassword
+                      : AutofillHints.password,
+                ],
+                onFieldSubmitted: _registering || _busy
+                    ? null
+                    : (_) => _submit(),
+                decoration: InputDecoration(
+                  labelText: 'Mật khẩu',
+                  helperText: _registering
+                      ? 'Tối thiểu 8 ký tự. Bạn có thể dùng trình quản lý mật khẩu.'
+                      : null,
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    tooltip: _obscurePassword ? 'Hiện mật khẩu' : 'Ẩn mật khẩu',
+                    onPressed: _busy
+                        ? null
+                        : () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                  ),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Hãy nhập mật khẩu.';
+                  }
+                  if (_registering && value.length < 8) {
+                    return 'Mật khẩu cần ít nhất 8 ký tự.';
+                  }
+                  return null;
+                },
+              ),
+              if (!_registering)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _busy ? null : _sendPasswordReset,
+                    child: const Text('Quên mật khẩu?'),
+                  ),
+                ),
+              if (_registering) ...[
+                const SizedBox(height: AppSpacing.lg),
+                TextFormField(
+                  controller: _confirmationController,
+                  enabled: !_busy,
+                  obscureText: _obscurePassword,
+                  textInputAction: TextInputAction.done,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  autofillHints: const [AutofillHints.newPassword],
+                  onFieldSubmitted: _busy ? null : (_) => _submit(),
+                  decoration: const InputDecoration(
+                    labelText: 'Nhập lại mật khẩu',
+                    prefixIcon: Icon(Icons.lock_reset_outlined),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Hãy nhập lại mật khẩu.';
+                    }
+                    return value != _passwordController.text
+                        ? 'Hai mật khẩu chưa khớp.'
+                        : null;
+                  },
+                ),
+              ],
+              const SizedBox(height: AppSpacing.xl),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                ),
+                onPressed: _busy ? null : _submit,
+                icon: _busy
+                    ? const ButtonSpinner()
+                    : Icon(
+                        _registering
+                            ? Icons.person_add_alt_1_outlined
+                            : Icons.login,
+                      ),
+                label: Text(_registering ? 'Tạo tài khoản' : 'Đăng nhập'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                ),
+                onPressed: _busy ? null : _signInWithGoogle,
+                icon: const Icon(Icons.account_circle_outlined),
+                label: const Text('Tiếp tục với Google'),
+              ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.lg),
-          const AppCallout(
-            tone: CalloutTone.neutral,
-            icon: Icons.security_outlined,
-            title: 'Lưu trên máy, đồng bộ cloud',
-            message:
-                'Ứng dụng ưu tiên lưu dữ liệu trên thiết bị. Khi có mạng, các thay đổi sẽ được đồng bộ an toàn với tài khoản của bạn.',
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -995,28 +1175,156 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 }
 
+class _AuthBenefit extends StatelessWidget {
+  const _AuthBenefit({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.foregroundColor,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color foregroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DecoratedBox(
+          decoration: ShapeDecoration(
+            color: scheme.tertiaryContainer,
+            shape: AppShapes.control,
+          ),
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(
+              icon,
+              size: AppIconSizes.md,
+              color: scheme.onTertiaryContainer,
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: foregroundColor,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: foregroundColor.withValues(alpha: 0.82),
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AuthLinePainter extends CustomPainter {
+  const _AuthLinePainter({
+    required this.lineColor,
+    required this.accentColor,
+    required this.expanded,
+  });
+
+  final Color lineColor;
+  final Color accentColor;
+  final bool expanded;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final line = Paint()
+      ..color = lineColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    if (expanded) {
+      final center = Offset(size.width * 0.87, size.height * 0.18);
+      for (var index = 0; index < 3; index++) {
+        canvas.drawCircle(center, 28 + index * 22, line);
+      }
+    }
+
+    final curve = Path()
+      ..moveTo(size.width * 0.54, size.height * 0.93)
+      ..cubicTo(
+        size.width * 0.66,
+        size.height * 0.82,
+        size.width * 0.72,
+        size.height * 0.98,
+        size.width * 0.81,
+        size.height * 0.88,
+      )
+      ..cubicTo(
+        size.width * 0.88,
+        size.height * 0.78,
+        size.width * 0.92,
+        size.height * 0.98,
+        size.width * 0.98,
+        size.height * 0.86,
+      );
+    canvas.drawPath(
+      curve,
+      Paint()
+        ..color = accentColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+
+    for (final point in [
+      Offset(size.width * 0.65, size.height * 0.9),
+      Offset(size.width * 0.81, size.height * 0.88),
+      Offset(size.width * 0.94, size.height * 0.9),
+    ]) {
+      canvas.drawCircle(
+        point,
+        3.5,
+        Paint()
+          ..color = accentColor
+          ..style = PaintingStyle.fill,
+      );
+      canvas.drawCircle(point, 8, line);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_AuthLinePainter oldDelegate) =>
+      lineColor != oldDelegate.lineColor ||
+      accentColor != oldDelegate.accentColor ||
+      expanded != oldDelegate.expanded;
+}
+
 class _ConfigurationMissingCard extends StatelessWidget {
   const _ConfigurationMissingCard();
 
   @override
   Widget build(BuildContext context) {
-    // Không phải LỖI: đây là một build hợp lệ, chỉ là không có cloud. App vẫn
-    // chạy đủ chức năng local, nên giọng điệu và lối ra phải phản ánh điều đó.
     return AppCallout(
       icon: Icons.cloud_off_outlined,
       tone: CalloutTone.info,
-      title: 'Bản build này không có đồng bộ cloud',
+      title: 'Cần cấu hình tài khoản',
       message:
-          'Nhập hóa đơn, OCR, ngân sách và toàn bộ thống kê vẫn hoạt động và '
-          'dữ liệu được lưu trên máy. Tài khoản và đồng bộ cần cấu hình '
-          'Supabase khi build.',
-      actions: [
-        FilledButton.icon(
-          onPressed: () => context.go('/'),
-          icon: const Icon(Icons.arrow_forward),
-          label: const Text('Tiếp tục dùng offline'),
-        ),
-      ],
+          'Ứng dụng yêu cầu đăng nhập trước khi sử dụng. Bản build này chưa có '
+          'cấu hình Supabase; hãy tạo lại bản build với SUPABASE_URL và '
+          'SUPABASE_PUBLISHABLE_KEY. Lần đăng nhập đầu cần có kết nối mạng.',
     );
   }
 }

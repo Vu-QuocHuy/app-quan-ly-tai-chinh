@@ -5,16 +5,20 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/budgets/presentation/budget_screen.dart';
+import '../../features/budgets/presentation/category_management.dart';
 import '../../features/auth/presentation/account_screen.dart';
 import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/invoices/domain/invoice_models.dart';
 import '../../features/invoices/presentation/invoice_detail_screen.dart';
+import '../../features/invoices/presentation/invoice_attachments_screen.dart';
 import '../../features/invoices/presentation/invoice_list_screen.dart';
 import '../../features/groups/presentation/group_screen.dart';
 import '../../features/ingestion/presentation/import_job_history_screen.dart';
+import '../../features/payments/presentation/qr_payment_screen.dart';
 import '../../features/review/presentation/review_invoice_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/settings/presentation/cloud_profile_settings_screen.dart';
 import '../../features/sync/presentation/sync_conflicts_screen.dart';
 import '../../shared/widgets/app_empty_state.dart';
 import '../shell/app_shell.dart';
@@ -96,6 +100,15 @@ final appRouter = GoRouter(
                   builder: (context, state) => InvoiceDetailScreen(
                     invoiceId: state.pathParameters['id']!,
                   ),
+                  routes: [
+                    GoRoute(
+                      path: 'attachments',
+                      parentNavigatorKey: _rootKey,
+                      builder: (context, state) => InvoiceAttachmentsScreen(
+                        invoiceId: state.pathParameters['id']!,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -141,6 +154,12 @@ final appRouter = GoRouter(
                   parentNavigatorKey: _rootKey,
                   builder: (context, state) => const SyncConflictsScreen(),
                 ),
+                GoRoute(
+                  path: 'cloud',
+                  parentNavigatorKey: _rootKey,
+                  builder: (context, state) =>
+                      const CloudProfileSettingsScreen(),
+                ),
               ],
             ),
           ],
@@ -151,6 +170,16 @@ final appRouter = GoRouter(
       path: '/chat',
       parentNavigatorKey: _rootKey,
       builder: (context, state) => const ChatScreen(),
+    ),
+    GoRoute(
+      path: '/qr-payment',
+      parentNavigatorKey: _rootKey,
+      builder: (context, state) => const QrPaymentScreen(),
+    ),
+    GoRoute(
+      path: '/categories',
+      parentNavigatorKey: _rootKey,
+      builder: (context, state) => const CategoryManagementScreen(),
     ),
     GoRoute(
       path: '/review',

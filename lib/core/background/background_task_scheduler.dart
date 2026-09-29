@@ -91,64 +91,61 @@ Future<bool> _runBackgroundMaintenance() async {
   try {
     final supabaseInitialized = await SupabaseBootstrap.initialize();
     final client = SupabaseBootstrap.clientOrNull;
-    userId = client?.auth.currentUser?.id;
+    if (!supabaseInitialized || client == null) return true;
+
+    userId = client.auth.currentUser?.id;
+    if (userId == null) return true;
+
     await LocalDatabaseScope.initialize(userId: userId);
-    final cloudConfigured = supabaseInitialized && client != null;
-    if (cloudConfigured && userId == null) return true;
     database = AppDatabase(
       null,
-      LocalDatabaseScope.databaseName(
-        userId: userId,
-        cloudConfigured: cloudConfigured,
-      ),
+      LocalDatabaseScope.databaseName(userId: userId, cloudConfigured: true),
     );
     final repository = DriftInvoiceRepository(database);
     var maintenanceSucceeded = true;
 
-    if (cloudConfigured && userId != null) {
-      final flags = await RemoteConfigService(client).load(userId: userId);
-      if (flags.cloudSync) {
-        try {
-          final outbox = DriftSyncOutboxStore(database);
-          final cursors = DriftSyncCursorStore(database);
-          final gateway = SupabaseSyncGateway(client);
-          final identity = SupabaseSyncIdentityProvider(client);
-          final syncPull = SyncPullCoordinator(
-            repository: repository,
-            cursors: cursors,
-            gateway: gateway,
-          );
-          final referencePulls = [
-            for (final aggregateType in const [
-              'category',
-              'budget',
-              'merchant_rule',
-            ])
-              SyncPullCoordinator(
-                repository: repository,
-                cursors: cursors,
-                gateway: gateway,
-                aggregateType: aggregateType,
-              ),
-          ];
-          final sync = SyncCoordinator(
-            upload: SyncEngine(
-              store: outbox,
-              identity: identity,
+    final flags = await RemoteConfigService(client).load(userId: userId);
+    if (flags.cloudSync) {
+      try {
+        final outbox = DriftSyncOutboxStore(database);
+        final cursors = DriftSyncCursorStore(database);
+        final gateway = SupabaseSyncGateway(client);
+        final identity = SupabaseSyncIdentityProvider(client);
+        final syncPull = SyncPullCoordinator(
+          repository: repository,
+          cursors: cursors,
+          gateway: gateway,
+        );
+        final referencePulls = [
+          for (final aggregateType in const [
+            'category',
+            'budget',
+            'merchant_rule',
+          ])
+            SyncPullCoordinator(
+              repository: repository,
+              cursors: cursors,
               gateway: gateway,
+              aggregateType: aggregateType,
             ),
+        ];
+        final sync = SyncCoordinator(
+          upload: SyncEngine(
+            store: outbox,
             identity: identity,
-            download: syncPull,
-            referenceDownloads: referencePulls,
-          );
-          final summary = await sync.runOnce();
-          if (summary.upload.failed > 0) maintenanceSucceeded = false;
-        } on Object {
-          maintenanceSucceeded = false;
-        }
+            gateway: gateway,
+          ),
+          identity: identity,
+          download: syncPull,
+          referenceDownloads: referencePulls,
+        );
+        final summary = await sync.runOnce();
+        if (summary.upload.failed > 0) maintenanceSucceeded = false;
+      } on Object {
+        maintenanceSucceeded = false;
       }
-      await _tryPruneBackups(client);
     }
+    await _tryPruneBackups(client);
 
     final snapshot = await repository
         .watchDashboard(MonthUtils.key(DateTime.now()))

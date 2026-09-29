@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +14,7 @@ import '../../features/ingestion/application/import_queue.dart';
 import '../../features/ingestion/data/pending_import_store.dart';
 import '../../features/ingestion/domain/import_job.dart';
 import '../../features/ingestion/presentation/import_source_sheet.dart';
+import '../../features/payments/application/qr_payment_providers.dart';
 import '../../shared/errors/error_presenter.dart';
 import '../../shared/widgets/reading_pane.dart';
 import '../theme/app_tokens.dart';
@@ -30,6 +30,8 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell>
     with WidgetsBindingObserver {
+  static const _autoSyncInterval = Duration(minutes: 15);
+
   bool _isImporting = false;
   bool _isSyncing = false;
   bool _syncRequestedWhileRunning = false;
@@ -38,6 +40,7 @@ class _AppShellState extends ConsumerState<AppShell>
   String? _importFileName;
   final _importQueue = ImportQueueController();
   Timer? _retryTimer;
+  Timer? _autoSyncTimer;
   DateTime? _lastAutoSyncAt;
 
   PendingImportStore get _pendingImportStore =>
@@ -47,6 +50,7 @@ class _AppShellState extends ConsumerState<AppShell>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _startAutoSyncTimer();
     if (!kIsWeb) unawaited(_resumePendingImports());
     unawaited(_syncCloud());
   }
@@ -55,15 +59,28 @@ class _AppShellState extends ConsumerState<AppShell>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _retryTimer?.cancel();
+    _autoSyncTimer?.cancel();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _startAutoSyncTimer();
       unawaited(_syncCloud());
       if (!kIsWeb) unawaited(_resumePendingImports());
+    } else {
+      _autoSyncTimer?.cancel();
+      _autoSyncTimer = null;
     }
+  }
+
+  void _startAutoSyncTimer() {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = Timer.periodic(
+      _autoSyncInterval,
+      (_) => _requestAutoSync(),
+    );
   }
 
   Future<void> _syncCloud() async {
@@ -146,60 +163,116 @@ class _AppShellState extends ConsumerState<AppShell>
       if (!_isImporting) unawaited(_resumePendingImports());
     });
     final width = MediaQuery.sizeOf(context).width;
+    final pendingQrPayment = ref.watch(pendingQrPaymentDraftProvider);
     final useRail = AppBreakpoints.useRail(width);
     final content = widget.navigationShell;
     final scheme = Theme.of(context).colorScheme;
     final showInvoiceAction = widget.navigationShell.currentIndex == 1;
     return Scaffold(
       body: SafeArea(
-        child: Row(
+        child: Column(
           children: [
-            if (useRail)
-              NavigationRail(
-                backgroundColor: scheme.surfaceContainerLow,
-                groupAlignment: -0.85,
-                minWidth: 84,
-                selectedIndex: widget.navigationShell.currentIndex,
-                onDestinationSelected: _goBranch,
-                labelType: NavigationRailLabelType.all,
-                leading: Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-                  child: Tooltip(
-                    message: 'Quản lý Tài chính',
-                    child: DecoratedBox(
-                      decoration: ShapeDecoration(
-                        color: scheme.primary,
-                        shape: AppShapes.control,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        child: Icon(
-                          Icons.account_balance_wallet_outlined,
-                          color: scheme.onPrimary,
+            if (pendingQrPayment.valueOrNull != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.gutter,
+                  AppSpacing.sm,
+                  AppSpacing.gutter,
+                  0,
+                ),
+                child: Material(
+                  color: scheme.tertiaryContainer,
+                  shape: AppShapes.card,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.pending_actions_outlined,
+                              color: scheme.onTertiaryContainer,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Có khoản thanh toán QR đang chờ xác nhận. Chưa ghi vào chi tiêu.',
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: scheme.onTertiaryContainer,
+                                    ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                        Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: TextButton(
+                            onPressed: () => context.push('/qr-payment'),
+                            child: const Text('Tiếp tục'),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                destinations: _destinations
-                    .map(
-                      (item) => NavigationRailDestination(
-                        icon: item.icon,
-                        selectedIcon: item.selectedIcon,
-                        label: Text(item.label),
+              ),
+            Expanded(
+              child: Row(
+                children: [
+                  if (useRail)
+                    NavigationRail(
+                      backgroundColor: scheme.surfaceContainerLow,
+                      groupAlignment: -0.85,
+                      minWidth: 84,
+                      selectedIndex: widget.navigationShell.currentIndex,
+                      onDestinationSelected: _goBranch,
+                      labelType: NavigationRailLabelType.all,
+                      leading: Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+                        child: Tooltip(
+                          message: 'Quản lý Tài chính',
+                          child: DecoratedBox(
+                            decoration: ShapeDecoration(
+                              color: scheme.primary,
+                              shape: AppShapes.control,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(AppSpacing.md),
+                              child: Icon(
+                                Icons.account_balance_wallet_outlined,
+                                color: scheme.onPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    )
-                    .toList(growable: false),
+                      destinations: _destinations
+                          .map(
+                            (item) => NavigationRailDestination(
+                              icon: item.icon,
+                              selectedIcon: item.selectedIcon,
+                              label: Text(item.label),
+                            ),
+                          )
+                          .toList(growable: false),
+                    ),
+                  if (useRail)
+                    VerticalDivider(
+                      width: 1,
+                      thickness: 1,
+                      color: scheme.outlineVariant,
+                    ),
+                  // Khi rail xuất hiện, nội dung được ràng vào bề rộng đọc và canh
+                  // giữa thay vì kéo dài hết cửa sổ.
+                  Expanded(
+                    child: useRail ? ReadingPane(child: content) : content,
+                  ),
+                ],
               ),
-            if (useRail)
-              VerticalDivider(
-                width: 1,
-                thickness: 1,
-                color: scheme.outlineVariant,
-              ),
-            // Khi rail xuất hiện, nội dung được ràng vào bề rộng đọc và canh
-            // giữa thay vì kéo dài hết cửa sổ.
-            Expanded(child: useRail ? ReadingPane(child: content) : content),
+            ),
           ],
         ),
       ),
@@ -246,82 +319,16 @@ class _AppShellState extends ConsumerState<AppShell>
     );
     if (source == null || !mounted) return;
     switch (source) {
-      case ImportSource.xmlOrPdf:
-        await _pickDocument();
       case ImportSource.camera:
         await _pickImage(ImageSource.camera);
       case ImportSource.gallery:
         await _pickImage(ImageSource.gallery);
+      case ImportSource.qrPayment:
+        if (mounted) context.push('/qr-payment');
       case ImportSource.manual:
         final draft = ref.read(importCoordinatorProvider).createManualDraft();
         if (mounted) context.push('/review', extra: draft);
     }
-  }
-
-  Future<void> _pickDocument() async {
-    final files = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['xml', 'pdf'],
-    );
-    if (files.isEmpty) return;
-    if (kIsWeb) {
-      final inputs = <({String fileName, Uint8List bytes})>[];
-      for (final file in files) {
-        final fileLength = await file.length();
-        if (fileLength <= 0 || fileLength > AppConstants.maxImportBytes) {
-          _showMessage('${file.name}: File phải có kích thước từ 1 đến 15 MB.');
-          continue;
-        }
-        final bytes = await file.readAsBytes();
-        if (bytes.isEmpty || bytes.length > AppConstants.maxImportBytes) {
-          _showMessage('${file.name}: Không thể đọc file đã chọn.');
-          continue;
-        }
-        inputs.add((fileName: file.name, bytes: bytes));
-      }
-      if (inputs.isEmpty) return;
-      final coordinator = ref.read(importCoordinatorProvider);
-      await _runImportBatch(
-        fileNames: inputs
-            .map((input) => input.fileName)
-            .toList(growable: false),
-        operation: (index) {
-          final input = inputs[index];
-          return coordinator.importFile(
-            bytes: input.bytes,
-            fileName: input.fileName,
-          );
-        },
-      );
-      return;
-    }
-    final pending = <PendingImport>[];
-    for (final file in files) {
-      final fileLength = await file.length();
-      if (fileLength <= 0 || fileLength > AppConstants.maxImportBytes) {
-        _showMessage('${file.name}: File phải có kích thước từ 1 đến 15 MB.');
-        continue;
-      }
-      final bytes = await file.readAsBytes();
-      if (bytes.isEmpty || bytes.length > AppConstants.maxImportBytes) {
-        _showMessage('${file.name}: Không thể đọc file đã chọn.');
-        continue;
-      }
-      final item = await _pendingImportStore.enqueue(
-        bytes: bytes,
-        fileName: file.name,
-        kind: PendingImportKind.document,
-      );
-      await ref.read(importJobStoreProvider).ensureQueued(item);
-      pending.add(item);
-    }
-    if (pending.isEmpty) return;
-    await _runImportBatch(
-      fileNames: pending.map((item) => item.fileName).toList(growable: false),
-      operation: (index) => _processPendingImport(pending[index]),
-      onCompleted: (index) => _completePendingImport(pending[index]),
-      onDeferred: (index) => _deferPendingImport(pending[index]),
-    );
   }
 
   Future<void> _pickImage(ImageSource source) async {

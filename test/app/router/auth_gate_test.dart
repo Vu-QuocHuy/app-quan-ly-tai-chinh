@@ -6,43 +6,53 @@ import 'package:hoadon_insight/shared/widgets/app_empty_state.dart';
 
 void main() {
   group('Cổng đăng nhập', () {
-    // Đây là kịch bản của chính APK mà CI dựng: không có --dart-define nào.
-    group('build không có cấu hình cloud', () {
+    group('build chưa có cấu hình Supabase', () {
       const routes = [
         '/',
         '/invoices',
+        '/invoices/invoice-1',
+        '/invoices/invoice-1/attachments',
         '/budgets',
+        '/groups',
         '/settings',
         '/settings/account',
+        '/settings/cloud',
         '/settings/import-jobs',
+        '/settings/conflicts',
         '/chat',
+        '/qr-payment',
         '/review',
       ];
 
       for (final route in routes) {
-        test('$route dùng được mà không cần đăng nhập', () {
+        test('$route không thể vào khi chưa cấu hình Supabase', () {
           expect(
             authRedirect(
               location: route,
               isConfigured: false,
               isSignedIn: false,
             ),
-            isNull,
-            reason:
-                'App là local-first; không có cloud thì không có gì để đăng '
-                'nhập, nên chặn $route làm app không dùng được.',
+            '/auth',
+            reason: '$route phải yêu cầu cấu hình và đăng nhập',
           );
         });
       }
 
-      test('/auth tự chuyển về trang chủ vì không có gì để đăng nhập', () {
+      test('/auth vẫn hiện hướng dẫn cấu hình', () {
         expect(
           authRedirect(
             location: '/auth',
             isConfigured: false,
             isSignedIn: false,
           ),
-          '/',
+          isNull,
+        );
+      });
+
+      test('phiên cũ cũng không bỏ qua build thiếu cấu hình', () {
+        expect(
+          authRedirect(location: '/', isConfigured: false, isSignedIn: true),
+          '/auth',
         );
       });
     });
@@ -59,6 +69,7 @@ void main() {
           '/settings/import-jobs',
           '/settings/conflicts',
           '/chat',
+          '/qr-payment',
           '/review',
         ]) {
           expect(
@@ -73,17 +84,23 @@ void main() {
         }
       });
 
-      test('trang đăng nhập và tài khoản vẫn tới được', () {
-        for (final route in ['/auth', '/settings/account']) {
-          expect(
-            authRedirect(
-              location: route,
-              isConfigured: true,
-              isSignedIn: false,
-            ),
-            isNull,
-          );
-        }
+      test('chỉ trang đăng nhập vẫn tới được', () {
+        expect(
+          authRedirect(
+            location: '/auth',
+            isConfigured: true,
+            isSignedIn: false,
+          ),
+          isNull,
+        );
+        expect(
+          authRedirect(
+            location: '/settings/account',
+            isConfigured: true,
+            isSignedIn: false,
+          ),
+          '/auth',
+        );
       });
     });
 
@@ -95,8 +112,15 @@ void main() {
         );
       });
 
-      test('mọi route khác đi thẳng', () {
-        for (final route in ['/', '/settings/conflicts', '/chat']) {
+      test('mọi route dữ liệu được mở', () {
+        for (final route in [
+          '/',
+          '/invoices',
+          '/settings/account',
+          '/settings/conflicts',
+          '/chat',
+          '/qr-payment',
+        ]) {
           expect(
             authRedirect(location: route, isConfigured: true, isSignedIn: true),
             isNull,

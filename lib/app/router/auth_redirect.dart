@@ -8,13 +8,9 @@
 ///
 /// Trả `null` nghĩa là đi thẳng, không redirect.
 ///
-/// App là local-first: OCR, SQLite, import và toàn bộ thống kê chạy offline.
-/// Nếu build không có cấu hình cloud — chính là APK mà CI dựng — thì KHÔNG có
-/// gì để đăng nhập, nên chặn ở đây làm app không dùng được và mâu thuẫn với
-/// lời hứa local-first trong README.
-///
-/// Khi cloud đã cấu hình, mọi route chứa dữ liệu người dùng đều cần phiên đăng
-/// nhập. Chỉ trang tài khoản được mở để thực hiện đăng nhập.
+/// App yêu cầu cấu hình Supabase và đăng nhập trước khi vào bất kỳ route dữ
+/// liệu nào. Sau lần đăng nhập đầu tiên, session đã lưu cho phép mở dữ liệu
+/// local khi offline; các thao tác cloud sẽ được thử lại khi có mạng.
 String? authRedirect({
   required String location,
   required bool isConfigured,
@@ -22,12 +18,9 @@ String? authRedirect({
 }) {
   final isAuthRoute = location == '/auth';
 
-  if (!isConfigured) {
-    return isAuthRoute ? '/' : null;
-  }
+  if (!isConfigured) return isAuthRoute ? null : '/auth';
 
-  const accountRoutes = {'/auth', '/settings/account'};
-  if (!isSignedIn && !accountRoutes.contains(location)) return '/auth';
+  if (!isSignedIn && !isAuthRoute) return '/auth';
 
   if (isSignedIn && isAuthRoute) return '/';
   return null;

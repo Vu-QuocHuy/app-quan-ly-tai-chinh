@@ -24,6 +24,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final _uuid = const Uuid();
+  Future<void> _pendingPersistence = Future<void>.value();
   List<ChatMessage> _messages = const [];
   bool _loading = true;
   bool _sending = false;
@@ -45,6 +46,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final api = ref.watch(chatApiClientProvider);
+    final cloudHistoryEnabled = ref
+        .watch(chatHistoryStoreProvider)
+        .canSyncCloud;
     final flags =
         ref.watch(featureFlagsProvider).value ?? FeatureFlags.defaults;
     return Scaffold(
@@ -78,6 +82,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   message:
                       'Chế độ local: câu hỏi về dữ liệu đã lưu vẫn hoạt động. '
                       'Gemini và dữ liệu bên ngoài đang tắt hoặc chưa cấu hình.',
+                ),
+              ),
+            if (cloudHistoryEnabled)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: AppCallout(
+                  icon: Icons.cloud_done_outlined,
+                  message:
+                      'Tin nhắn mới được lưu riêng tư trên cloud; lịch sử local cũ không được tải lên.',
                 ),
               ),
             if (_connectionNote != null)
@@ -242,13 +255,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _loadHistory() async {
-    final loaded = await ref.read(chatHistoryStoreProvider).load();
+    final store = ref.read(chatHistoryStoreProvider);
+    List<ChatMessage> loaded;
+    try {
+      loaded = await store.load();
+    } on Object {
+      loaded = await store.loadLocal();
+      if (store.canSyncCloud) {
+        _connectionNote =
+            'Chưa tải được lịch sử từ cloud; đang hiển thị bản trên thiết bị.';
+      }
+    }
     if (!mounted) return;
     setState(() {
       _messages = loaded.isEmpty ? [_welcomeMessage()] : loaded;
       _loading = false;
     });
     _scrollToEnd();
+  }
+
+  Future<void> _persistMessage(ChatMessage message) async {
+    final store = ref.read(chatHistoryStoreProvider);
+    try {
+      final savedToCloud = await store.append(message);
+      if (savedToCloud || !store.canSyncCloud || !mounted) return;
+      setState(() {
+        _connectionNote =
+            'Tin nhắn đã lưu trên thiết bị nhưng chưa đồng bộ được lên cloud.';
+      });
+    } on Object {
+      if (store.canSyncCloud && mounted) {
+        setState(() {
+          _connectionNote =
+              'Tin nhắn vẫn hiển thị nhưng chưa lưu được lịch sử cloud.';
+        });
+      }
+    }
+  }
+
+  void _enqueueMessagePersistence(ChatMessage message) {
+    _pendingPersistence = _pendingPersistence.then(
+      (_) => _persistMessage(message),
+    );
   }
 
   Future<void> _send(String value) async {
@@ -267,6 +315,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _connectionNote = null;
     });
     _scrollToEnd();
+    _enqueueMessagePersistence(userMessage);
 
     try {
       final local = await ref.read(localChatAssistantProvider).answer(question);
@@ -304,7 +353,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _messages = updated;
         _sending = false;
       });
-      await ref.read(chatHistoryStoreProvider).save(updated);
+      _enqueueMessagePersistence(assistantMessage);
       _scrollToEnd();
     } on Object catch (error) {
       if (!mounted) return;
@@ -330,7 +379,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Xóa lịch sử trò chuyện?'),
-        content: const Text('Các tin nhắn đã lưu trên thiết bị sẽ bị xóa.'),
+        content: const Text(
+          'Lịch sử trên thiết bị sẽ bị xóa; nếu đã đăng nhập, bản cloud cũng bị xóa.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -344,7 +395,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
     );
     if (confirmed != true) return;
-    await ref.read(chatHistoryStoreProvider).clear();
+    await _pendingPersistence;
+    try {
+      await ref.read(chatHistoryStoreProvider).clear();
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _connectionNote =
+              'Đã xóa bản trên thiết bị nhưng chưa xóa được lịch sử cloud.';
+        });
+      }
+    }
     if (!mounted) return;
     setState(() => _messages = [_welcomeMessage()]);
   }

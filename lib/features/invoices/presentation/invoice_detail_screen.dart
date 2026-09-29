@@ -30,6 +30,11 @@ class InvoiceDetailScreen extends ConsumerWidget {
         actions: [
           if (invoice != null) ...[
             IconButton(
+              tooltip: 'Chứng từ gốc',
+              onPressed: () => context.push('/invoices/$invoiceId/attachments'),
+              icon: const Icon(Icons.attach_file_outlined),
+            ),
+            IconButton(
               tooltip: 'Chỉnh sửa',
               onPressed: () => context.push('/review', extra: invoice),
               icon: const Icon(Icons.edit_outlined),

@@ -26,17 +26,17 @@ class SettingsScreen extends ConsumerWidget {
     final budgetAlerts = ref.watch(budgetAlertsEnabledProvider);
     final backupRecords = ref.watch(backupRecordsProvider);
     final authUser = ref.watch(authUserProvider);
+    final conflictsAsync = ref.watch(invoiceConflictsProvider);
+    final conflictCount = conflictsAsync.valueOrNull?.length ?? 0;
     final featureFlags =
         ref.watch(featureFlagsProvider).value ?? FeatureFlags.defaults;
     final supabaseConfigured = ref.watch(supabaseClientProvider) != null;
-    final aiStatus = authUser.when(
-      data: (user) => supabaseConfigured && user != null
-          ? 'OCR và chatbot AI online đã sẵn sàng.'
-          : 'Đang dùng OCR và chatbot offline; đăng nhập để bật AI online.',
-      loading: () => 'Đang kiểm tra trạng thái AI online…',
-      error: (_, _) =>
-          'Không kiểm tra được AI online; OCR và chatbot offline vẫn dùng được.',
-    );
+    final themeMode = ref.watch(themeModeProvider);
+    final themeLabel = switch (themeMode) {
+      ThemeMode.light => 'Sáng',
+      ThemeMode.dark => 'Tối',
+      ThemeMode.system => 'Theo hệ thống',
+    };
     final categories = categoriesAsync.value ?? const <CategoryEntity>[];
 
     return Scaffold(
@@ -48,96 +48,84 @@ class SettingsScreen extends ConsumerWidget {
             sliver: SliverList.list(
               children: [
                 _Section(
-                  title: 'Dữ liệu và quyền riêng tư',
+                  title: 'Tài khoản & đồng bộ',
                   children: [
-                    const ListTile(
-                      leading: Icon(Icons.phone_android_outlined),
-                      title: Text('Local-first'),
-                      subtitle: Text(
-                        'Dữ liệu hóa đơn được lưu trên thiết bị. Chỉ text OCR/PDF được gửi đi khi Edge Function AI được bật.',
-                      ),
-                    ),
                     ListTile(
                       leading: Icon(
                         supabaseConfigured
                             ? Icons.cloud_sync_outlined
                             : Icons.cloud_off_outlined,
                       ),
-                      title: const Text('Tài khoản và đồng bộ'),
+                      title: const Text('Tài khoản'),
                       subtitle: Text(
                         !supabaseConfigured
-                            ? 'Supabase chưa được bật trong cấu hình build.'
+                            ? 'Tài khoản chưa được cấu hình.'
                             : authUser.when(
                                 data: (user) => user?.email ?? 'Chưa đăng nhập',
-                                loading: () => 'Đang kiểm tra phiên đăng nhập…',
+                                loading: () => 'Đang tải tài khoản…',
                                 error: (_, _) =>
-                                    'Không đọc được phiên đăng nhập.',
+                                    'Không tải được thông tin tài khoản.',
                               ),
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/settings/account'),
                     ),
+                    syncHealth.when(
+                      data: (health) => ListTile(
+                        leading: Icon(
+                          health.cloudConfigured
+                              ? Icons.cloud_done_outlined
+                              : Icons.cloud_off_outlined,
+                        ),
+                        title: const Text('Đồng bộ dữ liệu'),
+                        subtitle: Text(
+                          !featureFlags.cloudSync
+                              ? 'Đồng bộ hiện đang tạm tắt.'
+                              : !health.cloudConfigured
+                              ? 'Đăng nhập để đồng bộ dữ liệu lên cloud.'
+                              : health.failedCount > 0
+                              ? '${health.failedCount} thay đổi cần thử lại.'
+                              : health.pendingCount > 0
+                              ? '${health.pendingCount} thay đổi đang chờ gửi.'
+                              : 'Dữ liệu đã được cập nhật.',
+                        ),
+                        trailing:
+                            featureFlags.cloudSync && health.cloudConfigured
+                            ? const Icon(Icons.sync)
+                            : null,
+                        onTap: featureFlags.cloudSync && health.cloudConfigured
+                            ? () => _syncNow(context, ref)
+                            : null,
+                      ),
+                      loading: () => const _LoadingTile(),
+                      error: (error, _) => _ErrorTile(
+                        error: error,
+                        label: 'Không đọc được trạng thái đồng bộ',
+                        onRetry: () => ref.invalidate(syncHealthProvider),
+                      ),
+                    ),
                     ListTile(
-                      leading: Icon(
-                        Icons.delete_outline,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                      title: const Text('Xóa toàn bộ dữ liệu'),
+                      leading: const Icon(Icons.tune_outlined),
+                      title: const Text('Cài đặt đồng bộ'),
                       subtitle: const Text(
-                        'Xóa hóa đơn, ngân sách và quy tắc phân loại trên thiết bị.',
+                        'Giao diện, cảnh báo ngân sách và app ngân hàng QR.',
                       ),
-                      onTap: () => _confirmDelete(context, ref),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/settings/cloud'),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _Section(
-                  title: 'Giao diện',
+                  title: 'Tùy chỉnh',
                   children: [
-                    // ThemeModeNotifier.set trước đây không được gọi ở đâu cả,
-                    // nên tuỳ chọn đã lưu không bao giờ ghi được và app luôn
-                    // theo hệ thống.
                     ListTile(
                       leading: const Icon(Icons.brightness_6_outlined),
-                      title: const Text('Chế độ sáng/tối'),
-                      subtitle: Text(switch (ref.watch(themeModeProvider)) {
-                        ThemeMode.light => 'Luôn dùng giao diện sáng',
-                        ThemeMode.dark => 'Luôn dùng giao diện tối',
-                        ThemeMode.system => 'Theo cài đặt hệ thống',
-                      }),
+                      title: const Text('Giao diện'),
+                      subtitle: Text(themeLabel),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _chooseThemeMode(context, ref),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: SegmentedButton<ThemeMode>(
-                        segments: const [
-                          ButtonSegment(
-                            value: ThemeMode.system,
-                            icon: Icon(Icons.brightness_auto_outlined),
-                            label: Text('Hệ thống'),
-                          ),
-                          ButtonSegment(
-                            value: ThemeMode.light,
-                            icon: Icon(Icons.light_mode_outlined),
-                            label: Text('Sáng'),
-                          ),
-                          ButtonSegment(
-                            value: ThemeMode.dark,
-                            icon: Icon(Icons.dark_mode_outlined),
-                            label: Text('Tối'),
-                          ),
-                        ],
-                        selected: {ref.watch(themeModeProvider)},
-                        onSelectionChanged: (selection) => ref
-                            .read(themeModeProvider.notifier)
-                            .set(selection.first),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _Section(
-                  title: 'Thông báo',
-                  children: [
                     budgetAlerts.when(
                       data: (enabled) => SwitchListTile(
                         secondary: const Icon(
@@ -161,160 +149,156 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _Section(
-                  title: 'Phân loại tự động',
+                  title: 'Tự động hóa & công cụ',
                   children: [
-                    rulesAsync.when(
-                      data: (rules) => _MerchantRuleManagement(
-                        rules: rules,
-                        categories: categories,
-                        onDelete: (rule) =>
-                            _confirmDeleteRule(context, ref, rule),
+                    ExpansionTile(
+                      leading: const Icon(Icons.auto_fix_high_outlined),
+                      title: const Text('Quy tắc phân loại'),
+                      subtitle: rulesAsync.when(
+                        data: (rules) => Text(
+                          rules.isEmpty
+                              ? 'Tự ghi nhớ danh mục theo cửa hàng'
+                              : '${rules.length} quy tắc đã ghi nhớ',
+                        ),
+                        loading: () => const Text('Đang tải quy tắc…'),
+                        error: (_, _) => const Text('Không tải được quy tắc'),
                       ),
-                      loading: () => const _LoadingTile(),
-                      error: (error, _) => _ErrorTile(
-                        error: error,
-                        label: 'Không tải được quy tắc phân loại',
-                        onRetry: () => ref.invalidate(merchantRulesProvider),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _Section(
-                  title: 'Sao lưu và khôi phục',
-                  children: [
-                    backupRecords.when(
-                      data: (records) => _BackupStatusTile(records: records),
-                      loading: () => const _LoadingTile(),
-                      error: (error, _) => _ErrorTile(
-                        error: error,
-                        label: 'Không đọc được lịch sử backup',
-                        onRetry: () => ref.invalidate(backupRecordsProvider),
-                      ),
-                    ),
-                    _ExportManagement(
-                      onExportJson: () => _export(context, ref, json: true),
-                      onExportCsv: () => _export(context, ref, json: false),
-                      onExportEncrypted: () => _exportEncrypted(context, ref),
-                      onBackupCloud:
-                          supabaseConfigured && authUser.asData?.value != null
-                          ? () => _backupCloud(context, ref)
-                          : null,
-                      onManageCloud:
-                          supabaseConfigured && authUser.asData?.value != null
-                          ? () => _manageCloudBackups(
-                              context,
-                              ref,
-                              categories.map((item) => item.id),
-                            )
-                          : null,
-                      onExportPdf: () => _exportPdf(context, ref),
-                      onRestoreJson: () => _restore(
-                        context,
-                        ref,
-                        categories.map((item) => item.id),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _Section(
-                  title: 'Xử lý thông minh',
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.auto_awesome_outlined),
-                      title: const Text('OCR và trợ lý AI'),
-                      subtitle: Text(aiStatus),
+                      children: [
+                        rulesAsync.when(
+                          data: (rules) => _MerchantRuleManagement(
+                            rules: rules,
+                            categories: categories,
+                            onDelete: (rule) =>
+                                _confirmDeleteRule(context, ref, rule),
+                          ),
+                          loading: () => const _LoadingTile(),
+                          error: (error, _) => _ErrorTile(
+                            error: error,
+                            label: 'Không tải được quy tắc phân loại',
+                            onRetry: () =>
+                                ref.invalidate(merchantRulesProvider),
+                          ),
+                        ),
+                      ],
                     ),
                     ListTile(
                       leading: const Icon(Icons.chat_bubble_outline),
                       title: const Text('Trợ lý chi tiêu'),
                       subtitle: const Text(
-                        'Hỏi dữ liệu local; Gemini và tỷ giá bên ngoài dùng backend khi được bật.',
+                        'Hỏi về chi tiêu và hóa đơn của bạn.',
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/chat'),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                if (conflictCount > 0) ...[
+                  const SizedBox(height: 12),
+                  _Section(
+                    title: 'Cần xử lý',
+                    children: [
+                      ListTile(
+                        leading: Icon(
+                          Icons.warning_amber_outlined,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        title: const Text('Xung đột dữ liệu'),
+                        subtitle: Text(
+                          '$conflictCount hóa đơn cần bạn chọn bản giữ lại.',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/settings/conflicts'),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 12),
                 _Section(
-                  title: 'Vận hành',
+                  title: 'Dữ liệu',
+                  children: [
+                    ExpansionTile(
+                      leading: const Icon(Icons.backup_outlined),
+                      title: const Text('Sao lưu & khôi phục'),
+                      subtitle: const Text(
+                        'Xuất, nhập hoặc quản lý bản sao lưu cloud.',
+                      ),
+                      children: [
+                        backupRecords.when(
+                          data: (records) =>
+                              _BackupStatusTile(records: records),
+                          loading: () => const _LoadingTile(),
+                          error: (error, _) => _ErrorTile(
+                            error: error,
+                            label: 'Không đọc được lịch sử backup',
+                            onRetry: () =>
+                                ref.invalidate(backupRecordsProvider),
+                          ),
+                        ),
+                        _ExportManagement(
+                          onExportJson: () => _export(context, ref, json: true),
+                          onExportCsv: () => _export(context, ref, json: false),
+                          onExportEncrypted: () =>
+                              _exportEncrypted(context, ref),
+                          onBackupCloud:
+                              supabaseConfigured &&
+                                  authUser.asData?.value != null
+                              ? () => _backupCloud(context, ref)
+                              : null,
+                          onManageCloud:
+                              supabaseConfigured &&
+                                  authUser.asData?.value != null
+                              ? () => _manageCloudBackups(
+                                  context,
+                                  ref,
+                                  categories.map((item) => item.id),
+                                )
+                              : null,
+                          onExportPdf: () => _exportPdf(context, ref),
+                          onRestoreJson: () => _restore(
+                            context,
+                            ref,
+                            categories.map((item) => item.id),
+                          ),
+                        ),
+                        ListTile(
+                          leading: Icon(
+                            Icons.delete_outline,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          title: const Text('Xóa dữ liệu trên thiết bị'),
+                          subtitle: const Text(
+                            'Thao tác này không thể hoàn tác.',
+                          ),
+                          onTap: () => _confirmDelete(context, ref),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _Section(
+                  title: 'Nâng cao',
                   children: [
                     ListTile(
                       leading: const Icon(Icons.history_outlined),
                       title: const Text('Lịch sử nhập hóa đơn'),
                       subtitle: const Text(
-                        'Theo dõi lỗi, số lần chạy và thử lại tác vụ bị lỗi.',
+                        'Theo dõi tác vụ nhập và thử lại khi gặp lỗi.',
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/settings/import-jobs'),
                     ),
-                    syncHealth.when(
-                      data: (health) => ListTile(
-                        leading: Icon(
-                          health.cloudConfigured
-                              ? Icons.cloud_done_outlined
-                              : Icons.cloud_off_outlined,
-                        ),
-                        title: const Text('Đồng bộ đám mây'),
-                        subtitle: Text(
-                          !featureFlags.cloudSync
-                              ? 'Đồng bộ đang tạm tắt theo cấu hình rollout.'
-                              : health.cloudConfigured
-                              ? '${health.pendingCount} thay đổi đang chờ · ${health.failedCount} lỗi'
-                              : '${health.pendingCount} thay đổi đã lưu trong outbox; cần cấu hình tài khoản và cloud gateway để gửi.',
-                        ),
-                        trailing:
-                            featureFlags.cloudSync && health.cloudConfigured
-                            ? const Icon(Icons.sync)
-                            : null,
-                        onTap: featureFlags.cloudSync && health.cloudConfigured
-                            ? () => _syncNow(context, ref)
-                            : null,
-                      ),
-                      loading: () => const _LoadingTile(),
+                    conflictsAsync.when(
+                      data: (_) => const SizedBox.shrink(),
+                      loading: () => const SizedBox.shrink(),
                       error: (error, _) => _ErrorTile(
                         error: error,
-                        label: 'Không đọc được trạng thái đồng bộ',
-                        onRetry: () => ref.invalidate(syncHealthProvider),
+                        label: 'Không đọc được trạng thái xung đột',
+                        onRetry: () => ref.invalidate(invoiceConflictsProvider),
                       ),
                     ),
-                    ref
-                        .watch(invoiceConflictsProvider)
-                        .when(
-                          data: (conflicts) => ListTile(
-                            leading: Icon(
-                              conflicts.isEmpty
-                                  ? Icons.check_circle_outline
-                                  : Icons.warning_amber_outlined,
-                              color: conflicts.isEmpty
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context).colorScheme.error,
-                            ),
-                            title: const Text('Xung đột dữ liệu'),
-                            subtitle: Text(
-                              conflicts.isEmpty
-                                  ? 'Không có hóa đơn cần xử lý.'
-                                  : '${conflicts.length} hóa đơn cần bạn chọn bản giữ lại.',
-                            ),
-                            trailing: conflicts.isEmpty
-                                ? null
-                                : const Icon(Icons.chevron_right),
-                            onTap: conflicts.isEmpty
-                                ? null
-                                : () => context.push('/settings/conflicts'),
-                          ),
-                          loading: () => const _LoadingTile(),
-                          error: (error, _) => _ErrorTile(
-                            error: error,
-                            label: 'Không đọc được xung đột',
-                            onRetry: () =>
-                                ref.invalidate(invoiceConflictsProvider),
-                          ),
-                        ),
                   ],
                 ),
               ],
@@ -743,12 +727,86 @@ class SettingsScreen extends ConsumerWidget {
         }
       }
       ref.invalidate(budgetAlertsEnabledProvider);
+      if (!context.mounted) return;
+      await _syncCloudProfilePreferences(context, ref, enabled);
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'Không thể cập nhật thông báo: ${friendlyMessage(error)}',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _chooseThemeMode(BuildContext context, WidgetRef ref) async {
+    final current = ref.read(themeModeProvider);
+    final selected = await showModalBottomSheet<ThemeMode>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 20, 24, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Chọn giao diện'),
+              ),
+            ),
+            for (final option in const [
+              (ThemeMode.system, 'Theo hệ thống'),
+              (ThemeMode.light, 'Sáng'),
+              (ThemeMode.dark, 'Tối'),
+            ])
+              ListTile(
+                title: Text(option.$2),
+                selected: current == option.$1,
+                trailing: current == option.$1 ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.of(sheetContext).pop(option.$1),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || selected == current || !context.mounted) return;
+    await _setThemeMode(context, ref, selected);
+  }
+
+  Future<void> _setThemeMode(
+    BuildContext context,
+    WidgetRef ref,
+    ThemeMode mode,
+  ) async {
+    await ref.read(themeModeProvider.notifier).set(mode);
+    if (!context.mounted) return;
+    final enabled = await ref.read(budgetAlertPreferencesProvider).isEnabled();
+    if (!context.mounted) return;
+    await _syncCloudProfilePreferences(context, ref, enabled);
+  }
+
+  Future<void> _syncCloudProfilePreferences(
+    BuildContext context,
+    WidgetRef ref,
+    bool alertsEnabled,
+  ) async {
+    final store = ref.read(profilePreferencesStoreProvider);
+    if (store == null || !store.canSync) return;
+    try {
+      await store.save(
+        themeMode: ref.read(themeModeProvider).name,
+        budgetAlertsEnabled: alertsEnabled,
+      );
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã lưu trên thiết bị nhưng chưa đồng bộ cài đặt cloud: '
+            '${friendlyMessage(error)}',
           ),
         ),
       );
@@ -1085,11 +1143,6 @@ class _MerchantRuleManagement extends StatelessWidget {
 
     return Column(
       children: [
-        const ListTile(
-          leading: Icon(Icons.auto_fix_high_outlined),
-          title: Text('Quy tắc đã ghi nhớ'),
-          subtitle: Text('Áp dụng tự động cho các hóa đơn mới.'),
-        ),
         ...rules.map((rule) {
           final category = _findCategory(categories, rule.categoryId);
           return ListTile(

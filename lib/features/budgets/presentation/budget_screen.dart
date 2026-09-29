@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
@@ -13,7 +14,6 @@ import '../../../shared/widgets/month_selector.dart';
 import '../../../shared/widgets/money_text.dart';
 import '../../../shared/widgets/section_header.dart';
 import '../../invoices/domain/invoice_models.dart';
-import 'category_management.dart';
 import '../../../shared/errors/error_presenter.dart';
 
 class BudgetScreen extends ConsumerWidget {
@@ -30,7 +30,17 @@ class BudgetScreen extends ConsumerWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar(pinned: true, title: Text('Ngân sách')),
+          SliverAppBar(
+            pinned: true,
+            title: const Text('Ngân sách'),
+            actions: [
+              IconButton(
+                tooltip: 'Quản lý danh mục',
+                onPressed: () => context.push('/categories'),
+                icon: const Icon(Icons.category_outlined),
+              ),
+            ],
+          ),
           const SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -83,13 +93,6 @@ class BudgetScreen extends ConsumerWidget {
               ),
             },
           ),
-          if (categories case AsyncData(value: final categoryItems))
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 112),
-                child: CategoryManagement(categories: categoryItems),
-              ),
-            ),
         ],
       ),
     );

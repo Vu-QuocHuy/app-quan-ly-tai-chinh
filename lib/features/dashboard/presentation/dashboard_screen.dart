@@ -13,7 +13,6 @@ import '../../../app/theme/finance_colors.dart';
 import '../../../shared/widgets/app_callout.dart';
 import '../../../shared/widgets/category_avatar.dart';
 import '../../../shared/widgets/app_card.dart';
-import '../../../shared/widgets/app_empty_state.dart';
 import '../../../shared/widgets/app_error_state.dart';
 import '../../../shared/widgets/app_skeleton.dart';
 import '../../../shared/widgets/budget_meter.dart';
@@ -543,16 +542,7 @@ class _DailyChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (snapshot.dailyTotals.isEmpty) {
-      return const AppCard(
-        child: AppEmptyState(
-          icon: Icons.show_chart,
-          title: 'Chưa có dữ liệu chi tiêu',
-          message: 'Biểu đồ sẽ xuất hiện sau khi bạn xác nhận hóa đơn.',
-        ),
-      );
-    }
-
+    final hasData = snapshot.dailyTotals.isNotEmpty;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final days = DateUtils.getDaysInMonth(month.year, month.month);
@@ -574,13 +564,14 @@ class _DailyChart extends StatelessWidget {
         ? [FlSpot(1, 0), FlSpot(days.toDouble(), previous.toDouble())]
         : const <FlSpot>[];
 
-    final maxY = math.max(running, previous).toDouble();
+    final maxY = math.max(running, hasData ? previous : 0).toDouble();
 
     return Semantics(
-      label:
-          'Biểu đồ chi tiêu cộng dồn theo ngày. '
-          'Tổng cuối kỳ ${MoneyFormatter.format(running)}.'
-          '${previous > 0 ? ' Tháng trước ${MoneyFormatter.format(previous)}.' : ''}',
+      label: hasData
+          ? 'Biểu đồ chi tiêu cộng dồn theo ngày. '
+                'Tổng cuối kỳ ${MoneyFormatter.format(running)}.'
+                '${previous > 0 ? ' Tháng trước ${MoneyFormatter.format(previous)}.' : ''}'
+          : 'Biểu đồ chi tiêu cộng dồn theo ngày, chưa có dữ liệu trong tháng ${MonthUtils.label(month)}.',
       child: AppCard(
         child: AspectRatio(
           aspectRatio: 16 / 10,
@@ -661,28 +652,30 @@ class _DailyChart extends StatelessWidget {
                       .toList(growable: false),
                 ),
               ),
-              lineBarsData: [
-                LineChartBarData(
-                  spots: spots,
-                  isCurved: false,
-                  color: scheme.primary,
-                  barWidth: 2,
-                  dotData: const FlDotData(show: false),
-                  belowBarData: BarAreaData(
-                    show: true,
-                    color: scheme.primary.withValues(alpha: 0.06),
-                  ),
-                ),
-                if (paceSpots.isNotEmpty)
-                  LineChartBarData(
-                    spots: paceSpots,
-                    isCurved: false,
-                    color: scheme.outline,
-                    barWidth: 1.5,
-                    dashArray: const [3, 4],
-                    dotData: const FlDotData(show: false),
-                  ),
-              ],
+              lineBarsData: hasData
+                  ? [
+                      LineChartBarData(
+                        spots: spots,
+                        isCurved: false,
+                        color: scheme.primary,
+                        barWidth: 2,
+                        dotData: const FlDotData(show: false),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          color: scheme.primary.withValues(alpha: 0.06),
+                        ),
+                      ),
+                      if (paceSpots.isNotEmpty)
+                        LineChartBarData(
+                          spots: paceSpots,
+                          isCurved: false,
+                          color: scheme.outline,
+                          barWidth: 1.5,
+                          dashArray: const [3, 4],
+                          dotData: const FlDotData(show: false),
+                        ),
+                    ]
+                  : const [],
             ),
           ),
         ),
@@ -701,11 +694,9 @@ class _CategoryBreakdown extends StatelessWidget {
   Widget build(BuildContext context) {
     if (snapshot.categoryTotals.isEmpty) {
       return const AppCard(
-        child: AppEmptyState(
-          icon: Icons.category_outlined,
-          title: 'Chưa có danh mục nào',
-          message: 'Chưa có dữ liệu danh mục trong tháng này.',
-        ),
+        semanticLabel:
+            'Biểu đồ theo danh mục, chưa có dữ liệu trong tháng được chọn.',
+        child: SizedBox(height: 104),
       );
     }
     final entries = snapshot.categoryTotals.entries.toList()

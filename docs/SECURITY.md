@@ -1,12 +1,18 @@
 # Security baseline
 
-Quản lý Tài chính xử lý dữ liệu thu chi theo nguyên tắc local-first. XML, PDF và
+Quản lý Tài chính xử lý dữ liệu thu chi theo nguyên tắc offline-first có tài
+khoản bắt buộc. Lần đăng nhập đầu cần mạng; sau đó session đã lưu mở đúng cơ sở
+dữ liệu local theo user khi offline, còn thao tác cloud được giữ để thử lại.
+Không có Supabase config hoặc chưa có phiên đăng nhập thì mọi route dữ liệu đều
+bị chặn. XML, PDF và
 ảnh được xử lý trên thiết bị theo mặc định. Khi người dùng bật luồng AI online,
 OCR text hoặc ảnh được chọn sẽ gửi qua HTTPS tới private Supabase Storage/Edge
 Function để trích xuất; dữ liệu này không được ghi vào log và có thời hạn dọn.
 
 ## Controls đã triển khai
 
+- Router không cho đi vào dashboard, giao dịch, QR, chat, nhóm hay cài đặt dữ liệu nếu chưa cấu hình Supabase và đăng nhập; màn hình auth là route duy nhất trước đăng nhập.
+- Tác vụ nền không mở database hoặc gửi thông báo từ dữ liệu cũ khi Supabase chưa cấu hình hoặc không có session; với session đã lưu, dữ liệu local theo user vẫn có thể dùng offline.
 - Không nhúng Gemini API key trong app. Key chỉ tồn tại trong Supabase Secrets.
 - Edge Function yêu cầu Supabase JWT, giới hạn request theo cửa sổ thời gian và không ghi token vào log.
 - Quota AI được ghi atomically theo user trong PostgreSQL; nếu RPC quota không khả dụng, request bị từ chối thay vì fallback có thể bị bypass.
@@ -25,6 +31,10 @@ Function để trích xuất; dữ liệu này không được ghi vào log và 
   thao tác xóa tài khoản dọn cả queue hiện tại và queue legacy.
 - Cloud backup chỉ nhận envelope `.hdbak` đã mã hóa, dùng bucket private và policy giới hạn thư mục theo `auth.uid()`; mọi thao tác list/download/delete phía app tiếp tục kiểm tra prefix user hiện tại.
 - Cloud sync chỉ ghi dữ liệu dưới `auth.uid()` qua wrapper RPC kiểm tra identity, revision, kích thước payload và nested records; quyền gọi trực tiếp RPC ghi bị thu hồi.
+- Chứng từ gốc nằm trong bucket `receipt-images` private, theo prefix user; metadata có SHA-256, MIME/size checks, RLS và chỉ hóa đơn đã tồn tại trên cloud mới nhận file. Link mở file là signed URL ngắn hạn.
+- Chat cloud chỉ ghi từng tin nhắn mới sau migration, không backfill lịch sử local cũ; nội dung/citations được giới hạn, RLS theo user và có thể xóa trên cả thiết bị lẫn cloud.
+- QR lưu session và event `scanned`, `bank_opened`, `user_confirmed` hoặc `user_cancelled` qua RPC owner-scoped. `user_confirmed` chỉ là lời xác nhận của người dùng, không phải xác minh từ ngân hàng; dữ liệu người nhận/tài khoản QR cũng được lưu trong session riêng tư.
+- Theme, cảnh báo ngân sách và app ngân hàng QR gần nhất gắn với hồ sơ tài khoản. Ghi cài đặt chỉ qua RPC hẹp vì hồ sơ đã khóa quyền ghi trực tiếp.
 - Input AI thành công được dọn ngay sau xử lý; job lỗi giữ tối đa 7 ngày để replay, job cancel tối đa 1 ngày, và cleanup chỉ xóa đường dẫn DB sau khi Storage xác nhận.
 - Edge Function xóa tài khoản duyệt toàn bộ prefix user, gồm cả thư mục Storage lồng nhau, trước khi xóa Auth user.
 - Kết quả và metadata của job AI terminal được giữ tối đa 30 ngày rồi worker dọn theo batch, không xóa job khi input path vẫn còn cần cleanup.

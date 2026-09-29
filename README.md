@@ -1,6 +1,6 @@
 # Quản lý Tài chính
 
-Ứng dụng Flutter local-first để quản lý thu chi cá nhân và nhóm: nhập hóa đơn điện tử Việt Nam từ XML, PDF có text, camera/ảnh OCR hoặc nhập tay; kiểm tra dữ liệu trước khi lưu; tự phân loại; phát hiện trùng; theo dõi chi tiêu, ngân sách và xu hướng tài chính.
+Ứng dụng Flutter offline-first để quản lý thu chi cá nhân và nhóm: ghi giao dịch thủ công, OCR hóa đơn từ camera/thư viện, quét VietQR để mở app ngân hàng rồi tự xác nhận kết quả; kiểm tra dữ liệu trước khi lưu; tự phân loại; phát hiện trùng; theo dõi chi tiêu, ngân sách và xu hướng tài chính. Giao diện hiện không cung cấp XML/PDF như nguồn nhập hóa đơn; parser cũ vẫn được giữ trong repo để kiểm thử tương thích. Người dùng phải đăng nhập Supabase trước khi vào ứng dụng; sau lần đăng nhập đầu tiên, dữ liệu vẫn dùng được offline và sẽ đồng bộ lại khi có mạng.
 
 ## Kiến trúc
 
@@ -25,10 +25,13 @@ dart run build_runner build
 dart format lib test
 flutter analyze
 flutter test
-flutter run --dart-define=APP_ENV=dev
+flutter run --dart-define=APP_ENV=dev \
+  --dart-define-from-file=config/supabase.local.json
 ```
 
-Không truyền cấu hình cloud/AI thì app vẫn chạy đầy đủ bằng XML/PDF deterministic và OCR fallback offline.
+Bản build không có cấu hình Supabase chỉ hiển thị hướng dẫn cấu hình và không
+cho vào dữ liệu ứng dụng. Lần đăng nhập đầu cần online; các lần mở sau có thể
+dùng phiên đã lưu và dữ liệu local khi offline.
 
 ## Bật Supabase Auth và đồng bộ
 
@@ -42,10 +45,11 @@ flutter run \
   --dart-define-from-file=config/supabase.local.json
 ```
 
-Trong app, mở **Cài đặt → Tài khoản và đồng bộ** để đăng ký hoặc đăng nhập.
-OCR và SQLite vẫn hoạt động offline; các thay đổi hóa đơn được giữ trong outbox
-và đẩy lên Supabase khi người dùng đăng nhập rồi bấm **Đồng bộ ngay**. Khi mở
-lại app, hệ thống tự chạy best-effort sync; dữ liệu cloud mới được tải theo
+Trong app, đăng ký hoặc đăng nhập ở cổng tài khoản trước khi vào ứng dụng.
+OCR và SQLite vẫn hoạt động offline sau khi đã đăng nhập; các thay đổi được giữ
+trong outbox. App đồng bộ khi khởi động/mở lại, thử lại mỗi 15 phút khi đang mở,
+và có tác vụ nền bị ràng buộc mạng; người dùng cũng có thể bấm **Đồng bộ ngay**.
+Dữ liệu cloud mới được tải theo
 cursor delta dùng timestamp do server sở hữu và không tạo vòng lặp outbox. Danh mục, ngân sách và quy tắc merchant
 cũng đi qua outbox, được áp dụng atomically bằng RPC riêng và tải ngược theo
 cursor delta có tombstone.
@@ -58,9 +62,9 @@ cần chạy `supabase db push` trước khi bật nút **Chia sẻ hóa đơn**
 
 Trên Android/iOS, app đăng ký tác vụ nền định kỳ khoảng 15 phút với ràng buộc có
 mạng và đủ bộ nhớ để đồng bộ outbox/pull dữ liệu và kiểm tra cảnh báo ngân sách.
-Khi outbox có thay đổi trong lúc app đang mở, app cũng tự đồng bộ opportunistic
-và tiếp tục theo batch cho đến khi hết tác vụ đang chờ. Hệ điều hành vẫn có thể
-trì hoãn tác vụ nền; người dùng có thể bấm **Đồng bộ ngay** để chạy tức thì.
+Khi app đang mở, tác vụ foreground cũng thử lại theo chu kỳ 15 phút và khi app
+được mở lại. Hệ điều hành vẫn có thể trì hoãn tác vụ nền; người dùng có thể bấm
+**Đồng bộ ngay** để chạy tức thì.
 OCR/import vẫn tiếp tục ở foreground và chỉ hoàn tất sau khi người dùng xem lại,
 xác nhận.
 Khi cloud được cấu hình, dữ liệu Drift local được mở trong database riêng theo
