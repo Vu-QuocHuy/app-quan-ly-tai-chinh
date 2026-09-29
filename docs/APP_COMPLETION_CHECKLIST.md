@@ -24,7 +24,7 @@ Checklist này là lộ trình chính để hoàn tất bản phát hành nội 
 - [ ] B2. Hoàn tất scan secret bằng scanner chuyên dụng trước phát hành. Pattern scan cho Supabase/OpenAI/Google key/JWT trên worktree không bị ignore và Git history không có match; không có `gitleaks` trong môi trường, và file cấu hình local bị gitignore được chủ ý không đọc.
 - [x] B3. Đối chiếu giao diện thêm giao dịch: chỉ còn chụp ảnh, thư viện ảnh, QR và nhập tay; test widget xác nhận XML/PDF không hiện trong lựa chọn. Checklist F7 phân biệt giao diện hiện tại với hỗ trợ OCR ảnh và các parser XML/PDF cũ.
 - [x] B4. Format không cần chỉnh file; `flutter analyze` sạch; toàn bộ 231 test qua; Android debug APK và web release build thành công.
-- [ ] B5. Commit các thay đổi đã duyệt và push lên GitHub. Hiện nhánh `main` có nhiều thay đổi local chưa commit/push.
+- [x] B5. Các thay đổi đã duyệt được commit `dbce05e` và push lên `origin/main` ngày 2026-09-29. File thiết kế QR do người dùng cung cấp được giữ ngoài commit.
 
 ## C. Supabase: database, quyền và Storage
 
