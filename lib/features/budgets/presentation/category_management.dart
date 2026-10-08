@@ -406,13 +406,24 @@ class _CategoryDialogState extends State<_CategoryDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Hủy'),
-        ),
+        TextButton(onPressed: _cancel, child: const Text('Hủy')),
         FilledButton(onPressed: _save, child: const Text('Lưu danh mục')),
       ],
     );
+  }
+
+  Future<void> _cancel() async {
+    final editing = widget.editing;
+    final hasChanges =
+        _nameController.text != (editing?.name ?? '') ||
+        _budgetController.text.isNotEmpty ||
+        _iconName != (editing?.iconName ?? 'category') ||
+        _colorValue != (editing?.colorValue ?? _colorValues.first);
+    if (hasChanges) {
+      final discard = await showDiscardChangesDialog(context);
+      if (!discard || !mounted) return;
+    }
+    Navigator.pop(context);
   }
 
   void _save() {

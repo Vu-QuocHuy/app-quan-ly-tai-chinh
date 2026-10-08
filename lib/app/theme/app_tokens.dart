@@ -121,6 +121,9 @@ abstract final class AppBreakpoints {
   static const double medium = 840; // tablet dọc / foldable -> NavigationRail
   static const double expanded = 1240; // desktop / web rộng
 
+  /// Tối thiểu để dashboard đặt phần tổng quan và biểu đồ thành hai cột.
+  static const double dashboardTwoColumnMinWidth = 960;
+
   /// Bề rộng đọc tối đa cho nội dung một cột. Không có ràng buộc này thì một
   /// `ListTile` Cài đặt rộng ~1300dp trên cửa sổ web 1440dp.
   static const double readingWidth = 720;
@@ -147,11 +150,11 @@ extension AppSurfaces on ColorScheme {
   /// PHẢI theo brightness. Các vai `*Fixed` bất biến theo brightness — đó là
   /// mục đích của chúng — nên `onPrimaryFixedVariant` (#2A50CC) giữ nguyên ở
   /// theme tối, trong khi `onPrimary` tối lại là #0A1B63 gần đen. Ghép hai thứ
-  /// đó cho 2.31:1, tức là chữ trên hero không đọc được ở chế độ tối.
+  /// đó cho tương phản thấp, chữ trên hero khó đọc ở chế độ tối.
   ///
   /// Đo được với `onPrimary` tương ứng:
-  ///   sáng  #FFFFFF trên #1E40AF -> #2A50CC = 8.72:1 -> 6.74:1
-  ///   tối   #0A1B63 trên #B4C4FF -> #B9C3FF = 9.10:1 -> 9.12:1
+  ///   sáng  #FFFFFF trên #2E5942 -> #3F6B51 = 8.00:1 -> 6.12:1
+  ///   tối   #183425 trên #C1D7C3 -> #B6D1B9 = 8.85:1 -> 8.23:1
   Color get heroGradientEnd =>
       brightness == Brightness.dark ? primaryFixedDim : onPrimaryFixedVariant;
 }

@@ -27,8 +27,6 @@ class GroupScreen extends ConsumerStatefulWidget {
 }
 
 class _GroupScreenState extends ConsumerState<GroupScreen> {
-  ExpenseGroup? _selectedGroup;
-  Future<GroupDetails>? _detailsFuture;
   bool _busy = false;
 
   @override
@@ -85,6 +83,15 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                 ),
               ],
               AsyncData(value: final items) => [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Text(
+                      'Nhóm của tôi',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   sliver: SliverList.separated(
@@ -94,8 +101,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                         _buildGroupCard(items[index]),
                   ),
                 ),
-                if (_selectedGroup != null)
-                  SliverToBoxAdapter(child: _buildDetailsSection(context)),
               ],
               AsyncError(error: final error) => [
                 SliverFillRemaining(
@@ -143,66 +148,14 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   }
 
   Widget _buildGroupCard(ExpenseGroup group) {
-    final selected = _selectedGroup?.id == group.id;
     return Card(
-      color: selected ? Theme.of(context).colorScheme.secondaryContainer : null,
       child: ListTile(
-        selected: selected,
         leading: const CircleAvatar(child: Icon(Icons.groups_outlined)),
         title: Text(group.name),
-        subtitle: Text('Mã mời: ${group.inviteCode}'),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () => _selectGroup(group),
+        onTap: () => context.push('/groups/${group.id}'),
       ),
     );
-  }
-
-  Widget _buildDetailsSection(BuildContext context) {
-    final future = _detailsFuture;
-    if (future == null) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-      child: FutureBuilder<GroupDetails>(
-        future: future,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return AppCallout(
-              tone: CalloutTone.danger,
-              message:
-                  'Không thể tải chi tiết nhóm: ${friendlyMessage(snapshot.error!)}',
-            );
-          }
-          final details = snapshot.data;
-          if (details == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          return _GroupDetails(
-            details: details,
-            currentUserId: ref.read(expenseGroupServiceProvider)!.currentUserId,
-            onCopyCode: () => _copyInviteCode(details.group.inviteCode),
-            onAddExpense: () => _addExpense(details),
-            onAddReceipt: () => _addReceipt(details),
-            onSettle: _settleShare,
-            onEditExpense: (expense) => _editExpense(details, expense),
-            onDeleteExpense: _deleteExpense,
-            onSetMemberRole: (userId, role) =>
-                _setMemberRole(details.group.id, userId, role),
-            onRemoveMember: (userId, displayName) =>
-                _removeMember(details.group.id, userId, displayName),
-            onLeaveGroup: () => _leaveGroup(details),
-          );
-        },
-      ),
-    );
-  }
-
-  void _selectGroup(ExpenseGroup group) {
-    final service = ref.read(expenseGroupServiceProvider);
-    if (service == null) return;
-    setState(() {
-      _selectedGroup = group;
-      _detailsFuture = service.loadDetails(group);
-    });
   }
 
   Future<void> _createGroup() async {
@@ -213,12 +166,15 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       confirmLabel: 'Tạo nhóm',
     );
     if (name == null) return;
+    ExpenseGroup? createdGroup;
     await _runGroupAction(() async {
-      final group = await ref
+      createdGroup = await ref
           .read(expenseGroupServiceProvider)!
           .createGroup(name);
-      _selectGroup(group);
     });
+    final group = createdGroup;
+    if (!mounted || group == null) return;
+    await context.push('/groups/${group.id}');
   }
 
   Future<void> _joinGroup() async {
@@ -229,12 +185,15 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       confirmLabel: 'Tham gia',
     );
     if (code == null) return;
+    ExpenseGroup? joinedGroup;
     await _runGroupAction(() async {
-      final group = await ref
+      joinedGroup = await ref
           .read(expenseGroupServiceProvider)!
           .joinGroup(code);
-      _selectGroup(group);
     });
+    final group = joinedGroup;
+    if (!mounted || group == null) return;
+    await context.push('/groups/${group.id}');
   }
 
   Future<String?> _askText({
@@ -256,7 +215,13 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () async {
+              if (controller.text.trim().isNotEmpty) {
+                final discard = await showDiscardChangesDialog(context);
+                if (!discard || !context.mounted) return;
+              }
+              Navigator.pop(context);
+            },
             child: const Text('Hủy'),
           ),
           FilledButton(
@@ -270,6 +235,130 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         ],
       ),
     ).whenComplete(controller.dispose);
+  }
+
+  Future<void> _runGroupAction(Future<void> Function() action) async {
+    setState(() => _busy = true);
+    try {
+      await action();
+      ref.invalidate(expenseGroupsProvider);
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(friendlyMessage(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _refresh() {
+    ref.invalidate(expenseGroupsProvider);
+  }
+}
+
+class GroupDetailScreen extends ConsumerStatefulWidget {
+  const GroupDetailScreen({required this.groupId, super.key});
+
+  final String groupId;
+
+  @override
+  ConsumerState<GroupDetailScreen> createState() => _GroupDetailScreenState();
+}
+
+class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final details = ref.watch(expenseGroupDetailsProvider(widget.groupId));
+    final service = ref.watch(expenseGroupServiceProvider);
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Quay lại danh sách nhóm',
+          onPressed: _goBack,
+          icon: const Icon(Icons.arrow_back),
+        ),
+        title: Text(details.asData?.value.group.name ?? 'Chi tiết nhóm'),
+        actions: [
+          IconButton(
+            tooltip: 'Làm mới chi tiết nhóm',
+            onPressed: _refresh,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          if (_busy) const LinearProgressIndicator(),
+          Expanded(
+            child: details.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, stackTrace) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.groups_outlined, size: 40),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Không thể tải chi tiết nhóm: ${friendlyMessage(error)}',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: _refresh,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Thử lại'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              data: (groupDetails) {
+                final currentUserId = service?.currentUserId;
+                if (currentUserId == null) {
+                  return const AppEmptyState(
+                    icon: Icons.cloud_off_outlined,
+                    title: 'Nhóm cần kết nối tài khoản',
+                    message: 'Đăng nhập để xem chi tiết nhóm.',
+                  );
+                }
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                  children: [
+                    _GroupDetails(
+                      details: groupDetails,
+                      currentUserId: currentUserId,
+                      busy: _busy,
+                      onCopyCode: () =>
+                          _copyInviteCode(groupDetails.group.inviteCode),
+                      onAddExpense: () => _addExpense(groupDetails),
+                      onAddReceipt: () => _addReceipt(groupDetails),
+                      onSettle: _settleShare,
+                      onEditExpense: (expense) =>
+                          _editExpense(groupDetails, expense),
+                      onDeleteExpense: _deleteExpense,
+                      onSetMemberRole: (userId, role) =>
+                          _setMemberRole(groupDetails.group.id, userId, role),
+                      onRemoveMember: (userId, displayName) => _removeMember(
+                        groupDetails.group.id,
+                        userId,
+                        displayName,
+                      ),
+                      onLeaveGroup: () => _leaveGroup(groupDetails),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _addExpense(GroupDetails details) async {
@@ -295,14 +384,12 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           splitAmounts: draft.splitAmounts!,
         );
       }
-      _reloadDetails();
     });
   }
 
   Future<void> _settleShare(String expenseId) async {
     await _runGroupAction(() async {
       await ref.read(expenseGroupServiceProvider)!.settleMyShare(expenseId);
-      _reloadDetails();
     });
   }
 
@@ -322,7 +409,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
             totalMinor: draft.totalMinor,
             splitAmounts: draft.splitAmounts!,
           );
-      _reloadDetails();
     });
   }
 
@@ -338,7 +424,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     if (!confirmed || !mounted) return;
     await _runGroupAction(() async {
       await ref.read(expenseGroupServiceProvider)!.deleteExpense(expense.id);
-      _reloadDetails();
     });
   }
 
@@ -351,7 +436,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       await ref
           .read(expenseGroupServiceProvider)!
           .setMemberRole(groupId: groupId, userId: userId, role: role);
-      _reloadDetails();
     });
   }
 
@@ -373,7 +457,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       await ref
           .read(expenseGroupServiceProvider)!
           .removeMember(groupId: groupId, userId: userId);
-      _reloadDetails();
     });
   }
 
@@ -392,14 +475,15 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       destructive: true,
     );
     if (!confirmed || !mounted) return;
+    var leftGroup = false;
     await _runGroupAction(() async {
       await service.leaveGroup(details.group.id);
-      if (!mounted) return;
-      setState(() {
-        _selectedGroup = null;
-        _detailsFuture = null;
-      });
+      leftGroup = true;
     });
+    if (leftGroup && mounted) {
+      ref.invalidate(expenseGroupsProvider);
+      context.pop();
+    }
   }
 
   Future<void> _addReceipt(GroupDetails details) async {
@@ -437,7 +521,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
             splitAmounts: allocation.splitAmounts,
           );
       _reloadDetails();
-      ref.invalidate(expenseGroupsProvider);
     } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -455,7 +538,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     setState(() => _busy = true);
     try {
       await action();
-      ref.invalidate(expenseGroupsProvider);
+      if (!mounted) return;
+      _reloadDetails();
     } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -468,15 +552,20 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   }
 
   void _reloadDetails() {
-    final service = ref.read(expenseGroupServiceProvider);
-    final group = _selectedGroup;
-    if (service == null || group == null) return;
-    setState(() => _detailsFuture = service.loadDetails(group));
+    ref.invalidate(expenseGroupDetailsProvider(widget.groupId));
   }
 
   void _refresh() {
     ref.invalidate(expenseGroupsProvider);
     _reloadDetails();
+  }
+
+  void _goBack() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/groups');
+    }
   }
 
   Future<void> _copyInviteCode(String code) async {
@@ -492,6 +581,7 @@ class _GroupDetails extends StatelessWidget {
   const _GroupDetails({
     required this.details,
     required this.currentUserId,
+    required this.busy,
     required this.onCopyCode,
     required this.onAddExpense,
     required this.onAddReceipt,
@@ -505,6 +595,7 @@ class _GroupDetails extends StatelessWidget {
 
   final GroupDetails details;
   final String currentUserId;
+  final bool busy;
   final VoidCallback onCopyCode;
   final VoidCallback onAddExpense;
   final VoidCallback onAddReceipt;
@@ -533,11 +624,6 @@ class _GroupDetails extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  details.group.name,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
                 Text('Mã mời: ${details.group.inviteCode}'),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -590,7 +676,7 @@ class _GroupDetails extends StatelessWidget {
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed: onAddExpense,
+                onPressed: busy ? null : onAddExpense,
                 icon: const Icon(Icons.add_card_outlined),
                 label: const Text('Thêm khoản chi'),
               ),
@@ -598,7 +684,7 @@ class _GroupDetails extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: onAddReceipt,
+                onPressed: busy ? null : onAddReceipt,
                 icon: const Icon(Icons.document_scanner_outlined),
                 label: const Text('Từ hóa đơn'),
               ),
@@ -779,8 +865,6 @@ class _DirectShareInbox extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (share.snapshot.invoiceNumber != null)
-                  Text('Số hóa đơn: ${share.snapshot.invoiceNumber}'),
                 if (share.snapshot.issuedAt != null)
                   Text('Ngày: ${_formatShareDate(share.snapshot.issuedAt!)}'),
                 const SizedBox(height: 12),
@@ -832,8 +916,6 @@ class _DirectShareInbox extends ConsumerWidget {
         InvoiceEntity(
           id: 'direct-share-${share.id}',
           sellerName: seller.length <= 180 ? seller : seller.substring(0, 180),
-          sellerTaxCode: share.snapshot.sellerTaxCode,
-          invoiceNumber: share.snapshot.invoiceNumber,
           issuedAt: share.snapshot.issuedAt ?? share.acceptedAt ?? now,
           currencyCode: share.snapshot.currencyCode,
           subtotalMinor: share.recipientAmountMinor,
@@ -1335,7 +1417,16 @@ class _InvoiceAllocationDialogState extends State<_InvoiceAllocationDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () async {
+            final discard = await showConfirmDialog(
+              context,
+              title: 'Hủy phân chia hóa đơn?',
+              message: 'Phần chia của hóa đơn này sẽ không được lưu vào nhóm.',
+              confirmLabel: 'Hủy phân chia',
+              destructive: true,
+            );
+            if (discard && context.mounted) Navigator.pop(context);
+          },
           child: const Text('Hủy'),
         ),
         FilledButton(onPressed: _submit, child: const Text('Xác nhận chia')),
@@ -1519,10 +1610,7 @@ class _NewExpenseDialogState extends State<_NewExpenseDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Hủy'),
-        ),
+        TextButton(onPressed: _cancel, child: const Text('Hủy')),
         FilledButton(
           onPressed: _submit,
           child: Text(
@@ -1531,6 +1619,42 @@ class _NewExpenseDialogState extends State<_NewExpenseDialog> {
         ),
       ],
     );
+  }
+
+  bool get _hasChanges {
+    final initial = widget.initialExpense;
+    final initialMemberIds = initial == null
+        ? widget.members.map((item) => item.userId).toSet()
+        : initial.splits
+              .map((split) => split.userId)
+              .whereType<String>()
+              .toSet();
+    if (_descriptionController.text != (initial?.description ?? '') ||
+        _amountController.text != (initial?.totalMinor.toString() ?? '') ||
+        _customMode != (initial == null ? null : GroupSplitMode.exact) ||
+        _selectedIds.length != initialMemberIds.length ||
+        !_selectedIds.containsAll(initialMemberIds)) {
+      return true;
+    }
+
+    final initialSplitAmounts = {
+      if (initial != null)
+        for (final split in initial.splits)
+          if (split.userId != null) split.userId!: split.amountMinor,
+    };
+    return _splitControllers.entries.any(
+      (entry) =>
+          entry.value.text !=
+          (initialSplitAmounts[entry.key]?.toString() ?? ''),
+    );
+  }
+
+  Future<void> _cancel() async {
+    if (_hasChanges) {
+      final discard = await showDiscardChangesDialog(context);
+      if (!discard || !mounted) return;
+    }
+    Navigator.pop(context);
   }
 
   Widget _buildMemberRow(GroupMember member) {

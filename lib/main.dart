@@ -12,8 +12,6 @@ import 'core/security/supabase_bootstrap.dart';
 import 'features/notifications/data/budget_notification_service.dart';
 
 Future<void> main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  AppErrorReporter.instance.install();
   return runZonedGuarded(_bootstrap, (error, stackTrace) {
         unawaited(
           AppErrorReporter.instance.report(
@@ -28,6 +26,8 @@ Future<void> main() {
 }
 
 Future<void> _bootstrap() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  AppErrorReporter.instance.install();
   await SupabaseBootstrap.initialize();
   _configureErrorMonitoring();
   await LocalDatabaseScope.initialize(

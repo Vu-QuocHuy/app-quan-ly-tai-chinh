@@ -15,6 +15,7 @@ import '../../features/ingestion/data/pending_import_store.dart';
 import '../../features/ingestion/domain/import_job.dart';
 import '../../features/ingestion/presentation/import_source_sheet.dart';
 import '../../features/payments/application/qr_payment_providers.dart';
+import '../../shared/dialogs/confirm_dialog.dart';
 import '../../shared/errors/error_presenter.dart';
 import '../../shared/widgets/reading_pane.dart';
 import '../theme/app_tokens.dart';
@@ -134,7 +135,7 @@ class _AppShellState extends ConsumerState<AppShell>
     NavigationDestination(
       icon: Icon(Icons.receipt_long_outlined),
       selectedIcon: Icon(Icons.receipt_long),
-      label: 'Hóa đơn',
+      label: 'Giao dịch',
     ),
     NavigationDestination(
       icon: Icon(Icons.savings_outlined),
@@ -142,8 +143,8 @@ class _AppShellState extends ConsumerState<AppShell>
       label: 'Ngân sách',
     ),
     NavigationDestination(
-      icon: Icon(Icons.group_outlined),
-      selectedIcon: Icon(Icons.group),
+      icon: Icon(Icons.groups_outlined),
+      selectedIcon: Icon(Icons.groups),
       label: 'Nhóm',
     ),
     NavigationDestination(
@@ -265,10 +266,17 @@ class _AppShellState extends ConsumerState<AppShell>
                       thickness: 1,
                       color: scheme.outlineVariant,
                     ),
-                  // Khi rail xuất hiện, nội dung được ràng vào bề rộng đọc và canh
-                  // giữa thay vì kéo dài hết cửa sổ.
+                  // Dashboard dùng thêm chiều ngang cho biểu đồ; các trang đọc
+                  // và chỉnh sửa vẫn giữ bề rộng dễ quét.
                   Expanded(
-                    child: useRail ? ReadingPane(child: content) : content,
+                    child: useRail
+                        ? ReadingPane(
+                            maxWidth: widget.navigationShell.currentIndex == 0
+                                ? AppBreakpoints.twoColumnWidth
+                                : AppBreakpoints.readingWidth,
+                            child: content,
+                          )
+                        : content,
                   ),
                 ],
               ),
@@ -289,14 +297,14 @@ class _AppShellState extends ConsumerState<AppShell>
               onPressed: _isImporting ? _cancelImport : _showImportSources,
               tooltip: _isImporting && _importFileName != null
                   ? 'Đang xử lý $_importFileName · Nhấn để hủy'
-                  : 'Thêm hóa đơn',
+                  : 'Thêm giao dịch',
               icon: _isImporting
                   ? const Icon(Icons.stop_circle_outlined)
-                  : const Icon(Icons.add_a_photo_outlined),
+                  : const Icon(Icons.note_add_outlined),
               label: Text(
                 _isImporting
                     ? 'Hủy $_importIndex/$_importTotal'
-                    : 'Thêm hóa đơn',
+                    : 'Thêm giao dịch',
               ),
             )
           : null,
@@ -525,7 +533,19 @@ class _AppShellState extends ConsumerState<AppShell>
     }
   }
 
-  void _cancelImport() {
+  Future<void> _cancelImport() async {
+    if (!_isImporting) return;
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Hủy xử lý hóa đơn?',
+      message:
+          'Tệp đang xử lý sẽ hoàn tất trước khi dừng. Các tệp còn lại vẫn '
+          'được giữ để tiếp tục sau.',
+      confirmLabel: 'Hủy xử lý',
+      cancelLabel: 'Tiếp tục xử lý',
+      destructive: true,
+    );
+    if (!confirmed || !mounted || !_isImporting) return;
     _importQueue.cancel();
     _showMessage('Đang hủy sau khi hoàn tất file hiện tại…');
   }
@@ -549,9 +569,40 @@ class _AppShellState extends ConsumerState<AppShell>
       '/review',
       extra: outcome.result.invoice,
     );
+    if (saved == true) await _saveSourceImage(outcome);
     return saved == true
         ? ImportQueueDecision.completed
         : ImportQueueDecision.deferred;
+  }
+
+  Future<void> _saveSourceImage(ImportOutcome outcome) async {
+    final bytes = outcome.sourceImageBytes;
+    final fileName = outcome.sourceImageFileName;
+    if (bytes == null || fileName == null) return;
+    try {
+      final flags =
+          ref.read(featureFlagsProvider).value ?? FeatureFlags.defaults;
+      if (!flags.cloudSync) {
+        throw StateError('Đồng bộ cloud đang tắt.');
+      }
+      final store = ref.read(invoiceAttachmentStoreProvider);
+      if (store == null) throw StateError('Supabase chưa được cấu hình.');
+      await ref.read(syncCoordinatorProvider).runOnce(batchSize: 100);
+      await store.upload(
+        invoiceId: outcome.result.invoice.id,
+        fileName: fileName,
+        bytes: bytes,
+      );
+      ref.invalidate(invoiceAttachmentsProvider(outcome.result.invoice.id));
+    } on Object catch (error) {
+      if (mounted) {
+        _showMessage(
+          'Hóa đơn đã lưu, nhưng chưa lưu được ảnh gốc: ${friendlyMessage(error)}. '
+          'Bạn có thể thử thêm lại trong mục Chứng từ gốc.',
+          isError: true,
+        );
+      }
+    }
   }
 
   Future<void> _completePendingImport(PendingImport item) async {

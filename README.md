@@ -7,7 +7,7 @@
 - Flutter + Material 3, Riverpod, GoRouter.
 - Drift/SQLite; tiền lưu bằng số nguyên theo đơn vị nhỏ nhất.
 - Adapter ingestion thống nhất cho XML, PDF text và OCR.
-- ML Kit OCR chạy trên thiết bị. AI là tùy chọn và có fallback offline.
+- Ảnh hóa đơn được gửi trực tiếp tới Gemini VLM qua Supabase; cần kết nối mạng.
 - Supabase Edge Function gọi Gemini Structured Output; secret chỉ ở backend.
 - Trợ lý chi tiêu có bộ tool local read-only, chỉ gọi tool phù hợp với câu hỏi; Gemini `/v1/chat` là tùy chọn và citation cho dữ liệu nguồn.
 - Câu trả lời từ dữ liệu local không gọi Gemini. Khi cần Gemini, client và Edge Function chỉ cho phép facts tổng hợp, loại bỏ invoice ID/merchant/kết quả tìm kiếm và ẩn thông tin định danh trong câu hỏi/lịch sử.
@@ -46,7 +46,8 @@ flutter run \
 ```
 
 Trong app, đăng ký hoặc đăng nhập ở cổng tài khoản trước khi vào ứng dụng.
-OCR và SQLite vẫn hoạt động offline sau khi đã đăng nhập; các thay đổi được giữ
+SQLite và các hóa đơn đã lưu vẫn hoạt động offline sau khi đã đăng nhập. Quét ảnh
+hóa đơn cần kết nối mạng; nhập thủ công vẫn dùng được offline. Các thay đổi được giữ
 trong outbox. App đồng bộ khi khởi động/mở lại, thử lại mỗi 15 phút khi đang mở,
 và có tác vụ nền bị ràng buộc mạng; người dùng cũng có thể bấm **Đồng bộ ngay**.
 Dữ liệu cloud mới được tải theo
@@ -90,13 +91,12 @@ archive dữ liệu cũ:
 flutter test tool/benchmark_local_database.dart
 ```
 
-## Fine-tune OCR hóa đơn Việt Nam
+## Thử nghiệm model OCR riêng
 
-Thư mục [`ml/receipt_ocr`](ml/receipt_ocr/README.md) chứa pipeline độc lập để chuẩn
-bị dataset, fine-tune `PP-OCRv5_mobile_rec`, đo CER/WER, export và version model.
-Pipeline có notebook Kaggle; không cần cấu hình model để chạy Flutter hiện tại.
-ML Kit tiếp tục là baseline/fallback cho đến khi model fine-tuned vượt evaluation
-gate và có artifact đã ký version.
+Thư mục [`ml/receipt_ocr`](ml/receipt_ocr/README.md) giữ pipeline nghiên cứu độc
+lập để chuẩn bị dataset, fine-tune `PP-OCRv5_mobile_rec` và đo CER/WER. Pipeline
+này không được app sử dụng; luồng ảnh hiện gửi trực tiếp tới Gemini VLM và yêu cầu
+kết nối mạng. Không cần fine-tune hay đóng gói model OCR để chạy app.
 
 Hướng dẫn thao tác đầy đủ: [Kaggle OCR runbook](ml/receipt_ocr/KAGGLE_RUNBOOK_VI.md).
 
@@ -133,7 +133,7 @@ Sau khi backend đã cấu hình `GEMINI_API_KEY`, app có thể hỏi bằng ti
 
 Các câu hỏi tỷ giá như “tỷ giá USD/VND hôm nay” sẽ dùng connector ExchangeRate-API ở backend và trả về citation; một số cặp tiền có fallback Frankfurter. Đây là dữ liệu tham khảo, cập nhật theo lịch của nhà cung cấp; không dùng làm chứng từ hoặc quyết định tài chính tự động.
 
-Function `ai-api` bật `verify_jwt = true`; chỉ phiên Supabase hợp lệ mới được gọi Gemini.
+Function `ai-api` bật `verify_jwt = true`; chỉ phiên Supabase hợp lệ mới được gọi AI proxy.
 Khi đưa web lên production, có thể khóa origin bằng `AI_ALLOWED_ORIGINS`, ví dụ
 `https://app.example.com`; nên đặt thêm `AI_REQUIRE_ORIGIN_ALLOWLIST=true` và
 `DELETE_ACCOUNT_REQUIRE_ORIGIN_ALLOWLIST=true` cùng allowlist tương ứng.
@@ -158,32 +158,40 @@ on conflict (environment, key) do update set
   updated_at = now();
 ```
 
-### OAuth Google tùy chọn
+### Đăng nhập và quản lý tài khoản
 
-Mã nguồn đã có đăng nhập Google, liên kết và gỡ liên kết identity. Để bật, vào
-Supabase Dashboard → Authentication → Providers → Google, cấu hình OAuth client
-ở Google Cloud, rồi thêm redirect URL sau vào Supabase:
+Ứng dụng hỗ trợ email/mật khẩu và Google OAuth. Màn hình tài khoản cho phép đổi
+mật khẩu, gửi email khôi phục, liên kết/gỡ liên kết Google, đăng xuất và yêu cầu
+xóa tài khoản cùng dữ liệu cloud. Để bật Google, cấu hình OAuth client trong
+Google Cloud rồi bật Google tại Supabase Dashboard → Authentication → Providers.
+Google Cloud dùng callback URL do Supabase hiển thị (thường là
+`https://<project-ref>.supabase.co/auth/v1/callback`).
+
+Thêm URI quay lại ứng dụng vào Supabase Dashboard → Authentication → URL
+Configuration → Redirect URLs:
 
 ```text
 hoadoninsight://login-callback
 ```
 
-Khi chạy Android/iOS, truyền thêm redirect URI (không phải secret):
+Khi chạy Android/iOS, truyền redirect URI cho OAuth và khôi phục mật khẩu (đây
+không phải secret):
 
 ```bash
 flutter run --dart-define-from-file=config/supabase.local.json \
-  --dart-define=SUPABASE_OAUTH_REDIRECT_URI=hoadoninsight://login-callback
+  --dart-define=SUPABASE_OAUTH_REDIRECT_URI=hoadoninsight://login-callback \
+  --dart-define=SUPABASE_AUTH_REDIRECT_URI=hoadoninsight://login-callback
 ```
 
-Trên Chrome có thể bỏ qua biến này để Supabase trả về trang hiện tại. Nếu chưa
-cấu hình Google Provider, nút Google sẽ báo lỗi cấu hình thay vì làm hỏng đăng
-nhập email/mật khẩu.
+Nếu Google Provider chưa được cấu hình, email/mật khẩu vẫn dùng được; thao tác
+Google sẽ báo lỗi cấu hình. Hãy đảm bảo Redirect URLs cho phép URI của app để
+OAuth và khôi phục mật khẩu quay lại đúng nơi.
 
 ## Nguồn nhập hỗ trợ
 
 - XML hóa đơn: parse trực tiếp, namespace-tolerant, ưu tiên độ chính xác.
 - PDF có text layer: đọc tối đa 100 trang; PDF scan được hướng sang camera/ảnh OCR.
-- Ảnh/camera: ML Kit OCR on-device, sau đó AI structured extraction nếu cấu hình; lỗi mạng tự fallback offline.
+- Ảnh/camera: Gemini VLM phân tích trực tiếp ảnh qua backend; người dùng kiểm tra và sửa trước khi lưu.
 - Nhập tay: luôn sẵn sàng khi không có file/ảnh.
 
 ## Quản lý dữ liệu và vận hành

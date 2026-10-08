@@ -10,16 +10,17 @@ void main() {
     String seller = 'Demo',
     int subtotal = 100000,
     int tax = 10000,
+    int discount = 0,
     int total = 110000,
   }) {
     return InvoiceEntity(
       id: 'invoice-1',
       sellerName: seller,
-      invoiceNumber: '0001',
       issuedAt: now,
       currencyCode: 'VND',
       subtotalMinor: subtotal,
       taxMinor: tax,
+      discountMinor: discount,
       totalMinor: total,
       sourceType: InvoiceSourceType.xml,
       status: InvoiceStatus.validating,
@@ -39,6 +40,18 @@ void main() {
     expect(result.isValid, isTrue);
     expect(result.requiresReview, isTrue);
     expect(result.warnings, isNotEmpty);
+  });
+
+  test('accounts for invoice discount when comparing totals', () {
+    final result = validator.validate(invoice(discount: 10000, total: 100000));
+    expect(result.isValid, isTrue);
+    expect(result.warnings, isEmpty);
+  });
+
+  test('rejects a negative invoice discount', () {
+    final result = validator.validate(invoice(discount: -1));
+    expect(result.isValid, isFalse);
+    expect(result.errors, contains('Số tiền giảm giá không hợp lệ.'));
   });
 
   test('rejects empty seller and non-positive total', () {

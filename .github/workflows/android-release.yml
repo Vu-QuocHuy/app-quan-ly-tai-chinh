@@ -22,7 +22,7 @@ jobs:
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-      SUPABASE_OAUTH_REDIRECT_URI: ${{ secrets.SUPABASE_OAUTH_REDIRECT_URI }}
+      SUPABASE_AUTH_REDIRECT_URI: ${{ secrets.SUPABASE_AUTH_REDIRECT_URI || secrets.SUPABASE_OAUTH_REDIRECT_URI }}
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -55,7 +55,7 @@ jobs:
           flutter build appbundle --release --flavor production
           --dart-define="SUPABASE_URL=$SUPABASE_URL"
           --dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY"
-          --dart-define="SUPABASE_OAUTH_REDIRECT_URI=$SUPABASE_OAUTH_REDIRECT_URI"
+          --dart-define="SUPABASE_AUTH_REDIRECT_URI=$SUPABASE_AUTH_REDIRECT_URI"
       - uses: actions/upload-artifact@v4
         with:
           name: hoadon-insight-internal-aab

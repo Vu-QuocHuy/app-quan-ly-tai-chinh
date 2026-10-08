@@ -50,6 +50,7 @@ Không ghi API key vào file hoặc Git:
 supabase login
 supabase link --project-ref YOUR_PROJECT_REF
 supabase secrets set GEMINI_API_KEY=your_gemini_key
+supabase secrets set GEMINI_MODEL=gemini-3.8-flash
 supabase secrets set AI_WORKER_SECRET=at-least-32-random-characters
 supabase secrets set HEALTHCHECK_SECRET=another-at-least-32-random-characters
 supabase functions deploy ai-api
@@ -181,8 +182,10 @@ cả nhóm. Nhóm không còn thành viên sẽ được xóa cùng dữ liệu 
 ## Local smoke test
 
 ```bash
-supabase functions serve ai-api --no-verify-jwt
+supabase functions serve ai-api
 ```
 
-Lệnh local cần Docker theo yêu cầu của Supabase CLI. Khi test local, đặt
-`GEMINI_API_KEY` trong môi trường chạy function; không commit `.env`.
+Lệnh local cần Docker theo yêu cầu của Supabase CLI. Gửi yêu cầu bằng phiên đăng
+nhập Supabase như khi chạy ứng dụng. Khi test local, đặt `GEMINI_API_KEY` và
+`GEMINI_MODEL` trong môi trường chạy function; model mặc định là
+`gemini-3.8-flash`. Không commit `.env`.

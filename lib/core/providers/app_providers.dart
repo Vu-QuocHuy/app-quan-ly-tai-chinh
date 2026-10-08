@@ -15,7 +15,6 @@ import '../../features/ingestion/data/ai_extraction_client.dart';
 import '../../features/ingestion/data/ai_extraction_job_client.dart';
 import '../../features/ingestion/data/drift_import_job_store.dart';
 import '../../features/ingestion/data/heuristic_text_extractor.dart';
-import '../../features/ingestion/data/ocr_service.dart';
 import '../../features/ingestion/data/pdf_text_service.dart';
 import '../../features/ingestion/data/pending_import_store.dart';
 import '../../features/ingestion/data/xml_invoice_extractor.dart';
@@ -158,6 +157,22 @@ final expenseGroupsProvider = FutureProvider.autoDispose<List<ExpenseGroup>>((
   return service?.listGroups() ?? const [];
 });
 
+final expenseGroupDetailsProvider = FutureProvider.autoDispose
+    .family<GroupDetails, String>((ref, groupId) async {
+      final service = ref.watch(expenseGroupServiceProvider);
+      if (service == null) {
+        throw StateError('Nhóm cần kết nối tài khoản.');
+      }
+      final groups = await ref.watch(expenseGroupsProvider.future);
+      final group = groups.where((item) => item.id == groupId).firstOrNull;
+      if (group == null) {
+        throw StateError(
+          'Không tìm thấy nhóm hoặc bạn không còn là thành viên.',
+        );
+      }
+      return service.loadDetails(group);
+    });
+
 final backupCatalogStoreProvider = Provider<BackupCatalogStore>((ref) {
   final userId = ref.watch(authUserProvider).value?.id;
   return BackupCatalogStore(scope: userId);
@@ -197,7 +212,6 @@ final importCoordinatorProvider = Provider<ImportCoordinator>((ref) {
   return ImportCoordinator(
     repository: ref.watch(invoiceRepositoryProvider),
     xmlExtractor: XmlInvoiceExtractor(),
-    ocrService: OcrService(),
     pdfTextService: const PdfTextService(),
     aiExtractor: ref.watch(aiExtractionClientProvider),
     heuristicExtractor: HeuristicTextExtractor(),

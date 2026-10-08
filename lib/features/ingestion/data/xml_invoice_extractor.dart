@@ -131,9 +131,6 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
                   'PriceAmount',
                 ]),
               ),
-              taxRate: _taxRate(
-                _valueWithin(element, const ['TSuat', 'TaxRate', 'VATRate']),
-              ),
               totalMinor: _money(
                 _valueWithin(element, const [
                   'ThTien',
@@ -148,23 +145,6 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
       final invoice = InvoiceEntity(
         id: id,
         sellerName: StringNormalizer.compact(sellerName),
-        sellerTaxCode:
-            _valueWithin(seller, const [
-              'MST',
-              'MSTNBan',
-              'TaxCode',
-              'SellerTaxCode',
-              'SupplierTaxCode',
-              'TaxIdentificationNumber',
-            ]) ??
-            _value(document, const ['MSTNBan', 'SellerTaxCode']),
-        invoiceNumber: _valueWithin(general, const [
-          'SHDon',
-          'InvoiceNumber',
-          'No',
-          'InvoiceNo',
-          'Number',
-        ]),
         invoiceSymbol: _valueWithin(general, const [
           'KHHDon',
           'InvoiceSymbol',
@@ -302,11 +282,6 @@ class XmlInvoiceExtractor implements InvoiceExtractor {
   double? _decimal(String? value) {
     if (value == null) return null;
     return double.tryParse(value.replaceAll(',', '.'));
-  }
-
-  double? _taxRate(String? value) {
-    if (value == null) return null;
-    return double.tryParse(value.replaceAll('%', '').replaceAll(',', '.'));
   }
 
   DateTime? _date(String? value) {

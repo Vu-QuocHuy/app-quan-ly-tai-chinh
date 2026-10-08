@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
@@ -10,14 +12,13 @@ class Invoices extends Table {
   TextColumn get id => text()();
   TextColumn get cloudId => text().nullable()();
   TextColumn get sellerName => text()();
-  TextColumn get sellerTaxCode => text().nullable()();
-  TextColumn get invoiceNumber => text().nullable()();
   TextColumn get invoiceSymbol => text().nullable()();
   DateTimeColumn get issuedAt => dateTime().nullable()();
   TextColumn get currencyCode =>
       text().withDefault(const Constant(AppConstants.defaultCurrency))();
   IntColumn get subtotalMinor => integer().withDefault(const Constant(0))();
   IntColumn get taxMinor => integer().withDefault(const Constant(0))();
+  IntColumn get discountMinor => integer().withDefault(const Constant(0))();
   IntColumn get totalMinor => integer().withDefault(const Constant(0))();
   TextColumn get sourceType => text()();
   TextColumn get sourceHash => text().nullable()();
@@ -229,7 +230,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -276,12 +277,101 @@ class AppDatabase extends _$AppDatabase {
           await migrator.addColumn(invoiceLines, invoiceLines.categoryId);
         }
       }
+      if (from < 6) {
+        await migrator.addColumn(invoices, invoices.discountMinor);
+      }
+      if (from < 7) {
+        final invoiceColumns = (await customSelect(
+          'PRAGMA table_info(invoices)',
+        ).get()).map((row) => row.read<String>('name')).toSet();
+        final retiredColumns = const [
+          'seller_tax_code',
+          'invoice_number',
+        ].where(invoiceColumns.contains);
+        var cleanedSearchText = 'search_text';
+        for (final column in retiredColumns) {
+          cleanedSearchText =
+              "replace($cleanedSearchText, lower(ifnull($column, '')), '')";
+        }
+        if (cleanedSearchText != 'search_text') {
+          await customStatement(
+            'UPDATE invoices SET search_text = trim($cleanedSearchText)',
+          );
+        }
+        await _removeLegacyInvoiceIdentifiersFromJson(
+          table: 'sync_outbox_events',
+          rowId: 'id',
+          jsonColumn: 'payload_json',
+        );
+        await _removeLegacyInvoiceIdentifiersFromJson(
+          table: 'invoice_conflicts',
+          rowId: 'invoice_id',
+          jsonColumn: 'remote_payload_json',
+        );
+        final evidenceTable = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'field_evidences'",
+        ).getSingleOrNull();
+        if (evidenceTable != null) {
+          await customStatement('''
+            DELETE FROM field_evidences
+            WHERE field_name IN (
+              'sellerTaxCode', 'invoiceNumber', 'seller_tax_code', 'invoice_number'
+            )
+          ''');
+        }
+        for (final column in retiredColumns) {
+          await customStatement('ALTER TABLE invoices DROP COLUMN $column');
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
       await _createIndexes();
     },
   );
+
+  Future<void> _removeLegacyInvoiceIdentifiersFromJson({
+    required String table,
+    required String rowId,
+    required String jsonColumn,
+  }) async {
+    final rows = await customSelect(
+      'SELECT $rowId, $jsonColumn FROM $table WHERE $jsonColumn IS NOT NULL',
+    ).get();
+    for (final row in rows) {
+      final raw = row.read<String>(jsonColumn);
+      Object? decoded;
+      try {
+        decoded = jsonDecode(raw);
+      } on FormatException {
+        continue;
+      }
+      if (decoded is! Map<String, dynamic>) continue;
+      decoded
+        ..remove('sellerTaxCode')
+        ..remove('invoiceNumber')
+        ..remove('seller_tax_code')
+        ..remove('invoice_number');
+      final evidence = decoded['evidence'];
+      if (evidence is List) {
+        decoded['evidence'] = evidence
+            .where((item) {
+              if (item is! Map) return true;
+              return !const {
+                'sellerTaxCode',
+                'invoiceNumber',
+                'seller_tax_code',
+                'invoice_number',
+              }.contains(item['fieldName'] ?? item['field_name']);
+            })
+            .toList(growable: false);
+      }
+      await customStatement(
+        'UPDATE $table SET $jsonColumn = ? WHERE $rowId = ?',
+        [jsonEncode(decoded), row.read<String>(rowId)],
+      );
+    }
+  }
 
   Future<void> _createIndexes() async {
     const statements = [

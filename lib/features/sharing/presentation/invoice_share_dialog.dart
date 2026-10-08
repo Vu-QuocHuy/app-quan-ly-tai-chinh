@@ -8,6 +8,7 @@ import '../../../shared/errors/error_presenter.dart';
 import '../../groups/domain/group_models.dart';
 import '../../groups/domain/group_split_calculator.dart';
 import '../../invoices/domain/invoice_models.dart';
+import '../../../shared/dialogs/confirm_dialog.dart';
 
 Future<bool?> showInvoiceShareDialog(
   BuildContext context,
@@ -46,6 +47,18 @@ class _InvoiceShareDialogState extends ConsumerState<InvoiceShareDialog> {
   String? _emailError;
   String? _amountError;
   bool _busy = false;
+
+  bool get _hasChanges =>
+      _target != _ShareTarget.group ||
+      _groupId != null ||
+      _selectedMemberIds.isNotEmpty ||
+      _groupSplitMode != null ||
+      _groupSplitControllers.values.any(
+        (controller) => controller.text.trim().isNotEmpty,
+      ) ||
+      _emailController.text.isNotEmpty ||
+      _recipientAmountController.text !=
+          ((widget.invoice.totalMinor + 1) ~/ 2).toString();
 
   @override
   void dispose() {
@@ -116,10 +129,7 @@ class _InvoiceShareDialogState extends ConsumerState<InvoiceShareDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Hủy'),
-        ),
+        TextButton(onPressed: _busy ? null : _cancel, child: const Text('Hủy')),
         FilledButton.icon(
           onPressed: _busy ? null : _submit,
           icon: _busy
@@ -132,6 +142,14 @@ class _InvoiceShareDialogState extends ConsumerState<InvoiceShareDialog> {
         ),
       ],
     );
+  }
+
+  Future<void> _cancel() async {
+    if (_hasChanges) {
+      final discard = await showDiscardChangesDialog(context);
+      if (!discard || !mounted) return;
+    }
+    Navigator.pop(context);
   }
 
   Widget _buildGroupTarget(AsyncValue<List<ExpenseGroup>> groups) {

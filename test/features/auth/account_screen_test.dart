@@ -37,6 +37,9 @@ void main() {
     expect(find.text('Làm chủ chi tiêu,\ntừng ngày một.'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Mật khẩu'), findsOneWidget);
+    expect(find.text('Tiếp tục với Google'), findsNothing);
+    expect(find.byIcon(Icons.login), findsNothing);
+    expect(find.text('Liên kết Google'), findsNothing);
     expect(find.textContaining('đồng bộ'), findsNothing);
     expect(find.textContaining('cloud'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -93,6 +96,9 @@ void main() {
 
     expect(find.text('Nhập lại mật khẩu'), findsOneWidget);
     expect(find.text('Tạo tài khoản'), findsWidgets);
+    expect(find.text('Tiếp tục với Google'), findsNothing);
+    expect(find.byIcon(Icons.login), findsNothing);
+    expect(find.text('Liên kết Google'), findsNothing);
     expect(find.textContaining('đồng bộ'), findsNothing);
     expect(tester.takeException(), isNull);
   });

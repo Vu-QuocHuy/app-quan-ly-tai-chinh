@@ -43,8 +43,6 @@ class InvoiceFilter {
       final searchable = StringNormalizer.merchant(
         [
           invoice.sellerName,
-          invoice.sellerTaxCode,
-          invoice.invoiceNumber,
           invoice.invoiceSymbol,
           invoice.notes,
           ...invoice.tags,

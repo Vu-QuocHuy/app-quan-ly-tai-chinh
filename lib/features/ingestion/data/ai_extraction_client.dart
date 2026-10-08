@@ -138,16 +138,6 @@ class AiExtractionClient implements InvoiceExtractor {
     final invoice = InvoiceEntity(
       id: id,
       sellerName: _requiredString(invoiceJson['sellerName'], 'sellerName', 500),
-      sellerTaxCode: _optionalString(
-        invoiceJson['sellerTaxCode'],
-        'sellerTaxCode',
-        300,
-      ),
-      invoiceNumber: _optionalString(
-        invoiceJson['invoiceNumber'],
-        'invoiceNumber',
-        300,
-      ),
       invoiceSymbol: _optionalString(
         invoiceJson['invoiceSymbol'],
         'invoiceSymbol',
@@ -164,17 +154,16 @@ class AiExtractionClient implements InvoiceExtractor {
         'subtotalMinor',
       ),
       taxMinor: _requiredMoney(invoiceJson['taxMinor'], 'taxMinor'),
+      discountMinor: invoiceJson['discountMinor'] == null
+          ? 0
+          : _requiredMoney(invoiceJson['discountMinor'], 'discountMinor'),
       totalMinor: _requiredMoney(invoiceJson['totalMinor'], 'totalMinor'),
       sourceType: input.sourceType,
       sourceHash: input.bytes.isEmpty
           ? null
           : SourceHasher.sha256Of(input.bytes),
       status: InvoiceStatus.needsReview,
-      categoryId: _enumString(
-        invoiceJson['categoryId'],
-        'categoryId',
-        _supportedCategories,
-      ),
+      categoryId: _categoryId(invoiceJson['categoryId']),
       createdAt: now,
       updatedAt: now,
       lines: [
@@ -216,16 +205,11 @@ class AiExtractionClient implements InvoiceExtractor {
         item['unitPriceMinor'],
         'items[$index].unitPriceMinor',
       ),
-      taxRate: _optionalTaxRate(item['taxRate'], 'items[$index].taxRate'),
       totalMinor: _requiredMoney(
         item['totalMinor'],
         'items[$index].totalMinor',
       ),
-      categoryId: _enumString(
-        item['categoryId'],
-        'items[$index].categoryId',
-        _supportedCategories,
-      ),
+      categoryId: _categoryId(item['categoryId']),
     );
   }
 
@@ -293,6 +277,12 @@ class AiExtractionClient implements InvoiceExtractor {
     return normalized;
   }
 
+  String _categoryId(Object? value) {
+    if (value is! String) return 'other';
+    final normalized = value.trim().toLowerCase();
+    return _supportedCategories.contains(normalized) ? normalized : 'other';
+  }
+
   int _requiredMoney(Object? value, String field) {
     final parsed = _optionalMoney(value, field);
     if (parsed == null) throw ExtractionException('$field không hợp lệ.');
@@ -318,14 +308,6 @@ class AiExtractionClient implements InvoiceExtractor {
       throw ExtractionException('$field không hợp lệ.');
     }
     return value.toDouble();
-  }
-
-  double? _optionalTaxRate(Object? value, String field) {
-    final rate = _optionalNonNegativeDouble(value, field);
-    if (rate != null && rate > 100) {
-      throw ExtractionException('$field không hợp lệ.');
-    }
-    return rate;
   }
 
   double _confidence(Object? value, String field) {

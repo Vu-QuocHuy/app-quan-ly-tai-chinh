@@ -34,8 +34,6 @@ class SharedBillSnapshot {
     required this.sellerName,
     required this.currencyCode,
     required this.totalMinor,
-    this.sellerTaxCode,
-    this.invoiceNumber,
     this.invoiceSymbol,
     this.issuedAt,
     this.subtotalMinor = 0,
@@ -44,8 +42,6 @@ class SharedBillSnapshot {
   });
 
   final String sellerName;
-  final String? sellerTaxCode;
-  final String? invoiceNumber;
   final String? invoiceSymbol;
   final DateTime? issuedAt;
   final String currencyCode;
@@ -57,8 +53,6 @@ class SharedBillSnapshot {
   factory SharedBillSnapshot.fromInvoice(InvoiceEntity invoice) {
     return SharedBillSnapshot(
       sellerName: invoice.sellerName,
-      sellerTaxCode: invoice.sellerTaxCode,
-      invoiceNumber: invoice.invoiceNumber,
       invoiceSymbol: invoice.invoiceSymbol,
       issuedAt: invoice.issuedAt,
       currencyCode: invoice.currencyCode,
@@ -102,16 +96,6 @@ class SharedBillSnapshot {
     }
     return SharedBillSnapshot(
       sellerName: _requiredString(map['seller_name'], 'seller_name', 240),
-      sellerTaxCode: _optionalString(
-        map['seller_tax_code'],
-        'seller_tax_code',
-        80,
-      ),
-      invoiceNumber: _optionalString(
-        map['invoice_number'],
-        'invoice_number',
-        120,
-      ),
       invoiceSymbol: _optionalString(
         map['invoice_symbol'],
         'invoice_symbol',
@@ -128,8 +112,6 @@ class SharedBillSnapshot {
 
   Map<String, dynamic> toMap() => {
     'seller_name': sellerName,
-    if (sellerTaxCode != null) 'seller_tax_code': sellerTaxCode,
-    if (invoiceNumber != null) 'invoice_number': invoiceNumber,
     if (invoiceSymbol != null) 'invoice_symbol': invoiceSymbol,
     if (issuedAt != null) 'issued_at': issuedAt!.toUtc().toIso8601String(),
     'currency_code': currencyCode,

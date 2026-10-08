@@ -180,16 +180,6 @@ class DriftInvoiceRepository implements InvoiceRepository {
     InvoiceEntity candidate,
   ) async {
     final predicates = <Expression<bool>>[];
-    if (candidate.sellerTaxCode?.trim().isNotEmpty == true) {
-      predicates.add(
-        _db.invoices.sellerTaxCode.equals(candidate.sellerTaxCode!),
-      );
-    }
-    if (candidate.invoiceNumber?.trim().isNotEmpty == true) {
-      predicates.add(
-        _db.invoices.invoiceNumber.equals(candidate.invoiceNumber!),
-      );
-    }
     if (candidate.totalMinor > 0) {
       predicates.add(_db.invoices.totalMinor.equals(candidate.totalMinor));
     }
@@ -714,7 +704,6 @@ class DriftInvoiceRepository implements InvoiceRepository {
               description: item.description,
               quantity: item.quantity,
               unitPriceMinor: item.unitPriceMinor,
-              taxRate: item.taxRate,
               totalMinor: item.totalMinor,
               categoryId: item.categoryId,
             ),
@@ -744,13 +733,12 @@ class DriftInvoiceRepository implements InvoiceRepository {
     return InvoiceEntity(
       id: row.id,
       sellerName: row.sellerName,
-      sellerTaxCode: row.sellerTaxCode,
-      invoiceNumber: row.invoiceNumber,
       invoiceSymbol: row.invoiceSymbol,
       issuedAt: row.issuedAt,
       currencyCode: row.currencyCode,
       subtotalMinor: row.subtotalMinor,
       taxMinor: row.taxMinor,
+      discountMinor: row.discountMinor,
       totalMinor: row.totalMinor,
       sourceType: _sourceTypeFromName(row.sourceType),
       sourceHash: row.sourceHash,
@@ -986,13 +974,12 @@ class DriftInvoiceRepository implements InvoiceRepository {
             id: Value(stored.id),
             cloudId: Value(stored.cloudId),
             sellerName: Value(stored.sellerName),
-            sellerTaxCode: Value(stored.sellerTaxCode),
-            invoiceNumber: Value(stored.invoiceNumber),
             invoiceSymbol: Value(stored.invoiceSymbol),
             issuedAt: Value(stored.issuedAt),
             currencyCode: Value(stored.currencyCode),
             subtotalMinor: Value(stored.subtotalMinor),
             taxMinor: Value(stored.taxMinor),
+            discountMinor: Value(stored.discountMinor),
             totalMinor: Value(stored.totalMinor),
             sourceType: Value(stored.sourceType.name),
             sourceHash: Value(stored.sourceHash),
@@ -1027,7 +1014,6 @@ class DriftInvoiceRepository implements InvoiceRepository {
                   description: line.description,
                   quantity: Value(line.quantity),
                   unitPriceMinor: Value(line.unitPriceMinor),
-                  taxRate: Value(line.taxRate),
                   totalMinor: line.totalMinor,
                   categoryId: Value(line.categoryId),
                 ),
@@ -1121,8 +1107,6 @@ class DriftInvoiceRepository implements InvoiceRepository {
     return StringNormalizer.merchant(
       [
         invoice.sellerName,
-        invoice.sellerTaxCode,
-        invoice.invoiceNumber,
         invoice.invoiceSymbol,
         invoice.notes,
         ...invoice.tags,
@@ -1134,13 +1118,12 @@ class DriftInvoiceRepository implements InvoiceRepository {
     'id': invoice.id,
     'cloudId': invoice.cloudId,
     'sellerName': invoice.sellerName,
-    'sellerTaxCode': invoice.sellerTaxCode,
-    'invoiceNumber': invoice.invoiceNumber,
     'invoiceSymbol': invoice.invoiceSymbol,
     'issuedAt': invoice.issuedAt?.toIso8601String(),
     'currencyCode': invoice.currencyCode,
     'subtotalMinor': invoice.subtotalMinor,
     'taxMinor': invoice.taxMinor,
+    'discountMinor': invoice.discountMinor,
     'totalMinor': invoice.totalMinor,
     'sourceType': invoice.sourceType.name,
     'sourceHash': invoice.sourceHash,
@@ -1160,7 +1143,6 @@ class DriftInvoiceRepository implements InvoiceRepository {
           'description': line.description,
           'quantity': line.quantity,
           'unitPriceMinor': line.unitPriceMinor,
-          'taxRate': line.taxRate,
           'totalMinor': line.totalMinor,
           'categoryId': line.categoryId,
         },

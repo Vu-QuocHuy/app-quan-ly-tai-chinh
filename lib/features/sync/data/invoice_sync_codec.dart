@@ -23,16 +23,6 @@ abstract final class InvoiceSyncCodec {
         'invoice.sellerName',
         maxLength: 500,
       ),
-      sellerTaxCode: _optionalString(
-        payload['sellerTaxCode'],
-        'invoice.sellerTaxCode',
-        64,
-      ),
-      invoiceNumber: _optionalString(
-        payload['invoiceNumber'],
-        'invoice.invoiceNumber',
-        128,
-      ),
       invoiceSymbol: _optionalString(
         payload['invoiceSymbol'],
         'invoice.invoiceSymbol',
@@ -45,6 +35,10 @@ abstract final class InvoiceSyncCodec {
         'invoice.subtotalMinor',
       ),
       taxMinor: _nonNegativeInteger(payload['taxMinor'], 'invoice.taxMinor'),
+      discountMinor: _nonNegativeInteger(
+        payload['discountMinor'] ?? 0,
+        'invoice.discountMinor',
+      ),
       totalMinor: _nonNegativeInteger(
         payload['totalMinor'],
         'invoice.totalMinor',
@@ -166,14 +160,6 @@ abstract final class InvoiceSyncCodec {
     return result;
   }
 
-  static double? _optionalTaxRate(Object? value, String field) {
-    final result = _optionalNonNegativeDouble(value, field);
-    if (result != null && result > 100) {
-      throw FormatException('$field không hợp lệ.');
-    }
-    return result;
-  }
-
   static List<String> _strings(Object? value, String field) {
     if (value == null) return const [];
     if (value is! List || value.length > 100) {
@@ -221,10 +207,6 @@ abstract final class InvoiceSyncCodec {
             raw['unitPriceMinor'],
             'invoice.lines[$index].unitPriceMinor',
           ),
-          taxRate: _optionalTaxRate(
-            raw['taxRate'],
-            'invoice.lines[$index].taxRate',
-          ),
           totalMinor: _nonNegativeInteger(
             raw['totalMinor'],
             'invoice.lines[$index].totalMinor',
@@ -257,17 +239,26 @@ abstract final class InvoiceSyncCodec {
         'invoice.evidence[$index].id',
         maxLength: 128,
       );
+      final fieldName = _requiredString(
+        raw['fieldName'],
+        'invoice.evidence[$index].fieldName',
+        maxLength: 64,
+      );
+      if (const {
+        'sellerTaxCode',
+        'invoiceNumber',
+        'seller_tax_code',
+        'invoice_number',
+      }.contains(fieldName)) {
+        continue;
+      }
       if (!ids.add(id)) {
         throw FormatException('invoice.evidence[$index].id bị trùng.');
       }
       evidence.add(
         FieldEvidenceEntity(
           id: id,
-          fieldName: _requiredString(
-            raw['fieldName'],
-            'invoice.evidence[$index].fieldName',
-            maxLength: 64,
-          ),
+          fieldName: fieldName,
           rawValue: _optionalString(
             raw['rawValue'],
             'invoice.evidence[$index].rawValue',

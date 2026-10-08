@@ -17,14 +17,13 @@ void main() {
     final result = AiExtractionClient(enabled: false).parseResponse({
       'invoice': {
         'sellerName': 'Siêu thị Demo',
-        'sellerTaxCode': null,
-        'invoiceNumber': 'HD-001',
         'invoiceSymbol': null,
         'invoiceDate': '2026-09-17',
         'currencyCode': 'VND',
         'subtotalMinor': 100000,
         'taxMinor': 10000,
-        'totalMinor': 110000,
+        'discountMinor': 5000,
+        'totalMinor': 105000,
         'categoryId': 'shopping',
         'items': [
           {
@@ -48,10 +47,43 @@ void main() {
     }, input);
 
     expect(result.invoice.sellerName, 'Siêu thị Demo');
+    expect(result.invoice.discountMinor, 5000);
     expect(result.invoice.categoryId, 'shopping');
     expect(result.invoice.lines.single.categoryId, 'food');
     expect(result.invoice.evidence.single.confidence, 0.9);
     expect(result.invoice.status, InvoiceStatus.needsReview);
+  });
+
+  test('maps unsupported invoice and item categories to Khác', () {
+    final response = _validResponse();
+    final invoice = response['invoice'] as Map<String, dynamic>;
+    invoice['categoryId'] = 'pet-care';
+    invoice['items'] = [
+      {
+        'description': 'Thức ăn cho mèo',
+        'quantity': 1,
+        'unitPriceMinor': 50000,
+        'taxRate': 0,
+        'totalMinor': 50000,
+        'categoryId': 'pet-supplies',
+      },
+    ];
+
+    final result = AiExtractionClient(
+      enabled: false,
+    ).parseResponse(response, input);
+
+    expect(result.invoice.categoryId, 'other');
+    expect(result.invoice.lines.single.categoryId, 'other');
+  });
+
+  test('treats a missing discount from older AI responses as zero', () {
+    final response = _validResponse();
+    (response['invoice'] as Map<String, dynamic>).remove('discountMinor');
+    final result = AiExtractionClient(
+      enabled: false,
+    ).parseResponse(response, input);
+    expect(result.invoice.discountMinor, 0);
   });
 
   test('rejects malformed AI amounts and nested collections', () {
@@ -86,13 +118,12 @@ void main() {
 Map<String, dynamic> _validResponse() => {
   'invoice': {
     'sellerName': 'Cửa hàng',
-    'sellerTaxCode': null,
-    'invoiceNumber': null,
     'invoiceSymbol': null,
     'invoiceDate': null,
     'currencyCode': 'VND',
     'subtotalMinor': 1,
     'taxMinor': 0,
+    'discountMinor': 0,
     'totalMinor': 1,
     'categoryId': 'other',
     'items': <Object?>[],

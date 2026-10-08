@@ -53,3 +53,13 @@ Future<bool> showConfirmDialog(
 
   return result ?? false;
 }
+
+Future<bool> showDiscardChangesDialog(BuildContext context) =>
+    showConfirmDialog(
+      context,
+      title: 'Bỏ thay đổi?',
+      message: 'Các thay đổi chưa lưu sẽ bị mất.',
+      confirmLabel: 'Bỏ thay đổi',
+      cancelLabel: 'Tiếp tục chỉnh sửa',
+      destructive: true,
+    );

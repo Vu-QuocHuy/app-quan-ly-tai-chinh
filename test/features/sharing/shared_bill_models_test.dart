@@ -6,8 +6,6 @@ void main() {
   final invoice = InvoiceEntity(
     id: 'invoice-1',
     sellerName: 'Cửa hàng demo',
-    sellerTaxCode: '0123456789',
-    invoiceNumber: '0001',
     invoiceSymbol: 'AA/26E',
     issuedAt: DateTime.utc(2026, 9, 19),
     currencyCode: 'VND',
@@ -32,6 +30,8 @@ void main() {
     expect(payload['total_minor'], 99000);
     expect(payload.containsKey('notes'), isFalse);
     expect(payload.containsKey('tags'), isFalse);
+    expect(payload.containsKey('seller_tax_code'), isFalse);
+    expect(payload.containsKey('invoice_number'), isFalse);
     expect(payload['lines'], [
       {'description': 'Cà phê', 'total_minor': 99000},
     ]);

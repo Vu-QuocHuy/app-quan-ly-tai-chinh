@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:uuid/uuid.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -9,7 +8,6 @@ import '../../invoices/domain/invoice_models.dart';
 import '../../invoices/domain/invoice_repository.dart';
 import '../data/ai_extraction_client.dart';
 import '../data/heuristic_text_extractor.dart';
-import '../data/ocr_service.dart';
 import '../data/pdf_text_service.dart';
 import '../data/xml_invoice_extractor.dart';
 import '../domain/duplicate_detector.dart';
@@ -23,18 +21,21 @@ class ImportOutcome {
     required this.result,
     this.exactDuplicate,
     this.likelyDuplicate,
+    this.sourceImageBytes,
+    this.sourceImageFileName,
   });
 
   final ExtractionResult result;
   final InvoiceEntity? exactDuplicate;
   final DuplicateMatch? likelyDuplicate;
+  final Uint8List? sourceImageBytes;
+  final String? sourceImageFileName;
 }
 
 class ImportCoordinator {
   ImportCoordinator({
     required InvoiceRepository repository,
     required XmlInvoiceExtractor xmlExtractor,
-    required OcrService ocrService,
     required PdfTextService pdfTextService,
     required AiExtractionClient aiExtractor,
     required HeuristicTextExtractor heuristicExtractor,
@@ -44,7 +45,6 @@ class ImportCoordinator {
     Uuid uuid = const Uuid(),
     Iterable<InvoiceExtractor> additionalExtractors = const [],
   }) : _repository = repository,
-       _ocrService = ocrService,
        _pdfTextService = pdfTextService,
        _aiExtractor = aiExtractor,
        _heuristicExtractor = heuristicExtractor,
@@ -57,7 +57,6 @@ class ImportCoordinator {
        ]);
 
   final InvoiceRepository _repository;
-  final OcrService _ocrService;
   final PdfTextService _pdfTextService;
   final AiExtractionClient _aiExtractor;
   final HeuristicTextExtractor _heuristicExtractor;
@@ -106,27 +105,18 @@ class ImportCoordinator {
       sourceType: InvoiceSourceType.imageOcr,
       localPath: imagePath,
     );
-    if (kIsWeb) {
-      if (!_aiExtractor.isConfigured) {
-        throw const NetworkException(
-          'OCR trên Chrome cần cấu hình backend AI. Trên Android/iOS có thể OCR offline.',
-        );
-      }
-      return _complete(await _aiExtractor.extractImage(input));
+    if (!_aiExtractor.isConfigured) {
+      throw const NetworkException(
+        'Cần kết nối dịch vụ AI để phân tích ảnh hóa đơn. Bạn có thể nhập thủ công.',
+      );
     }
-    final text = OcrTextNormalizer.normalize(
-      await _ocrService.recognizeText(imagePath),
-    );
-    return _complete(
-      await _extractText(
-        ExtractionInput(
-          bytes: bytes,
-          fileName: fileName,
-          sourceType: InvoiceSourceType.imageOcr,
-          localPath: imagePath,
-          ocrText: text,
-        ),
-      ),
+    final outcome = await _complete(await _aiExtractor.extractImage(input));
+    return ImportOutcome(
+      result: outcome.result,
+      exactDuplicate: outcome.exactDuplicate,
+      likelyDuplicate: outcome.likelyDuplicate,
+      sourceImageBytes: bytes,
+      sourceImageFileName: fileName,
     );
   }
 
@@ -135,6 +125,7 @@ class ImportCoordinator {
     return InvoiceEntity(
       id: _uuid.v4(),
       sellerName: '',
+      issuedAt: now,
       currencyCode: AppConstants.defaultCurrency,
       subtotalMinor: 0,
       taxMinor: 0,
@@ -152,19 +143,36 @@ class ImportCoordinator {
       result.invoice.lines,
       categories,
     );
-    var categoryId = await _repository.categoryForMerchant(
+    final merchantRuleCategoryId = await _repository.categoryForMerchant(
       result.invoice.sellerName,
     );
-    if (categoryId == null && _aiExtractor.isConfigured) {
+    var categoryId = merchantRuleCategoryId ?? result.invoice.categoryId;
+    if (merchantRuleCategoryId == null &&
+        (categoryId == null || categoryId == 'other') &&
+        classifiedLines.isNotEmpty) {
+      final lineCategoryIds = classifiedLines
+          .map((line) => line.categoryId)
+          .toSet();
+      if (lineCategoryIds.length == 1 &&
+          !lineCategoryIds.contains(null) &&
+          !lineCategoryIds.contains('other')) {
+        categoryId = lineCategoryIds.single;
+      }
+    }
+    if (merchantRuleCategoryId == null &&
+        (categoryId == null || categoryId == 'other') &&
+        _aiExtractor.isConfigured) {
       try {
-        categoryId = await _aiExtractor.classifyMerchant(
+        final merchantCategoryId = await _aiExtractor.classifyMerchant(
           result.invoice.sellerName,
         );
+        if (merchantCategoryId != null && merchantCategoryId != 'other') {
+          categoryId = merchantCategoryId;
+        }
       } on NetworkException {
         // Classification is an enrichment step; import must remain offline-first.
       }
     }
-    categoryId ??= result.invoice.categoryId;
     final availableCategoryIds = categories
         .map((category) => category.id)
         .toSet();

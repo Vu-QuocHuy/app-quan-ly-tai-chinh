@@ -31,16 +31,8 @@ class DuplicateDetector {
           reasons: const ['File có cùng fingerprint'],
         );
       }
-      if (_sameNonEmpty(candidate.sellerTaxCode, invoice.sellerTaxCode)) {
-        score += 0.25;
-        reasons.add('Cùng mã số thuế');
-      }
-      if (_sameNonEmpty(candidate.invoiceNumber, invoice.invoiceNumber)) {
-        score += 0.35;
-        reasons.add('Cùng số hóa đơn');
-      }
       if (candidate.totalMinor == invoice.totalMinor) {
-        score += 0.2;
+        score += 0.5;
         reasons.add('Cùng tổng tiền');
       }
       final candidateDate = candidate.issuedAt;
@@ -50,10 +42,10 @@ class DuplicateDetector {
           candidateDate.year == existingDate.year &&
           candidateDate.month == existingDate.month &&
           candidateDate.day == existingDate.day) {
-        score += 0.2;
+        score += 0.5;
         reasons.add('Cùng ngày lập');
       }
-      if (score >= 0.7 && (best == null || score > best.score)) {
+      if (score >= 0.9 && (best == null || score > best.score)) {
         best = DuplicateMatch(
           invoiceId: invoice.id,
           score: score,
@@ -63,7 +55,4 @@ class DuplicateDetector {
     }
     return best;
   }
-
-  bool _sameNonEmpty(String? left, String? right) =>
-      left != null && left.isNotEmpty && right != null && left == right;
 }

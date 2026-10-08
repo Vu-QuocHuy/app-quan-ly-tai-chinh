@@ -37,6 +37,7 @@ void main() {
 
       expect(invoice.id, 'invoice-1');
       expect(invoice.status, InvoiceStatus.confirmed);
+      expect(invoice.discountMinor, 0);
       expect(invoice.lines.single.categoryId, 'food');
       expect(invoice.evidence.single.correctedByUser, isTrue);
     });
@@ -56,6 +57,12 @@ void main() {
         ),
         throwsA(isA<FormatException>()),
       );
+    });
+
+    test('decodes a separately reported invoice discount', () {
+      final payload = _invoicePayload()..['discountMinor'] = 25;
+      final invoice = InvoiceSyncCodec.fromPayload(payload, revision: 1);
+      expect(invoice.discountMinor, 25);
     });
 
     test('rejects unknown enum values and malformed nested records', () {

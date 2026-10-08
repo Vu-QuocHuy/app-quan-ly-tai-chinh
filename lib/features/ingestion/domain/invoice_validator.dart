@@ -23,11 +23,19 @@ class InvoiceValidator {
     if (invoice.totalMinor <= 0) {
       errors.add('Tổng tiền phải lớn hơn 0.');
     }
-    final computed = invoice.subtotalMinor + invoice.taxMinor;
+    if (invoice.discountMinor < 0) {
+      errors.add('Số tiền giảm giá không hợp lệ.');
+    }
+    final computed =
+        invoice.subtotalMinor + invoice.taxMinor - invoice.discountMinor;
     if (invoice.subtotalMinor > 0 &&
         (computed - invoice.totalMinor).abs() >
             AppConstants.moneyToleranceMinor) {
-      warnings.add('Tổng trước thuế và thuế chưa khớp với tổng thanh toán.');
+      warnings.add(
+        invoice.discountMinor > 0
+            ? 'Tiền trước thuế, thuế và giảm giá chưa khớp với tổng thanh toán.'
+            : 'Tổng trước thuế và thuế chưa khớp với tổng thanh toán.',
+      );
     }
     if (invoice.lines.isNotEmpty) {
       final lineTotal = invoice.lines.fold<int>(
@@ -38,9 +46,6 @@ class InvoiceValidator {
           AppConstants.moneyToleranceMinor) {
         warnings.add('Tổng các dòng hàng chưa khớp với tiền trước thuế.');
       }
-    }
-    if (invoice.invoiceNumber == null || invoice.invoiceNumber!.isEmpty) {
-      warnings.add('Không tìm thấy số hóa đơn.');
     }
     if (invoice.issuedAt == null) {
       warnings.add('Không tìm thấy ngày lập hóa đơn.');

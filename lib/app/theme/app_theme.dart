@@ -29,7 +29,7 @@ abstract final class AppTheme {
       // Từ `.standard` cố định -> theo nền tảng. App có target web và dùng
       // NavigationRail trên 840dp, nên mật độ nên theo platform.
       visualDensity: VisualDensity.adaptivePlatformDensity,
-      splashFactory: InkSparkle.splashFactory,
+      splashFactory: InkRipple.splashFactory,
       extensions: <ThemeExtension<dynamic>>[finance],
       // Đặt một lần ở đây thay vì per-route: biến thể reduced-motion sau này
       // chỉ là một dòng swap.
@@ -68,8 +68,9 @@ abstract final class AppTheme {
 
       // ---------- Chrome điều hướng ----------
       appBarTheme: AppBarTheme(
-        backgroundColor: scheme.surface,
+        backgroundColor: scheme.surfaceContainerLow,
         surfaceTintColor: scheme.surfaceTint,
+        shape: Border(bottom: BorderSide(color: scheme.outlineVariant)),
         scrolledUnderElevation: AppElevations.raised,
         elevation: AppElevations.none,
         centerTitle: false,
@@ -85,7 +86,7 @@ abstract final class AppTheme {
         elevation: AppElevations.raised,
         backgroundColor: scheme.surfaceContainerLow,
         surfaceTintColor: scheme.surfaceTint,
-        // Pill thương hiệu đặc: 7.20:1 sáng / 11.13:1 tối.
+        // Pill thương hiệu đặc: 8.00:1 sáng / 8.85:1 tối.
         indicatorColor: scheme.primary,
         indicatorShape: AppShapes.pill,
         iconTheme: WidgetStateProperty.resolveWith((states) {
@@ -126,7 +127,7 @@ abstract final class AppTheme {
         // Trước đây FAB hoàn toàn không được theme -> rơi về `primaryContainer`
         // mặc định của M3 = 1.23:1 so với nền. Nó là CTA toàn cục duy nhất.
         backgroundColor: scheme.primary,
-        foregroundColor: scheme.onPrimary, // 8.72:1 / 9.10:1
+        foregroundColor: scheme.onPrimary, // 8.00:1 / 8.85:1
         elevation: AppElevations.raised,
         hoverElevation: AppElevations.raisedHover,
         focusElevation: AppElevations.raisedHover,

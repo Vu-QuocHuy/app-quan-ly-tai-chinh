@@ -18,7 +18,7 @@ class ImportSourceSheet extends StatelessWidget {
             Text('Thêm giao dịch', style: theme.textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(
-              'Chọn cách thêm hóa đơn. Dữ liệu luôn được kiểm tra trước khi lưu.',
+              'Chụp hóa đơn hoặc ghi nhanh khoản chi không có hóa đơn.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -44,8 +44,8 @@ class ImportSourceSheet extends StatelessWidget {
             ),
             _SourceTile(
               icon: Icons.edit_note,
-              title: 'Nhập thủ công',
-              subtitle: 'Phù hợp khi không có file hoặc ảnh',
+              title: 'Thêm khoản chi',
+              subtitle: 'Không cần hóa đơn; nhập số tiền và danh mục',
               onTap: () => Navigator.pop(context, ImportSource.manual),
             ),
           ],

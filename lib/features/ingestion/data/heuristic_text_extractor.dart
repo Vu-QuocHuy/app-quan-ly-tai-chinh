@@ -42,13 +42,6 @@ class HeuristicTextExtractor implements InvoiceExtractor {
     final invoice = InvoiceEntity(
       id: id,
       sellerName: lines.isEmpty ? '' : lines.first,
-      invoiceNumber: _match(
-        text,
-        RegExp(
-          r'(?:số|so|invoice\s*(?:no|number))\s*[:#]?\s*([A-Z0-9/-]+)',
-          caseSensitive: false,
-        ),
-      ),
       issuedAt: _findDate(text),
       currencyCode: AppConstants.defaultCurrency,
       subtotalMinor: total,

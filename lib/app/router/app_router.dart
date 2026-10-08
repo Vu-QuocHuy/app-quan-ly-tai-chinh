@@ -16,6 +16,7 @@ import '../../features/invoices/presentation/invoice_list_screen.dart';
 import '../../features/groups/presentation/group_screen.dart';
 import '../../features/ingestion/presentation/import_job_history_screen.dart';
 import '../../features/payments/presentation/qr_payment_screen.dart';
+import '../../features/payments/presentation/qr_payment_history_screen.dart';
 import '../../features/review/presentation/review_invoice_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/settings/presentation/cloud_profile_settings_screen.dart';
@@ -129,6 +130,15 @@ final appRouter = GoRouter(
               path: '/groups',
               pageBuilder: (context, state) =>
                   _tabPage(context, const GroupScreen()),
+              routes: [
+                GoRoute(
+                  path: ':groupId',
+                  parentNavigatorKey: _rootKey,
+                  builder: (context, state) => GroupDetailScreen(
+                    groupId: state.pathParameters['groupId']!,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -175,6 +185,11 @@ final appRouter = GoRouter(
       path: '/qr-payment',
       parentNavigatorKey: _rootKey,
       builder: (context, state) => const QrPaymentScreen(),
+    ),
+    GoRoute(
+      path: '/qr-payment/history',
+      parentNavigatorKey: _rootKey,
+      builder: (context, state) => const QrPaymentHistoryScreen(),
     ),
     GoRoute(
       path: '/categories',

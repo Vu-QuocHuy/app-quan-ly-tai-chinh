@@ -1,9 +1,11 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/core/database/app_database.dart';
 
 void main() {
-  test('migrates v1 invoices to v2 and creates scale indexes', () async {
+  test('migrates v1 invoices and removes retired identifiers', () async {
     final database = AppDatabase(
       NativeDatabase.memory(
         setup: (sqlite) {
@@ -49,9 +51,9 @@ void main() {
           sqlite.execute(
             "INSERT INTO invoices (id, seller_name, currency_code, "
             "subtotal_minor, tax_minor, total_minor, source_type, status, "
-            "created_at, updated_at) VALUES "
+            "created_at, updated_at, seller_tax_code, invoice_number) VALUES "
             "('legacy', 'Legacy Store', 'VND', 10, 0, 10, 'manual', "
-            "'confirmed', 1788048000, 1788048000)",
+            "'confirmed', 1788048000, 1788048000, 'TAX-01', 'HD-01')",
           );
           sqlite.userVersion = 1;
         },
@@ -68,11 +70,20 @@ void main() {
     final indexes = await database
         .customSelect("SELECT name FROM sqlite_master WHERE type = 'index'")
         .get();
+    final invoiceColumns = await database
+        .customSelect('PRAGMA table_info(invoices)')
+        .get();
 
-    expect(legacy.read<String>('search_text'), contains('legacy store'));
+    final searchText = legacy.read<String>('search_text');
+    expect(searchText, contains('legacy store'));
+    expect(searchText, isNot(contains('tax-01')));
+    expect(searchText, isNot(contains('hd-01')));
     expect(legacy.read<String>('tags_json'), '[]');
     expect(legacy.read<String>('sync_state'), 'localOnly');
     expect(legacy.read<int>('revision'), 1);
+    final columnNames = invoiceColumns.map((row) => row.read<String>('name'));
+    expect(columnNames, isNot(contains('seller_tax_code')));
+    expect(columnNames, isNot(contains('invoice_number')));
     expect(
       indexes.map((row) => row.read<String>('name')),
       containsAll([
@@ -83,4 +94,39 @@ void main() {
       ]),
     );
   });
+
+  test(
+    'migrates v6 databases where retired columns are already absent',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'invoice-migration-',
+      );
+      final file = File('${directory.path}/database.sqlite');
+      AppDatabase? database;
+      try {
+        database = AppDatabase(NativeDatabase(file));
+        await database.customSelect('SELECT id FROM invoices').get();
+        await database.customStatement('''
+        INSERT INTO invoices (
+          id, seller_name, currency_code, source_type, status,
+          search_text, created_at, updated_at
+        ) VALUES ('existing', 'Corner Shop', 'VND', 'manual', 'confirmed',
+          'corner shop', 1788048000000, 1788048000000)
+      ''');
+        await database.customStatement('PRAGMA user_version = 6');
+        await database.close();
+
+        database = AppDatabase(NativeDatabase(file));
+        final invoice = await database
+            .customSelect(
+              "SELECT search_text FROM invoices WHERE id = 'existing'",
+            )
+            .getSingle();
+        expect(invoice.read<String>('search_text'), 'corner shop');
+      } finally {
+        await database?.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 }

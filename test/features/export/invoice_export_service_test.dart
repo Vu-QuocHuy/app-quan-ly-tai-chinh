@@ -9,13 +9,12 @@ void main() {
   final invoice = InvoiceEntity(
     id: 'invoice-1',
     sellerName: 'Cửa hàng, Một',
-    sellerTaxCode: '0123',
-    invoiceNumber: 'HD-01',
     invoiceSymbol: 'AA/26E',
     issuedAt: DateTime(2026, 8, 30),
     currencyCode: 'VND',
     subtotalMinor: 100000,
     taxMinor: 10000,
+    discountMinor: 5000,
     totalMinor: 110000,
     sourceType: InvoiceSourceType.xml,
     sourceHash: 'hash',
@@ -41,6 +40,9 @@ void main() {
     expect(decoded['format'], 'hoadon-insight.invoice-export');
     expect(decoded['checksumSha256'], hasLength(64));
     expect(exported['sellerName'], 'Cửa hàng, Một');
+    expect(exported.containsKey('sellerTaxCode'), isFalse);
+    expect(exported.containsKey('invoiceNumber'), isFalse);
+    expect(exported['discountMinor'], 5000);
     expect((exported['lines'] as List).length, 1);
     expect((exported['evidence'] as List), isEmpty);
   });
@@ -52,6 +54,9 @@ void main() {
     expect(csv, contains('"Cửa hàng, Một"'));
     expect(csv, contains('Cà phê'));
     expect(csv, contains('invoice-1'));
+    expect(csv, isNot(contains('seller_tax_code')));
+    expect(csv, isNot(contains('invoice_number')));
+    expect(csv, contains('discount_minor'));
     expect(csv, contains(',1,"'));
   });
 

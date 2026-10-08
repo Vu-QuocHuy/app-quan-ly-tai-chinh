@@ -31,7 +31,6 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   String _query = '';
   String? _categoryId;
   InvoiceStatus? _status;
-  InvoiceSourceType? _sourceType;
   DateTime? _month;
   Timer? _searchDebounce;
   int _limit = 50;
@@ -50,7 +49,6 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
       monthKey: _month == null ? null : MonthUtils.key(_month!),
       categoryId: _categoryId,
       status: _status,
-      sourceType: _sourceType,
     );
     final invoices = ref.watch(
       filteredInvoiceSummariesProvider(
@@ -63,7 +61,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
         slivers: [
           SliverAppBar(
             pinned: true,
-            title: const Text('Hóa đơn'),
+            title: const Text('Giao dịch'),
             actions: [
               IconButton(
                 tooltip: 'Mở trợ lý chi tiêu',
@@ -80,16 +78,12 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                 controller: _searchController,
                 query: _query,
                 categoryLabel: _categoryLabel(categories),
-                sourceLabel: _sourceType == null
-                    ? null
-                    : _sourceLabel(_sourceType!),
                 monthLabel: _month == null ? null : MonthUtils.label(_month!),
                 status: _status,
                 onQueryChanged: _onQueryChanged,
                 onStatusChanged: (value) =>
                     _changeFilter(() => _status = value),
                 onCategoryTap: () => _selectCategory(categories),
-                onSourceTap: _selectSource,
                 onMonthTap: _selectMonth,
                 onClear: filter.hasActiveFilters ? _clearFilters : null,
               ),
@@ -107,7 +101,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
               child: AppErrorState(
                 error: error,
                 stackTrace: stack,
-                title: 'Không tải được danh sách hóa đơn',
+                title: 'Không tải được lịch sử giao dịch',
                 onRetry: () => ref.invalidate(
                   filteredInvoiceSummariesProvider(
                     InvoiceListQuery(filter: filter, limit: _limit + 1),
@@ -154,7 +148,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                             child: OutlinedButton.icon(
                               onPressed: () => setState(() => _limit += 50),
                               icon: const Icon(Icons.expand_more),
-                              label: const Text('Tải thêm hóa đơn'),
+                              label: const Text('Tải thêm giao dịch'),
                             ),
                           ),
                         ),
@@ -181,7 +175,6 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
       _query = '';
       _categoryId = null;
       _status = null;
-      _sourceType = null;
       _month = null;
       _limit = 50;
     });
@@ -237,45 +230,6 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
     _changeFilter(() => _categoryId = result.isEmpty ? null : result);
   }
 
-  Future<void> _selectSource() async {
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.only(bottom: 16),
-          children: [
-            const ListTile(
-              title: Text('Lọc theo nguồn'),
-              subtitle: Text('Chọn cách hóa đơn được nhập vào ứng dụng'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.all_inclusive),
-              title: const Text('Tất cả nguồn'),
-              selected: _sourceType == null,
-              onTap: () => Navigator.pop(sheetContext, ''),
-            ),
-            ...InvoiceSourceType.values.map(
-              (source) => ListTile(
-                leading: Icon(_sourceIcon(source)),
-                title: Text(_sourceLabel(source)),
-                selected: source == _sourceType,
-                onTap: () => Navigator.pop(sheetContext, source.name),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (result == null) return;
-    _changeFilter(
-      () => _sourceType = result.isEmpty
-          ? null
-          : InvoiceSourceType.values.byName(result),
-    );
-  }
-
   Future<void> _selectMonth() async {
     final result = await showDatePicker(
       context: context,
@@ -294,13 +248,11 @@ class _FilterHeader extends StatelessWidget {
     required this.controller,
     required this.query,
     required this.categoryLabel,
-    required this.sourceLabel,
     required this.monthLabel,
     required this.status,
     required this.onQueryChanged,
     required this.onStatusChanged,
     required this.onCategoryTap,
-    required this.onSourceTap,
     required this.onMonthTap,
     required this.onClear,
   });
@@ -308,13 +260,11 @@ class _FilterHeader extends StatelessWidget {
   final TextEditingController controller;
   final String query;
   final String? categoryLabel;
-  final String? sourceLabel;
   final String? monthLabel;
   final InvoiceStatus? status;
   final ValueChanged<String> onQueryChanged;
   final ValueChanged<InvoiceStatus?> onStatusChanged;
   final VoidCallback onCategoryTap;
-  final VoidCallback onSourceTap;
   final VoidCallback onMonthTap;
   final VoidCallback? onClear;
 
@@ -325,7 +275,7 @@ class _FilterHeader extends StatelessWidget {
       children: [
         SearchBar(
           controller: controller,
-          hintText: 'Tìm người bán, MST hoặc số hóa đơn',
+          hintText: 'Tìm người bán, ký hiệu hoặc ghi chú',
           leading: const Icon(Icons.search),
           onChanged: onQueryChanged,
           trailing: [
@@ -365,12 +315,6 @@ class _FilterHeader extends StatelessWidget {
               label: Text(categoryLabel ?? 'Danh mục'),
               selected: categoryLabel != null,
               onSelected: (_) => onCategoryTap(),
-            ),
-            FilterChip(
-              avatar: const Icon(Icons.input_outlined, size: 18),
-              label: Text(sourceLabel ?? 'Nguồn'),
-              selected: sourceLabel != null,
-              onSelected: (_) => onSourceTap(),
             ),
             FilterChip(
               avatar: const Icon(Icons.calendar_month_outlined, size: 18),
@@ -478,7 +422,7 @@ class _InvoiceEmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            filtered ? 'Không tìm thấy hóa đơn' : 'Chưa có hóa đơn',
+            filtered ? 'Không tìm thấy giao dịch' : 'Chưa có giao dịch',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),

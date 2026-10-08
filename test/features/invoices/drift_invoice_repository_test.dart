@@ -25,7 +25,8 @@ void main() {
       currencyCode: 'VND',
       subtotalMinor: 100000,
       taxMinor: 10000,
-      totalMinor: 110000,
+      discountMinor: 5000,
+      totalMinor: 105000,
       sourceType: InvoiceSourceType.xml,
       sourceHash: 'hash-1',
       status: InvoiceStatus.confirmed,
@@ -55,13 +56,63 @@ void main() {
     final restored = await repository.findById(invoice.id);
 
     expect(restored?.sellerName, 'Demo');
+    expect(restored?.discountMinor, 5000);
     expect(restored?.lines.single.description, 'Dịch vụ');
     expect(restored?.evidence.single.confidence, 0.99);
     expect((await repository.watchInvoices().first), hasLength(1));
     final summary = (await repository.watchInvoiceSummaries().first).single;
     expect(summary.lines, isEmpty);
     expect(summary.evidence, isEmpty);
-    expect(summary.totalMinor, 110000);
+    expect(summary.totalMinor, 105000);
+  });
+
+  test('QR payment history includes confirmed QR payments only', () async {
+    final now = DateTime(2026, 8, 20, 10);
+    InvoiceEntity payment({
+      required String id,
+      required InvoiceStatus status,
+      List<String> tags = const ['qr-payment'],
+    }) {
+      return InvoiceEntity(
+        id: id,
+        sellerName: 'Người nhận',
+        currencyCode: 'VND',
+        subtotalMinor: 50000,
+        taxMinor: 0,
+        totalMinor: 50000,
+        sourceType: InvoiceSourceType.manual,
+        sourceHash: 'qr-payment:$id',
+        status: status,
+        categoryId: 'other',
+        notes: 'Thanh toán VietQR',
+        tags: tags,
+        createdAt: now,
+        updatedAt: now,
+        confirmedAt: status == InvoiceStatus.confirmed ? now : null,
+      );
+    }
+
+    await repository.saveInvoices([
+      payment(id: 'qr-confirmed', status: InvoiceStatus.confirmed),
+      payment(id: 'qr-review', status: InvoiceStatus.needsReview),
+      payment(
+        id: 'manual-confirmed',
+        status: InvoiceStatus.confirmed,
+        tags: const [],
+      ),
+    ]);
+
+    final payments = await repository
+        .watchInvoiceSummaries(
+          filter: const InvoiceFilter(
+            query: 'qr-payment',
+            status: InvoiceStatus.confirmed,
+            sourceType: InvoiceSourceType.manual,
+          ),
+        )
+        .first;
+
+    expect(payments.map((item) => item.id), ['qr-confirmed']);
   });
 
   test('seeds default categories', () async {

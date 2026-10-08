@@ -113,8 +113,7 @@ enabled = true
 file_size_limit = "50MiB"
 
 [functions.ai-api]
-# Only authenticated users may use the Gemini proxy. When cloud is configured,
-# the Flutter app also requires a session before opening user-data routes.
+# Only authenticated users may use the AI proxy.
 verify_jwt = true
 
 [functions.delete-account]

@@ -14,6 +14,7 @@ void main() {
         '/invoices/invoice-1/attachments',
         '/budgets',
         '/groups',
+        '/groups/group-1',
         '/settings',
         '/settings/account',
         '/settings/cloud',
@@ -21,6 +22,7 @@ void main() {
         '/settings/conflicts',
         '/chat',
         '/qr-payment',
+        '/qr-payment/history',
         '/review',
       ];
 
@@ -65,11 +67,13 @@ void main() {
           '/invoices/invoice-1',
           '/budgets',
           '/groups',
+          '/groups/group-1',
           '/settings',
           '/settings/import-jobs',
           '/settings/conflicts',
           '/chat',
           '/qr-payment',
+          '/qr-payment/history',
           '/review',
         ]) {
           expect(
@@ -120,6 +124,7 @@ void main() {
           '/settings/conflicts',
           '/chat',
           '/qr-payment',
+          '/qr-payment/history',
         ]) {
           expect(
             authRedirect(location: route, isConfigured: true, isSignedIn: true),

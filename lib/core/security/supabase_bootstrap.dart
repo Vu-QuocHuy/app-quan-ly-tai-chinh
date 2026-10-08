@@ -9,6 +9,11 @@ abstract final class SupabaseBootstrap {
   );
   static const _oauthRedirectUri = String.fromEnvironment(
     'SUPABASE_OAUTH_REDIRECT_URI',
+    defaultValue: String.fromEnvironment('SUPABASE_AUTH_REDIRECT_URI'),
+  );
+  static const _passwordRecoveryRedirectUri = String.fromEnvironment(
+    'SUPABASE_AUTH_REDIRECT_URI',
+    defaultValue: String.fromEnvironment('SUPABASE_OAUTH_REDIRECT_URI'),
   );
 
   static bool _initialized = false;
@@ -21,12 +26,22 @@ abstract final class SupabaseBootstrap {
 
   static String? get oauthRedirectUri {
     final redirectUri = _oauthRedirectUri.trim();
-    return redirectUri.isEmpty || !isSafeOAuthRedirectUri(redirectUri)
+    return redirectUri.isEmpty || !isSafeAuthRedirectUri(redirectUri)
         ? null
         : redirectUri;
   }
 
-  static bool isSafeOAuthRedirectUri(String value) {
+  static String? get passwordRecoveryRedirectUri {
+    final redirectUri = _passwordRecoveryRedirectUri.trim();
+    return redirectUri.isEmpty || !isSafeAuthRedirectUri(redirectUri)
+        ? null
+        : redirectUri;
+  }
+
+  static bool isSafeOAuthRedirectUri(String value) =>
+      isSafeAuthRedirectUri(value);
+
+  static bool isSafeAuthRedirectUri(String value) {
     final uri = Uri.tryParse(value.trim());
     if (uri == null ||
         uri.host.isEmpty ||

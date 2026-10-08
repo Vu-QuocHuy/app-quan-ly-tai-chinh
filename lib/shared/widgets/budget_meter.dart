@@ -15,6 +15,7 @@ class BudgetMeter extends StatelessWidget {
     required this.limitMinor,
     this.paceRatio,
     this.showLabel = true,
+    this.colorTransition = false,
     this.animate = true,
     super.key,
   });
@@ -28,6 +29,10 @@ class BudgetMeter extends StatelessWidget {
   final double? paceRatio;
 
   final bool showLabel;
+
+  /// Gradually transitions the filled bar from safe to warning to over-limit.
+  /// Used by the compact dashboard variant; detailed views keep status labels.
+  final bool colorTransition;
   final bool animate;
 
   @override
@@ -87,13 +92,32 @@ class BudgetMeter extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
         ],
-        _MeterBar(
-          ratio: ratio,
-          tone: tone,
-          safeTone: finance.budgetSafe,
-          paceRatio: paceRatio,
-          animate: animate,
-        ),
+        if (showLabel)
+          _MeterBar(
+            ratio: ratio,
+            tone: tone,
+            safeTone: finance.budgetSafe,
+            warningTone: finance.budgetWarn,
+            dangerTone: finance.budgetOver,
+            paceRatio: paceRatio,
+            colorTransition: colorTransition,
+            animate: animate,
+          )
+        else
+          Semantics(
+            label: 'Tiến độ ngân sách',
+            value: '$percent% đã sử dụng',
+            child: _MeterBar(
+              ratio: ratio,
+              tone: tone,
+              safeTone: finance.budgetSafe,
+              warningTone: finance.budgetWarn,
+              dangerTone: finance.budgetOver,
+              paceRatio: paceRatio,
+              colorTransition: colorTransition,
+              animate: animate,
+            ),
+          ),
         if (showLabel) ...[
           const SizedBox(height: AppSpacing.sm),
           Row(
@@ -123,15 +147,21 @@ class _MeterBar extends StatelessWidget {
     required this.ratio,
     required this.tone,
     required this.safeTone,
+    required this.warningTone,
+    required this.dangerTone,
     required this.animate,
+    required this.colorTransition,
     this.paceRatio,
   });
 
   final double ratio;
   final FinanceTone tone;
   final FinanceTone safeTone;
+  final FinanceTone warningTone;
+  final FinanceTone dangerTone;
   final double? paceRatio;
   final bool animate;
+  final bool colorTransition;
 
   static const double _height = 10;
 
@@ -157,6 +187,17 @@ class _MeterBar extends StatelessWidget {
             final overflow = value > 1.0
                 ? ((value - 1.0) / value).clamp(0.0, 1.0)
                 : 0.0;
+            final progressColor = base < 0.5
+                ? Color.lerp(
+                    safeTone.color,
+                    warningTone.color,
+                    base.toDouble() * 2,
+                  )!
+                : Color.lerp(
+                    warningTone.color,
+                    dangerTone.color,
+                    (base.toDouble() - 0.5) * 2,
+                  )!;
 
             return SizedBox(
               height: _height,
@@ -174,23 +215,35 @@ class _MeterBar extends StatelessWidget {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(999),
                     child: Row(
-                      children: [
-                        SizedBox(
-                          width: width * base * (1 - overflow),
-                          child: ColoredBox(
-                            color: value > 1.0 ? safeTone.color : tone.color,
-                            child: const SizedBox(height: _height),
-                          ),
-                        ),
-                        if (overflow > 0)
-                          SizedBox(
-                            width: width * overflow,
-                            child: ColoredBox(
-                              color: tone.color,
-                              child: const SizedBox(height: _height),
-                            ),
-                          ),
-                      ],
+                      children: colorTransition
+                          ? [
+                              SizedBox(
+                                width: width * base,
+                                child: ColoredBox(
+                                  color: progressColor,
+                                  child: const SizedBox(height: _height),
+                                ),
+                              ),
+                            ]
+                          : [
+                              SizedBox(
+                                width: width * base * (1 - overflow),
+                                child: ColoredBox(
+                                  color: value > 1.0
+                                      ? safeTone.color
+                                      : tone.color,
+                                  child: const SizedBox(height: _height),
+                                ),
+                              ),
+                              if (overflow > 0)
+                                SizedBox(
+                                  width: width * overflow,
+                                  child: ColoredBox(
+                                    color: tone.color,
+                                    child: const SizedBox(height: _height),
+                                  ),
+                                ),
+                            ],
                     ),
                   ),
                   if (paceRatio != null && paceRatio! > 0 && paceRatio! < 1)

@@ -7,7 +7,7 @@ Checklist này là lộ trình chính để hoàn tất bản phát hành nội 
 - Ứng dụng quản lý thu chi cá nhân, có nhóm và chia sẻ hóa đơn giữa các tài khoản.
 - Đăng nhập online lần đầu; sau đó có thể dùng dữ liệu local/offline và đồng bộ khi có mạng, tự thử lại khoảng 15 phút hoặc do người dùng yêu cầu.
 - Thêm giao dịch thủ công, OCR hóa đơn từ ảnh, quét QR thanh toán rồi mở app ngân hàng. Người dùng tự xác nhận thành công, hủy hoặc sửa giao dịch; app **không** xác minh giao dịch từ ngân hàng.
-- Bản đầu phát hành nội bộ Android; không bao gồm tích hợp cổng thanh toán hay tự kết nối tài khoản ngân hàng. Google OAuth và iOS là tùy chọn/ngoài đợt phát hành đầu.
+- Bản đầu phát hành nội bộ Android; không bao gồm tích hợp cổng thanh toán, tự kết nối tài khoản ngân hàng, Google OAuth hay iOS.
 
 ## A. Hiện trạng đã kiểm chứng trong repo
 
@@ -28,19 +28,19 @@ Checklist này là lộ trình chính để hoàn tất bản phát hành nội 
 
 ## C. Supabase: database, quyền và Storage
 
-Project cần đối chiếu: `mjirsdljxrikuhimbkrn`. Đã kiểm tra ngày 2026-09-29: CLI link đúng project; migration list remote mới nhất khớp local đến `20260927090000`; `20260929100000_harden_group_membership_policy.sql` đang pending. `supabase db lint --linked` không có lỗi trên schema remote trước migration khắc phục mới.
+Project cần đối chiếu: `mjirsdljxrikuhimbkrn`. Ngày 2026-09-30 đã áp dụng `20260929100000_harden_group_membership_policy.sql`; truy vấn Management API xác nhận version trong migration history và `supabase db lint --linked` không có lỗi. Lệnh `migration list --linked` sau đó không kết nối được bằng role CLI do password authentication, nên migration history được xác minh bằng `db query --linked`.
 
-- [x] C1. Xác nhận Supabase CLI đang link đúng project `mjirsdljxrikuhimbkrn`; tại thời điểm audit, local/remote khớp tới `20260927090000`. Migration mới được ghi nhận riêng ở C2.
-- [ ] C2. Đối chiếu migration: bốn migration trước đó đã có trên remote:
+- [x] C1. Xác nhận Supabase CLI đang link đúng project `mjirsdljxrikuhimbkrn`; migration history remote đã có version `20260929100000` (xác nhận bằng Management API).
+- [x] C2. Đối chiếu và áp dụng migration. Bốn migration trước đó đã có trên remote:
   - `20260918150000_remove_qr_feature_flag.sql`
   - `20260918160000_bill_sharing.sql`
   - `20260920100000_group_expense_lifecycle.sql`
   - `20260927090000_demo_cloud_data_expansion.sql`
-  Sau đợt rà soát, đã tạo `20260929100000_harden_group_membership_policy.sql`; CLI xác nhận migration này đang pending trên remote. Review/deploy rồi đối chiếu lại migration list và lint.
-- [x] C3. `supabase db lint --linked` ngày 2026-09-29 hoàn tất, không có lỗi schema.
-- [ ] C4. Kiểm tra RLS và quyền `authenticated`/`service_role` trên bảng, view, RPC; chú ý quyền đọc/chia sẻ nhóm và quyền thu hồi chia sẻ. Rà soát ngày 2026-09-29: tất cả bảng public bật RLS; không có quyền bảng trực tiếp cho `anon`; các bảng nội bộ không policy chỉ cấp quyền `service_role`; các view quản trị chỉ cấp `service_role`. Đã phát hiện RPC `is_expense_group_member(group_id,user_id)` cho phép dò membership của user tùy ý. Migration khắc phục đã tạo tại `supabase/migrations/20260929100000_harden_group_membership_policy.sql`; cần deploy rồi kiểm tra lại quyền/RLS trước khi đánh dấu hoàn tất.
+-  Migration được review; dry-run chỉ liệt kê migration này; áp dụng thành công ngày 2026-09-30 và xác nhận version đã có trong remote migration history.
+- [x] C3. `supabase db lint --linked` ngày 2026-09-30 hoàn tất, không có lỗi schema.
+- [x] C4. Kiểm tra lại quyền/RLS liên quan sau migration: helper dò membership tùy ý không còn quyền `EXECUTE` cho `anon`, `authenticated` hoặc `service_role`; helper chỉ nhận `auth.uid()` chỉ cấp `EXECUTE` cho `authenticated`. Năm bảng nhóm đều bật RLS và các policy `SELECT` dùng helper mới. Đợt rà soát ngày 2026-09-29 cũng xác nhận không có quyền bảng trực tiếp cho `anon`, bảng nội bộ không policy chỉ cấp quyền `service_role`, view quản trị chỉ cấp `service_role`.
 - [x] C5. Đã xác nhận ngày 2026-09-29: `receipt-images` và `invoice-backups` private; Storage policy chỉ cho `authenticated` thao tác trong prefix `{auth.uid()}/`; ảnh chứng từ dùng signed URL 120 giây, còn backup tải trực tiếp qua phiên đăng nhập và policy private. Kiểm thử end-to-end giữa hai tài khoản vẫn nằm ở F16.
-- [ ] C6. Xác nhận các RPC cho sync, nhóm, settlement, direct share, cài đặt hồ sơ và xóa tài khoản khớp với phiên bản app. Đã đối chiếu tên/tham số chính của sync, group CRUD/settlement, direct share và profile với remote; các hàm client cần dùng tồn tại, không cho `anon` execute. Cần recheck sau migration C4; các RPC chia bill hiện nhận `source_snapshot` từ client nên cần giữ kiểm thử provenance/đồng bộ nguồn ở F14.
+- [ ] C6. Xác nhận các RPC cho sync, nhóm, settlement, direct share, cài đặt hồ sơ và xóa tài khoản khớp với phiên bản app. Đã đối chiếu tên/tham số chính của sync, group CRUD/settlement, direct share và profile với remote; các hàm client cần dùng tồn tại, không cho `anon` execute. Sau migration, năm RPC nhóm gọi helper cũ vẫn là `SECURITY DEFINER`, owner `postgres` và `authenticated` có quyền execute. Còn cần hoàn tất đối chiếu toàn bộ RPC; các RPC chia bill nhận `source_snapshot` từ client nên giữ kiểm thử provenance/đồng bộ nguồn ở F14.
 - [ ] C7. Xác nhận các Edge Functions `ai-api`, `ai-worker`, `delete-account`, `health` đã deploy đúng phiên bản hiện tại. Đối chiếu lại ngày 2026-09-29: cả bốn `ACTIVE` (version lần lượt 8, 2, 4, 5); chưa chứng minh hash/version remote khớp mã nguồn local.
 - [ ] C8. Đặt Supabase Secrets: `GEMINI_API_KEY`, `AI_WORKER_SECRET`, `HEALTHCHECK_SECRET`. Đối chiếu ngày 2026-09-29: `GEMINI_API_KEY` đã có; `AI_WORKER_SECRET` và `HEALTHCHECK_SECRET` chưa có. CLI chỉ trả fingerprint, không đọc giá trị secret.
 - [ ] C9. Cấu hình `AI_REQUIRE_ORIGIN_ALLOWLIST=true`, `DELETE_ACCOUNT_REQUIRE_ORIGIN_ALLOWLIST=true` và allowlist `AI_ALLOWED_ORIGINS`, `DELETE_ACCOUNT_ALLOWED_ORIGINS` cho domain web thực tế. Các tên cấu hình này chưa có trong danh sách secrets ngày 2026-09-29; native app không gửi Origin như web.
@@ -52,14 +52,14 @@ Project cần đối chiếu: `mjirsdljxrikuhimbkrn`. Đã kiểm tra ngày 2026
 - [ ] D2. Cấu hình email xác nhận (nếu bật), password recovery và redirect URL cho web/native.
 - [ ] D3. Tạo ít nhất hai tài khoản staging riêng; không dùng tài khoản cá nhân làm dữ liệu thử xóa.
 - [ ] D4. Kiểm thử đăng ký, đăng nhập, khởi động lại app/khôi phục session, đăng xuất, đổi mật khẩu và khôi phục mật khẩu.
-- [ ] D5. Nếu bật Google OAuth: cấu hình provider, callback/redirect và kiểm thử liên kết/hủy liên kết. Nếu không bật, ghi rõ là ngoài phạm vi.
+- [x] D5. Đã quyết định không hỗ trợ Google OAuth trong app; provider trên Supabase Dashboard không bị thay đổi. Không cần OAuth client/callback để đăng nhập.
 - [ ] D6. Kiểm thử xóa một tài khoản staging và xác nhận dữ liệu local/cloud/Storage được dọn đúng, không ảnh hưởng tài khoản khác.
 
 ## E. GitHub Actions và bản Android nội bộ
 
 - [ ] E1. Tạo GitHub Environment `production`.
 - [ ] E2. Thêm signing secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
-- [ ] E3. Thêm `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`; chỉ thêm `SUPABASE_OAUTH_REDIRECT_URI` nếu bật OAuth.
+- [ ] E3. Thêm `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`; `SUPABASE_AUTH_REDIRECT_URI` chỉ cần nếu password recovery phải chuyển về callback khác Site URL. Workflow vẫn đọc biến OAuth cũ như fallback tương thích.
 - [ ] E4. Thêm GitHub Secrets cho workflow backend: `SUPABASE_FUNCTION_URL`, `AI_WORKER_SECRET`, `HEALTHCHECK_SECRET`.
 - [ ] E5. Chạy workflow `Android Release` bằng `workflow_dispatch`; xác nhận tạo được AAB ký bằng keystore release, không dùng debug keystore.
 - [ ] E6. Chạy workflow `ai-worker` và `production-health`; xác nhận đều thành công sau khi secrets/deployment đã sẵn sàng.
@@ -110,11 +110,10 @@ Project cần đối chiếu: `mjirsdljxrikuhimbkrn`. Đã kiểm tra ngày 2026
 
 ## Thứ tự nên làm tiếp
 
-1. Review rồi áp dụng migration `20260929100000_harden_group_membership_policy.sql`; xác nhận migration list/lint và kiểm tra lại C4/C6.
+1. C6–C10 — Đối chiếu RPC còn lại, phiên bản Edge Functions, bổ sung secrets/origin rồi chạy health readiness.
 2. D1–D4 — Cấu hình Auth và tạo/kiểm tra hai tài khoản staging.
-3. C7–C10 — Đối chiếu đúng phiên bản Edge Functions, bổ sung secrets/origin rồi chạy health readiness.
-4. F — Smoke test trên hai tài khoản và thiết bị thật.
-5. E — Signing secrets, tạo AAB và cài thử.
-6. B — Review cuối, commit/push và ghi nhận release.
+3. F — Smoke test trên hai tài khoản và thiết bị thật.
+4. E — Signing secrets, tạo AAB và cài thử.
+5. B2/G — Secret scan và rà soát cuối, theo dõi lỗi/chi phí và ghi nhận release.
 
 Checklist chi tiết triển khai hiện có tại [PRODUCTION_RELEASE_CHECKLIST.md](PRODUCTION_RELEASE_CHECKLIST.md); baseline bảo mật tại [SECURITY.md](SECURITY.md).

@@ -3,22 +3,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/core/security/supabase_bootstrap.dart';
 
 void main() {
-  group('Supabase OAuth redirect validation', () {
-    test('allows the native callback and HTTPS web callback', () {
+  group('Supabase auth redirect validation', () {
+    test('allows native, HTTPS, and local development callbacks', () {
       expect(
-        SupabaseBootstrap.isSafeOAuthRedirectUri(
+        SupabaseBootstrap.isSafeAuthRedirectUri(
           'hoadoninsight://login-callback',
         ),
         isTrue,
       );
       expect(
-        SupabaseBootstrap.isSafeOAuthRedirectUri(
+        SupabaseBootstrap.isSafeAuthRedirectUri(
           'https://app.example.com/auth/callback',
         ),
         isTrue,
       );
       expect(
-        SupabaseBootstrap.isSafeOAuthRedirectUri(
+        SupabaseBootstrap.isSafeAuthRedirectUri(
           'http://localhost:8080/auth/callback',
         ),
         isTrue,
@@ -35,7 +35,7 @@ void main() {
         'http://public.example.com/callback',
       ]) {
         expect(
-          SupabaseBootstrap.isSafeOAuthRedirectUri(value),
+          SupabaseBootstrap.isSafeAuthRedirectUri(value),
           isFalse,
           reason: value,
         );

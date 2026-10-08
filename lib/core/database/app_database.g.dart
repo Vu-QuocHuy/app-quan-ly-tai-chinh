@@ -403,28 +403,6 @@ class $InvoicesTable extends Invoices
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _sellerTaxCodeMeta = const VerificationMeta(
-    'sellerTaxCode',
-  );
-  @override
-  late final GeneratedColumn<String> sellerTaxCode = GeneratedColumn<String>(
-    'seller_tax_code',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _invoiceNumberMeta = const VerificationMeta(
-    'invoiceNumber',
-  );
-  @override
-  late final GeneratedColumn<String> invoiceNumber = GeneratedColumn<String>(
-    'invoice_number',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
   static const VerificationMeta _invoiceSymbolMeta = const VerificationMeta(
     'invoiceSymbol',
   );
@@ -477,6 +455,18 @@ class $InvoicesTable extends Invoices
   @override
   late final GeneratedColumn<int> taxMinor = GeneratedColumn<int>(
     'tax_minor',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _discountMinorMeta = const VerificationMeta(
+    'discountMinor',
+  );
+  @override
+  late final GeneratedColumn<int> discountMinor = GeneratedColumn<int>(
+    'discount_minor',
     aliasedName,
     false,
     type: DriftSqlType.int,
@@ -646,13 +636,12 @@ class $InvoicesTable extends Invoices
     id,
     cloudId,
     sellerName,
-    sellerTaxCode,
-    invoiceNumber,
     invoiceSymbol,
     issuedAt,
     currencyCode,
     subtotalMinor,
     taxMinor,
+    discountMinor,
     totalMinor,
     sourceType,
     sourceHash,
@@ -699,24 +688,6 @@ class $InvoicesTable extends Invoices
     } else if (isInserting) {
       context.missing(_sellerNameMeta);
     }
-    if (data.containsKey('seller_tax_code')) {
-      context.handle(
-        _sellerTaxCodeMeta,
-        sellerTaxCode.isAcceptableOrUnknown(
-          data['seller_tax_code']!,
-          _sellerTaxCodeMeta,
-        ),
-      );
-    }
-    if (data.containsKey('invoice_number')) {
-      context.handle(
-        _invoiceNumberMeta,
-        invoiceNumber.isAcceptableOrUnknown(
-          data['invoice_number']!,
-          _invoiceNumberMeta,
-        ),
-      );
-    }
     if (data.containsKey('invoice_symbol')) {
       context.handle(
         _invoiceSymbolMeta,
@@ -754,6 +725,15 @@ class $InvoicesTable extends Invoices
       context.handle(
         _taxMinorMeta,
         taxMinor.isAcceptableOrUnknown(data['tax_minor']!, _taxMinorMeta),
+      );
+    }
+    if (data.containsKey('discount_minor')) {
+      context.handle(
+        _discountMinorMeta,
+        discountMinor.isAcceptableOrUnknown(
+          data['discount_minor']!,
+          _discountMinorMeta,
+        ),
       );
     }
     if (data.containsKey('total_minor')) {
@@ -876,14 +856,6 @@ class $InvoicesTable extends Invoices
         DriftSqlType.string,
         data['${effectivePrefix}seller_name'],
       )!,
-      sellerTaxCode: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}seller_tax_code'],
-      ),
-      invoiceNumber: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}invoice_number'],
-      ),
       invoiceSymbol: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}invoice_symbol'],
@@ -903,6 +875,10 @@ class $InvoicesTable extends Invoices
       taxMinor: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}tax_minor'],
+      )!,
+      discountMinor: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}discount_minor'],
       )!,
       totalMinor: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -973,13 +949,12 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
   final String id;
   final String? cloudId;
   final String sellerName;
-  final String? sellerTaxCode;
-  final String? invoiceNumber;
   final String? invoiceSymbol;
   final DateTime? issuedAt;
   final String currencyCode;
   final int subtotalMinor;
   final int taxMinor;
+  final int discountMinor;
   final int totalMinor;
   final String sourceType;
   final String? sourceHash;
@@ -998,13 +973,12 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
     required this.id,
     this.cloudId,
     required this.sellerName,
-    this.sellerTaxCode,
-    this.invoiceNumber,
     this.invoiceSymbol,
     this.issuedAt,
     required this.currencyCode,
     required this.subtotalMinor,
     required this.taxMinor,
+    required this.discountMinor,
     required this.totalMinor,
     required this.sourceType,
     this.sourceHash,
@@ -1028,12 +1002,6 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
       map['cloud_id'] = Variable<String>(cloudId);
     }
     map['seller_name'] = Variable<String>(sellerName);
-    if (!nullToAbsent || sellerTaxCode != null) {
-      map['seller_tax_code'] = Variable<String>(sellerTaxCode);
-    }
-    if (!nullToAbsent || invoiceNumber != null) {
-      map['invoice_number'] = Variable<String>(invoiceNumber);
-    }
     if (!nullToAbsent || invoiceSymbol != null) {
       map['invoice_symbol'] = Variable<String>(invoiceSymbol);
     }
@@ -1043,6 +1011,7 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
     map['currency_code'] = Variable<String>(currencyCode);
     map['subtotal_minor'] = Variable<int>(subtotalMinor);
     map['tax_minor'] = Variable<int>(taxMinor);
+    map['discount_minor'] = Variable<int>(discountMinor);
     map['total_minor'] = Variable<int>(totalMinor);
     map['source_type'] = Variable<String>(sourceType);
     if (!nullToAbsent || sourceHash != null) {
@@ -1077,12 +1046,6 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
           ? const Value.absent()
           : Value(cloudId),
       sellerName: Value(sellerName),
-      sellerTaxCode: sellerTaxCode == null && nullToAbsent
-          ? const Value.absent()
-          : Value(sellerTaxCode),
-      invoiceNumber: invoiceNumber == null && nullToAbsent
-          ? const Value.absent()
-          : Value(invoiceNumber),
       invoiceSymbol: invoiceSymbol == null && nullToAbsent
           ? const Value.absent()
           : Value(invoiceSymbol),
@@ -1092,6 +1055,7 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
       currencyCode: Value(currencyCode),
       subtotalMinor: Value(subtotalMinor),
       taxMinor: Value(taxMinor),
+      discountMinor: Value(discountMinor),
       totalMinor: Value(totalMinor),
       sourceType: Value(sourceType),
       sourceHash: sourceHash == null && nullToAbsent
@@ -1128,13 +1092,12 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
       id: serializer.fromJson<String>(json['id']),
       cloudId: serializer.fromJson<String?>(json['cloudId']),
       sellerName: serializer.fromJson<String>(json['sellerName']),
-      sellerTaxCode: serializer.fromJson<String?>(json['sellerTaxCode']),
-      invoiceNumber: serializer.fromJson<String?>(json['invoiceNumber']),
       invoiceSymbol: serializer.fromJson<String?>(json['invoiceSymbol']),
       issuedAt: serializer.fromJson<DateTime?>(json['issuedAt']),
       currencyCode: serializer.fromJson<String>(json['currencyCode']),
       subtotalMinor: serializer.fromJson<int>(json['subtotalMinor']),
       taxMinor: serializer.fromJson<int>(json['taxMinor']),
+      discountMinor: serializer.fromJson<int>(json['discountMinor']),
       totalMinor: serializer.fromJson<int>(json['totalMinor']),
       sourceType: serializer.fromJson<String>(json['sourceType']),
       sourceHash: serializer.fromJson<String?>(json['sourceHash']),
@@ -1158,13 +1121,12 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
       'id': serializer.toJson<String>(id),
       'cloudId': serializer.toJson<String?>(cloudId),
       'sellerName': serializer.toJson<String>(sellerName),
-      'sellerTaxCode': serializer.toJson<String?>(sellerTaxCode),
-      'invoiceNumber': serializer.toJson<String?>(invoiceNumber),
       'invoiceSymbol': serializer.toJson<String?>(invoiceSymbol),
       'issuedAt': serializer.toJson<DateTime?>(issuedAt),
       'currencyCode': serializer.toJson<String>(currencyCode),
       'subtotalMinor': serializer.toJson<int>(subtotalMinor),
       'taxMinor': serializer.toJson<int>(taxMinor),
+      'discountMinor': serializer.toJson<int>(discountMinor),
       'totalMinor': serializer.toJson<int>(totalMinor),
       'sourceType': serializer.toJson<String>(sourceType),
       'sourceHash': serializer.toJson<String?>(sourceHash),
@@ -1186,13 +1148,12 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
     String? id,
     Value<String?> cloudId = const Value.absent(),
     String? sellerName,
-    Value<String?> sellerTaxCode = const Value.absent(),
-    Value<String?> invoiceNumber = const Value.absent(),
     Value<String?> invoiceSymbol = const Value.absent(),
     Value<DateTime?> issuedAt = const Value.absent(),
     String? currencyCode,
     int? subtotalMinor,
     int? taxMinor,
+    int? discountMinor,
     int? totalMinor,
     String? sourceType,
     Value<String?> sourceHash = const Value.absent(),
@@ -1211,12 +1172,6 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
     id: id ?? this.id,
     cloudId: cloudId.present ? cloudId.value : this.cloudId,
     sellerName: sellerName ?? this.sellerName,
-    sellerTaxCode: sellerTaxCode.present
-        ? sellerTaxCode.value
-        : this.sellerTaxCode,
-    invoiceNumber: invoiceNumber.present
-        ? invoiceNumber.value
-        : this.invoiceNumber,
     invoiceSymbol: invoiceSymbol.present
         ? invoiceSymbol.value
         : this.invoiceSymbol,
@@ -1224,6 +1179,7 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
     currencyCode: currencyCode ?? this.currencyCode,
     subtotalMinor: subtotalMinor ?? this.subtotalMinor,
     taxMinor: taxMinor ?? this.taxMinor,
+    discountMinor: discountMinor ?? this.discountMinor,
     totalMinor: totalMinor ?? this.totalMinor,
     sourceType: sourceType ?? this.sourceType,
     sourceHash: sourceHash.present ? sourceHash.value : this.sourceHash,
@@ -1246,12 +1202,6 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
       sellerName: data.sellerName.present
           ? data.sellerName.value
           : this.sellerName,
-      sellerTaxCode: data.sellerTaxCode.present
-          ? data.sellerTaxCode.value
-          : this.sellerTaxCode,
-      invoiceNumber: data.invoiceNumber.present
-          ? data.invoiceNumber.value
-          : this.invoiceNumber,
       invoiceSymbol: data.invoiceSymbol.present
           ? data.invoiceSymbol.value
           : this.invoiceSymbol,
@@ -1263,6 +1213,9 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
           ? data.subtotalMinor.value
           : this.subtotalMinor,
       taxMinor: data.taxMinor.present ? data.taxMinor.value : this.taxMinor,
+      discountMinor: data.discountMinor.present
+          ? data.discountMinor.value
+          : this.discountMinor,
       totalMinor: data.totalMinor.present
           ? data.totalMinor.value
           : this.totalMinor,
@@ -1298,13 +1251,12 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
           ..write('id: $id, ')
           ..write('cloudId: $cloudId, ')
           ..write('sellerName: $sellerName, ')
-          ..write('sellerTaxCode: $sellerTaxCode, ')
-          ..write('invoiceNumber: $invoiceNumber, ')
           ..write('invoiceSymbol: $invoiceSymbol, ')
           ..write('issuedAt: $issuedAt, ')
           ..write('currencyCode: $currencyCode, ')
           ..write('subtotalMinor: $subtotalMinor, ')
           ..write('taxMinor: $taxMinor, ')
+          ..write('discountMinor: $discountMinor, ')
           ..write('totalMinor: $totalMinor, ')
           ..write('sourceType: $sourceType, ')
           ..write('sourceHash: $sourceHash, ')
@@ -1328,13 +1280,12 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
     id,
     cloudId,
     sellerName,
-    sellerTaxCode,
-    invoiceNumber,
     invoiceSymbol,
     issuedAt,
     currencyCode,
     subtotalMinor,
     taxMinor,
+    discountMinor,
     totalMinor,
     sourceType,
     sourceHash,
@@ -1357,13 +1308,12 @@ class InvoiceRow extends DataClass implements Insertable<InvoiceRow> {
           other.id == this.id &&
           other.cloudId == this.cloudId &&
           other.sellerName == this.sellerName &&
-          other.sellerTaxCode == this.sellerTaxCode &&
-          other.invoiceNumber == this.invoiceNumber &&
           other.invoiceSymbol == this.invoiceSymbol &&
           other.issuedAt == this.issuedAt &&
           other.currencyCode == this.currencyCode &&
           other.subtotalMinor == this.subtotalMinor &&
           other.taxMinor == this.taxMinor &&
+          other.discountMinor == this.discountMinor &&
           other.totalMinor == this.totalMinor &&
           other.sourceType == this.sourceType &&
           other.sourceHash == this.sourceHash &&
@@ -1384,13 +1334,12 @@ class InvoicesCompanion extends UpdateCompanion<InvoiceRow> {
   final Value<String> id;
   final Value<String?> cloudId;
   final Value<String> sellerName;
-  final Value<String?> sellerTaxCode;
-  final Value<String?> invoiceNumber;
   final Value<String?> invoiceSymbol;
   final Value<DateTime?> issuedAt;
   final Value<String> currencyCode;
   final Value<int> subtotalMinor;
   final Value<int> taxMinor;
+  final Value<int> discountMinor;
   final Value<int> totalMinor;
   final Value<String> sourceType;
   final Value<String?> sourceHash;
@@ -1410,13 +1359,12 @@ class InvoicesCompanion extends UpdateCompanion<InvoiceRow> {
     this.id = const Value.absent(),
     this.cloudId = const Value.absent(),
     this.sellerName = const Value.absent(),
-    this.sellerTaxCode = const Value.absent(),
-    this.invoiceNumber = const Value.absent(),
     this.invoiceSymbol = const Value.absent(),
     this.issuedAt = const Value.absent(),
     this.currencyCode = const Value.absent(),
     this.subtotalMinor = const Value.absent(),
     this.taxMinor = const Value.absent(),
+    this.discountMinor = const Value.absent(),
     this.totalMinor = const Value.absent(),
     this.sourceType = const Value.absent(),
     this.sourceHash = const Value.absent(),
@@ -1437,13 +1385,12 @@ class InvoicesCompanion extends UpdateCompanion<InvoiceRow> {
     required String id,
     this.cloudId = const Value.absent(),
     required String sellerName,
-    this.sellerTaxCode = const Value.absent(),
-    this.invoiceNumber = const Value.absent(),
     this.invoiceSymbol = const Value.absent(),
     this.issuedAt = const Value.absent(),
     this.currencyCode = const Value.absent(),
     this.subtotalMinor = const Value.absent(),
     this.taxMinor = const Value.absent(),
+    this.discountMinor = const Value.absent(),
     this.totalMinor = const Value.absent(),
     required String sourceType,
     this.sourceHash = const Value.absent(),
@@ -1469,13 +1416,12 @@ class InvoicesCompanion extends UpdateCompanion<InvoiceRow> {
     Expression<String>? id,
     Expression<String>? cloudId,
     Expression<String>? sellerName,
-    Expression<String>? sellerTaxCode,
-    Expression<String>? invoiceNumber,
     Expression<String>? invoiceSymbol,
     Expression<DateTime>? issuedAt,
     Expression<String>? currencyCode,
     Expression<int>? subtotalMinor,
     Expression<int>? taxMinor,
+    Expression<int>? discountMinor,
     Expression<int>? totalMinor,
     Expression<String>? sourceType,
     Expression<String>? sourceHash,
@@ -1496,13 +1442,12 @@ class InvoicesCompanion extends UpdateCompanion<InvoiceRow> {
       if (id != null) 'id': id,
       if (cloudId != null) 'cloud_id': cloudId,
       if (sellerName != null) 'seller_name': sellerName,
-      if (sellerTaxCode != null) 'seller_tax_code': sellerTaxCode,
-      if (invoiceNumber != null) 'invoice_number': invoiceNumber,
       if (invoiceSymbol != null) 'invoice_symbol': invoiceSymbol,
       if (issuedAt != null) 'issued_at': issuedAt,
       if (currencyCode != null) 'currency_code': currencyCode,
       if (subtotalMinor != null) 'subtotal_minor': subtotalMinor,
       if (taxMinor != null) 'tax_minor': taxMinor,
+      if (discountMinor != null) 'discount_minor': discountMinor,
       if (totalMinor != null) 'total_minor': totalMinor,
       if (sourceType != null) 'source_type': sourceType,
       if (sourceHash != null) 'source_hash': sourceHash,
@@ -1525,13 +1470,12 @@ class InvoicesCompanion extends UpdateCompanion<InvoiceRow> {
     Value<String>? id,
     Value<String?>? cloudId,
     Value<String>? sellerName,
-    Value<String?>? sellerTaxCode,
-    Value<String?>? invoiceNumber,
     Value<String?>? invoiceSymbol,
     Value<DateTime?>? issuedAt,
     Value<String>? currencyCode,
     Value<int>? subtotalMinor,
     Value<int>? taxMinor,
+    Value<int>? discountMinor,
     Value<int>? totalMinor,
     Value<String>? sourceType,
     Value<String?>? sourceHash,
@@ -1552,13 +1496,12 @@ class InvoicesCompanion extends UpdateCompanion<InvoiceRow> {
       id: id ?? this.id,
       cloudId: cloudId ?? this.cloudId,
       sellerName: sellerName ?? this.sellerName,
-      sellerTaxCode: sellerTaxCode ?? this.sellerTaxCode,
-      invoiceNumber: invoiceNumber ?? this.invoiceNumber,
       invoiceSymbol: invoiceSymbol ?? this.invoiceSymbol,
       issuedAt: issuedAt ?? this.issuedAt,
       currencyCode: currencyCode ?? this.currencyCode,
       subtotalMinor: subtotalMinor ?? this.subtotalMinor,
       taxMinor: taxMinor ?? this.taxMinor,
+      discountMinor: discountMinor ?? this.discountMinor,
       totalMinor: totalMinor ?? this.totalMinor,
       sourceType: sourceType ?? this.sourceType,
       sourceHash: sourceHash ?? this.sourceHash,
@@ -1589,12 +1532,6 @@ class InvoicesCompanion extends UpdateCompanion<InvoiceRow> {
     if (sellerName.present) {
       map['seller_name'] = Variable<String>(sellerName.value);
     }
-    if (sellerTaxCode.present) {
-      map['seller_tax_code'] = Variable<String>(sellerTaxCode.value);
-    }
-    if (invoiceNumber.present) {
-      map['invoice_number'] = Variable<String>(invoiceNumber.value);
-    }
     if (invoiceSymbol.present) {
       map['invoice_symbol'] = Variable<String>(invoiceSymbol.value);
     }
@@ -1609,6 +1546,9 @@ class InvoicesCompanion extends UpdateCompanion<InvoiceRow> {
     }
     if (taxMinor.present) {
       map['tax_minor'] = Variable<int>(taxMinor.value);
+    }
+    if (discountMinor.present) {
+      map['discount_minor'] = Variable<int>(discountMinor.value);
     }
     if (totalMinor.present) {
       map['total_minor'] = Variable<int>(totalMinor.value);
@@ -1664,13 +1604,12 @@ class InvoicesCompanion extends UpdateCompanion<InvoiceRow> {
           ..write('id: $id, ')
           ..write('cloudId: $cloudId, ')
           ..write('sellerName: $sellerName, ')
-          ..write('sellerTaxCode: $sellerTaxCode, ')
-          ..write('invoiceNumber: $invoiceNumber, ')
           ..write('invoiceSymbol: $invoiceSymbol, ')
           ..write('issuedAt: $issuedAt, ')
           ..write('currencyCode: $currencyCode, ')
           ..write('subtotalMinor: $subtotalMinor, ')
           ..write('taxMinor: $taxMinor, ')
+          ..write('discountMinor: $discountMinor, ')
           ..write('totalMinor: $totalMinor, ')
           ..write('sourceType: $sourceType, ')
           ..write('sourceHash: $sourceHash, ')
@@ -6693,13 +6632,12 @@ typedef $$InvoicesTableCreateCompanionBuilder =
       required String id,
       Value<String?> cloudId,
       required String sellerName,
-      Value<String?> sellerTaxCode,
-      Value<String?> invoiceNumber,
       Value<String?> invoiceSymbol,
       Value<DateTime?> issuedAt,
       Value<String> currencyCode,
       Value<int> subtotalMinor,
       Value<int> taxMinor,
+      Value<int> discountMinor,
       Value<int> totalMinor,
       required String sourceType,
       Value<String?> sourceHash,
@@ -6721,13 +6659,12 @@ typedef $$InvoicesTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String?> cloudId,
       Value<String> sellerName,
-      Value<String?> sellerTaxCode,
-      Value<String?> invoiceNumber,
       Value<String?> invoiceSymbol,
       Value<DateTime?> issuedAt,
       Value<String> currencyCode,
       Value<int> subtotalMinor,
       Value<int> taxMinor,
+      Value<int> discountMinor,
       Value<int> totalMinor,
       Value<String> sourceType,
       Value<String?> sourceHash,
@@ -6871,16 +6808,6 @@ class $$InvoicesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get sellerTaxCode => $composableBuilder(
-    column: $table.sellerTaxCode,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get invoiceNumber => $composableBuilder(
-    column: $table.invoiceNumber,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get invoiceSymbol => $composableBuilder(
     column: $table.invoiceSymbol,
     builder: (column) => ColumnFilters(column),
@@ -6903,6 +6830,11 @@ class $$InvoicesTableFilterComposer
 
   ColumnFilters<int> get taxMinor => $composableBuilder(
     column: $table.taxMinor,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get discountMinor => $composableBuilder(
+    column: $table.discountMinor,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7119,16 +7051,6 @@ class $$InvoicesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get sellerTaxCode => $composableBuilder(
-    column: $table.sellerTaxCode,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get invoiceNumber => $composableBuilder(
-    column: $table.invoiceNumber,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get invoiceSymbol => $composableBuilder(
     column: $table.invoiceSymbol,
     builder: (column) => ColumnOrderings(column),
@@ -7151,6 +7073,11 @@ class $$InvoicesTableOrderingComposer
 
   ColumnOrderings<int> get taxMinor => $composableBuilder(
     column: $table.taxMinor,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get discountMinor => $composableBuilder(
+    column: $table.discountMinor,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -7263,16 +7190,6 @@ class $$InvoicesTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get sellerTaxCode => $composableBuilder(
-    column: $table.sellerTaxCode,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get invoiceNumber => $composableBuilder(
-    column: $table.invoiceNumber,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<String> get invoiceSymbol => $composableBuilder(
     column: $table.invoiceSymbol,
     builder: (column) => column,
@@ -7293,6 +7210,11 @@ class $$InvoicesTableAnnotationComposer
 
   GeneratedColumn<int> get taxMinor =>
       $composableBuilder(column: $table.taxMinor, builder: (column) => column);
+
+  GeneratedColumn<int> get discountMinor => $composableBuilder(
+    column: $table.discountMinor,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get totalMinor => $composableBuilder(
     column: $table.totalMinor,
@@ -7505,13 +7427,12 @@ class $$InvoicesTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String?> cloudId = const Value.absent(),
                 Value<String> sellerName = const Value.absent(),
-                Value<String?> sellerTaxCode = const Value.absent(),
-                Value<String?> invoiceNumber = const Value.absent(),
                 Value<String?> invoiceSymbol = const Value.absent(),
                 Value<DateTime?> issuedAt = const Value.absent(),
                 Value<String> currencyCode = const Value.absent(),
                 Value<int> subtotalMinor = const Value.absent(),
                 Value<int> taxMinor = const Value.absent(),
+                Value<int> discountMinor = const Value.absent(),
                 Value<int> totalMinor = const Value.absent(),
                 Value<String> sourceType = const Value.absent(),
                 Value<String?> sourceHash = const Value.absent(),
@@ -7531,13 +7452,12 @@ class $$InvoicesTableTableManager
                 id: id,
                 cloudId: cloudId,
                 sellerName: sellerName,
-                sellerTaxCode: sellerTaxCode,
-                invoiceNumber: invoiceNumber,
                 invoiceSymbol: invoiceSymbol,
                 issuedAt: issuedAt,
                 currencyCode: currencyCode,
                 subtotalMinor: subtotalMinor,
                 taxMinor: taxMinor,
+                discountMinor: discountMinor,
                 totalMinor: totalMinor,
                 sourceType: sourceType,
                 sourceHash: sourceHash,
@@ -7559,13 +7479,12 @@ class $$InvoicesTableTableManager
                 required String id,
                 Value<String?> cloudId = const Value.absent(),
                 required String sellerName,
-                Value<String?> sellerTaxCode = const Value.absent(),
-                Value<String?> invoiceNumber = const Value.absent(),
                 Value<String?> invoiceSymbol = const Value.absent(),
                 Value<DateTime?> issuedAt = const Value.absent(),
                 Value<String> currencyCode = const Value.absent(),
                 Value<int> subtotalMinor = const Value.absent(),
                 Value<int> taxMinor = const Value.absent(),
+                Value<int> discountMinor = const Value.absent(),
                 Value<int> totalMinor = const Value.absent(),
                 required String sourceType,
                 Value<String?> sourceHash = const Value.absent(),
@@ -7585,13 +7504,12 @@ class $$InvoicesTableTableManager
                 id: id,
                 cloudId: cloudId,
                 sellerName: sellerName,
-                sellerTaxCode: sellerTaxCode,
-                invoiceNumber: invoiceNumber,
                 invoiceSymbol: invoiceSymbol,
                 issuedAt: issuedAt,
                 currencyCode: currencyCode,
                 subtotalMinor: subtotalMinor,
                 taxMinor: taxMinor,
+                discountMinor: discountMinor,
                 totalMinor: totalMinor,
                 sourceType: sourceType,
                 sourceHash: sourceHash,

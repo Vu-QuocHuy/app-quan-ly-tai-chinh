@@ -229,13 +229,14 @@ abstract final class InvoiceRestoreParser {
     return InvoiceEntity(
       id: _requiredString(map, 'id'),
       sellerName: _requiredString(map, 'sellerName'),
-      sellerTaxCode: _optionalString(map, 'sellerTaxCode'),
-      invoiceNumber: _optionalString(map, 'invoiceNumber'),
       invoiceSymbol: _optionalString(map, 'invoiceSymbol'),
       issuedAt: _optionalDate(map, 'issuedAt'),
       currencyCode: _requiredString(map, 'currencyCode'),
       subtotalMinor: _requiredInt(map, 'subtotalMinor'),
       taxMinor: _requiredInt(map, 'taxMinor'),
+      discountMinor: map['discountMinor'] == null
+          ? 0
+          : _requiredInt(map, 'discountMinor'),
       totalMinor: _requiredInt(map, 'totalMinor'),
       sourceType: _invoiceSourceType(_requiredString(map, 'sourceType')),
       sourceHash: _optionalString(map, 'sourceHash'),
@@ -276,7 +277,6 @@ abstract final class InvoiceRestoreParser {
             description: _requiredString(raw, 'description'),
             quantity: _optionalDouble(raw, 'quantity'),
             unitPriceMinor: _optionalInt(raw, 'unitPriceMinor'),
-            taxRate: _optionalDouble(raw, 'taxRate'),
             totalMinor: _requiredInt(raw, 'totalMinor'),
             categoryId: _mapCategory(
               _optionalString(raw, 'categoryId'),
@@ -307,6 +307,15 @@ abstract final class InvoiceRestoreParser {
       );
     }
     return value
+        .where((raw) {
+          if (raw is! Map<String, Object?>) return true;
+          return !const {
+            'sellerTaxCode',
+            'invoiceNumber',
+            'seller_tax_code',
+            'invoice_number',
+          }.contains(raw['fieldName']);
+        })
         .map((raw) {
           if (raw is! Map<String, Object?>) {
             throw const FormatException('Một bằng chứng dữ liệu không hợp lệ.');

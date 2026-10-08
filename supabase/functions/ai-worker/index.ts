@@ -21,7 +21,7 @@ class WorkerError extends Error {
   }
 }
 
-const model = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
+const model = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.8-flash";
 const apiRoot = "https://generativelanguage.googleapis.com/v1beta";
 const maxTextLength = 50_000;
 const maxImageBytes = 15_000_000;
@@ -37,19 +37,18 @@ const invoiceSchema = {
   type: "object",
   additionalProperties: false,
   required: [
-    "sellerName", "sellerTaxCode", "invoiceNumber", "invoiceSymbol",
+    "sellerName", "invoiceSymbol",
     "invoiceDate", "currencyCode", "subtotalMinor", "taxMinor",
-    "totalMinor", "categoryId", "items",
+    "discountMinor", "totalMinor", "categoryId", "items",
   ],
   properties: {
     sellerName: {type: "string"},
-    sellerTaxCode: {type: ["string", "null"]},
-    invoiceNumber: {type: ["string", "null"]},
     invoiceSymbol: {type: ["string", "null"]},
     invoiceDate: {type: ["string", "null"]},
     currencyCode: {type: "string", enum: ["VND", "USD", "EUR", "JPY", "CNY"]},
     subtotalMinor: {type: "integer", minimum: 0},
     taxMinor: {type: "integer", minimum: 0},
+    discountMinor: {type: "integer", minimum: 0},
     totalMinor: {type: "integer", minimum: 0},
     categoryId: {
       type: "string",
@@ -61,12 +60,11 @@ const invoiceSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["description", "quantity", "unitPriceMinor", "taxRate", "totalMinor", "categoryId"],
+        required: ["description", "quantity", "unitPriceMinor", "totalMinor", "categoryId"],
         properties: {
           description: {type: "string"},
           quantity: {type: ["number", "null"], minimum: 0},
           unitPriceMinor: {type: ["integer", "null"], minimum: 0},
-          taxRate: {type: ["number", "null"], minimum: 0, maximum: 100},
           totalMinor: {type: "integer", minimum: 0},
           categoryId: {
             type: "string",
@@ -158,12 +156,16 @@ async function processJob(job: ExtractionJob): Promise<JsonObject> {
 }
 
 function extractionResult(requestId: string, invoice: JsonObject): JsonObject {
+  invoice.discountMinor ??= 0;
+  const categoryNormalization = normalizeInvoiceCategories(invoice);
   validateInvoice(invoice);
   return {
     requestId,
     invoice,
+    ...(categoryNormalization.length > 0 ? {categoryNormalization} : {}),
     evidence: [
       {field: "sellerName", rawValue: invoice.sellerName, value: invoice.sellerName, confidence: 0.75},
+      {field: "discountMinor", rawValue: String(invoice.discountMinor), value: String(invoice.discountMinor), confidence: 0.75},
       {field: "totalMinor", rawValue: String(invoice.totalMinor), value: String(invoice.totalMinor), confidence: 0.75},
     ],
     modelVersion: model,
@@ -177,6 +179,8 @@ async function generateInvoice(text?: string, image?: {mimeType: string; data: s
     "Trích xuất hóa đơn/biên lai Việt Nam từ OCR text.",
     "Không suy đoán trường không nhìn thấy; dùng null hoặc 0.",
     "Tiền dùng số nguyên theo đơn vị nhỏ nhất; với VND giữ nguyên số đồng.",
+    "discountMinor là tổng khoản giảm giá/chiết khấu cấp hóa đơn chỉ khi được in rõ; dùng 0 nếu không có và không suy ra từ phép trừ. subtotalMinor là tổng tiền hàng trước khoản giảm giá riêng; taxMinor là tổng thuế hóa đơn; totalMinor là số cuối khách phải trả.",
+    "Không đưa dòng khuyến mãi, chiết khấu, thanh toán, tiền mặt, tiền thối hoặc dòng tổng vào items; không trừ giảm giá cấp hóa đơn khỏi thành tiền dòng hàng.",
     "Đối chiếu tổng tiền nhưng không tự sửa số liệu để ép khớp.",
     "Phân loại từng mặt hàng vào đúng categoryId dựa trên mô tả; nếu không chắc dùng other.",
     text ? "OCR text:" : "Phân tích trực tiếp ảnh hóa đơn đính kèm:",
@@ -223,7 +227,7 @@ function validateInvoice(value: JsonObject): void {
   if (typeof value.sellerName !== "string" || value.sellerName.trim().length === 0 || value.sellerName.length > 500) {
     throw new WorkerError("INVALID_MODEL_RESPONSE", "Tên bên bán không hợp lệ.");
   }
-  for (const key of ["sellerTaxCode", "invoiceNumber", "invoiceSymbol"]) {
+  for (const key of ["invoiceSymbol"]) {
     const field = value[key];
     if (field !== null && field !== undefined && (typeof field !== "string" || field.length > 300)) {
       throw new WorkerError("INVALID_MODEL_RESPONSE", "Trường hóa đơn không hợp lệ.");
@@ -239,7 +243,7 @@ function validateInvoice(value: JsonObject): void {
   if (typeof value.categoryId !== "string" || !supportedCategories.has(value.categoryId)) {
     throw new WorkerError("INVALID_MODEL_RESPONSE", "Danh mục hóa đơn không hợp lệ.");
   }
-  for (const key of ["subtotalMinor", "taxMinor", "totalMinor"]) {
+  for (const key of ["subtotalMinor", "taxMinor", "discountMinor", "totalMinor"]) {
     const amount = value[key];
     if (typeof amount !== "number" || !Number.isSafeInteger(amount) || amount < 0) {
       throw new WorkerError("INVALID_AMOUNT", "Model trả số tiền không hợp lệ.");
@@ -264,14 +268,36 @@ function validateInvoice(value: JsonObject): void {
         (typeof unitPrice !== "number" || !Number.isSafeInteger(unitPrice) || unitPrice < 0)) {
       throw new WorkerError("INVALID_AMOUNT", "Đơn giá hàng hóa không hợp lệ.");
     }
-    if (item.taxRate !== null && item.taxRate !== undefined &&
-        (typeof item.taxRate !== "number" || !Number.isFinite(item.taxRate) || item.taxRate < 0 || item.taxRate > 100)) {
-      throw new WorkerError("INVALID_MODEL_RESPONSE", "Thuế suất hàng hóa không hợp lệ.");
-    }
     if (typeof item.totalMinor !== "number" || !Number.isSafeInteger(item.totalMinor) || item.totalMinor < 0) {
       throw new WorkerError("INVALID_AMOUNT", "Thành tiền hàng hóa không hợp lệ.");
     }
   }
+}
+
+function normalizeInvoiceCategories(value: JsonObject): JsonObject[] {
+  const changes: JsonObject[] = [];
+  const normalize = (raw: unknown, field: string): string => {
+    const candidate = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+    if (supportedCategories.has(candidate)) return candidate;
+    changes.push({field, returnedValue: categoryDiagnosticValue(raw), fallback: "other"});
+    return "other";
+  };
+
+  value.categoryId = normalize(value.categoryId, "categoryId");
+  if (Array.isArray(value.items)) {
+    value.items.forEach((item, index) => {
+      if (isObject(item)) item.categoryId = normalize(item.categoryId, `items[${index}].categoryId`);
+    });
+  }
+  return changes;
+}
+
+function categoryDiagnosticValue(value: unknown): string {
+  if (typeof value === "string") return value.trim().slice(0, 80) || "empty";
+  if (value === null) return "null";
+  if (value === undefined) return "missing";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return Array.isArray(value) ? "array" : "object";
 }
 
 async function downloadInput(path: string): Promise<Uint8Array> {

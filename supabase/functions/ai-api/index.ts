@@ -62,11 +62,15 @@ const baseCorsHeaders = {
   "Content-Type": "application/json; charset=utf-8",
 };
 
-const model = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.5-flash";
+const model = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.8-flash";
 const apiRoot = "https://generativelanguage.googleapis.com/v1beta";
+const ocrProvider = (Deno.env.get("OCR_AI_PROVIDER") ?? "gemini").trim().toLowerCase();
+const groqModel = Deno.env.get("GROQ_MODEL")?.trim() || "qwen/qwen3.8-27b";
+const groqMaxCompletionTokens = configuredInteger("GROQ_MAX_COMPLETION_TOKENS", 8_192, 256, 16_384);
+const groqApiRoot = "https://api.groq.com/openai/v1";
 const maxTextLength = 50_000;
-const maxImageBase64Length = 15_000_000;
-const maxBodyBytes = configuredInteger("AI_MAX_BODY_BYTES", 16_000_000, 1_024, 25_000_000);
+const maxImageBase64Length = 19_000_000;
+const maxBodyBytes = configuredInteger("AI_MAX_BODY_BYTES", 24_000_000, 1_024, 25_000_000);
 const maxRequestsPerMinute = configuredInteger("AI_MAX_REQUESTS_PER_MINUTE", 30, 1, 120);
 const maxRequestsPerDay = configuredInteger("AI_MAX_REQUESTS_PER_DAY", 500, 1, 5_000);
 const costUnitsByAction: Record<string, number> = {
@@ -104,19 +108,18 @@ const invoiceSchema = {
   type: "object",
   additionalProperties: false,
   required: [
-    "sellerName", "sellerTaxCode", "invoiceNumber", "invoiceSymbol",
+    "sellerName", "invoiceSymbol",
     "invoiceDate", "currencyCode", "subtotalMinor", "taxMinor",
-    "totalMinor", "categoryId", "items",
+    "discountMinor", "totalMinor", "categoryId", "items",
   ],
   properties: {
     sellerName: {type: "string"},
-    sellerTaxCode: {type: ["string", "null"]},
-    invoiceNumber: {type: ["string", "null"]},
     invoiceSymbol: {type: ["string", "null"]},
     invoiceDate: {type: ["string", "null"]},
     currencyCode: {type: "string", enum: ["VND", "USD", "EUR", "JPY", "CNY"]},
     subtotalMinor: {type: "integer", minimum: 0},
     taxMinor: {type: "integer", minimum: 0},
+    discountMinor: {type: "integer", minimum: 0},
     totalMinor: {type: "integer", minimum: 0},
     categoryId: {
       type: "string",
@@ -125,22 +128,7 @@ const invoiceSchema = {
     items: {
       type: "array",
       maxItems: 200,
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["description", "quantity", "unitPriceMinor", "taxRate", "totalMinor", "categoryId"],
-        properties: {
-          description: {type: "string"},
-          quantity: {type: ["number", "null"], minimum: 0},
-          unitPriceMinor: {type: ["integer", "null"], minimum: 0},
-          taxRate: {type: ["number", "null"], minimum: 0, maximum: 100},
-          totalMinor: {type: "integer", minimum: 0},
-          categoryId: {
-            type: "string",
-            enum: ["food", "transport", "shopping", "utilities", "health", "education", "entertainment", "other"],
-          },
-        },
-      },
+      items: {type: "string"},
     },
   },
 } as const;
@@ -205,27 +193,44 @@ Deno.serve(async (request) => {
 
 async function extractInvoice(request: ExtractionRequest) {
   const prompt = [
-    "Trích xuất hóa đơn/biên lai Việt Nam từ OCR text.",
-    "Không suy đoán trường không nhìn thấy; dùng null hoặc 0.",
-    "Tiền dùng số nguyên theo đơn vị nhỏ nhất; với VND giữ nguyên số đồng.",
-    "Đối chiếu tổng tiền nhưng không tự sửa số liệu để ép khớp.",
-    "Phân loại từng mặt hàng vào đúng categoryId dựa trên mô tả; nếu không chắc dùng other.",
+    "Trích xuất hóa đơn hoặc biên lai Việt Nam. Đọc ảnh gốc nếu có ảnh đính kèm.",
+    "Bố cục mỗi hóa đơn khác nhau; nhận diện trường theo nội dung, nhãn và ngữ cảnh, không dựa vào vị trí cố định.",
+    "Chép sellerName theo tên thương hiệu/đơn vị bán in trên hóa đơn; nếu logo có tên thương hiệu riêng, ưu tiên logo thay cho mã chi nhánh. Bỏ mã quầy, địa chỉ và khẩu hiệu; giữ dấu tiếng Việt kể cả chữ in hoa, không phiên âm bỏ dấu.",
+    "Ưu tiên chính xác hơn điền đủ: không suy đoán dữ liệu không nhìn thấy. invoiceSymbol, invoiceDate, quantity và unitPriceMinor có thể là null. subtotalMinor, taxMinor, discountMinor, totalMinor và thành tiền từng dòng bắt buộc là số nguyên không âm; nếu không đọc được thì dùng 0, không dùng null.",
+    "Với hóa đơn Việt Nam, ngày số theo thứ tự ngày/tháng/năm (dd/MM/yyyy, dd-MM-yyyy hoặc dd.MM.yyyy); xuất invoiceDate dạng YYYY-MM-DD. Nếu ảnh mờ khiến không chắc chữ số ngày hoặc tháng, dùng null thay vì đoán.",
+    "Với VND, các trường tiền phải là số nguyên chỉ gồm chữ số, không có dấu chấm/phẩy phân tách hàng nghìn hay ký hiệu tiền; ví dụ '67.701 đ' viết thành 67701. Chỉ quantity được phép là số thập phân.",
+    "Phân biệt subtotal, thuế và total. totalMinor là số tiền cuối cùng khách phải trả hoặc đã thanh toán; không lấy tạm tính, tiền thuế hay tiền thừa làm tổng.",
+    "Đối chiếu các con số nhưng không tự sửa số liệu để ép khớp phép tính.",
+    "Chỉ lấy mặt hàng được in thành dòng mua hàng. Trích từng dòng riêng gồm mô tả, số lượng, đơn giá và thành tiền nếu nhìn thấy; không trích thuế suất riêng từng mặt hàng, chỉ lấy tổng tiền thuế ở cấp hóa đơn. Không tự tính để điền số còn thiếu.",
+    "Với hàng tính theo cân, giữ số lượng thập phân và phân biệt đơn giá với thành tiền: ví dụ '64.600/KG x 1,048 KG' là quantity 1.048, unitPriceMinor 64600; không lấy thành tiền của dòng làm đơn giá và không mặc định quantity là 1 khi ảnh ghi khối lượng.",
+    "discountMinor là tổng khoản giảm giá/chiết khấu ở cấp hóa đơn chỉ khi được in rõ; cộng các khoản giảm giá riêng nếu có nhiều dòng, dùng 0 nếu không thấy. Không suy ra từ phép trừ giữa các tổng và không trừ khoản giảm giá khỏi thành tiền dòng hàng. Không đưa dòng KM, khuyến mãi, chiết khấu, thanh toán, tiền mặt, tiền thối hoặc dòng tổng vào items, kể cả khi số tiền của dòng đó âm. subtotalMinor là tổng các dòng hàng trước khoản giảm giá riêng; taxMinor là tổng thuế của hóa đơn; totalMinor là số cuối cùng khách phải trả. Mọi totalMinor của mặt hàng phải là số nguyên không âm.",
+    "Trước khi trả, đếm lại từng dòng mua hàng và so tổng thành tiền dòng với subtotal. Nếu lệch, đọc lại bảng để tìm dòng sót hoặc nhầm; giữ nguyên số in trên ảnh, không thêm dòng suy đoán để ép khớp. Chênh lệch giữa subtotal và total có thể do dòng KM/chiết khấu riêng.",
+    "Để giữ đủ mặt hàng trong giới hạn token, mỗi phần tử items là một chuỗi gồm đúng năm trường cách nhau bằng ký tự | theo thứ tự: mô tả | số lượng | đơn giá | thành tiền | categoryId. Dùng null nếu không đọc được số lượng hoặc đơn giá; thành tiền không đọc được dùng 0. Không dùng | bên trong mô tả và không thêm lời giải thích.",
+    "Không coi thông tin thanh toán, tiền khách đưa, tiền thối lại hoặc số điện thoại là mặt hàng.",
+    "categoryId chỉ được là một trong các mã chính xác sau: food, transport, shopping, utilities, health, education, entertainment, other. Không trả tên danh mục bằng tiếng Việt; nếu không chắc hoặc không khớp thì dùng other.",
+    "Phân loại từng mặt hàng vào categoryId dựa trên mô tả: thực phẩm/đồ uống dùng food; sách, sách giáo khoa và văn phòng phẩm học tập dùng education; hàng bán lẻ thông thường dùng shopping. Nếu không chắc dùng other.",
+    "Trả về JSON object có các khóa cấp hóa đơn sellerName, invoiceSymbol, invoiceDate, currencyCode, subtotalMinor, taxMinor, discountMinor, totalMinor, categoryId và items.",
     request.text ? "OCR text:" : "Phân tích trực tiếp ảnh hóa đơn đính kèm:",
     ...(request.text ? [request.text] : []),
   ].join("\n");
   const image = request.imageBase64 && request.mimeType
     ? {mimeType: request.mimeType, data: request.imageBase64}
     : undefined;
-  const parsed = await generateJson(prompt, invoiceSchema, 0.1, 30_000, image);
+  const parsed = await generateOcrJson(prompt, invoiceSchema, 0.1, 30_000, image);
+  parsed.discountMinor ??= 0;
+  normalizeInvoiceItemFields(parsed);
+  const categoryNormalization = normalizeInvoiceCategories(parsed);
   validateInvoice(parsed);
   return {
     requestId: request.requestId,
     invoice: parsed,
+    ...(categoryNormalization.length > 0 ? {categoryNormalization} : {}),
     evidence: [
       {field: "sellerName", rawValue: parsed.sellerName, value: parsed.sellerName, confidence: 0.75},
+      {field: "discountMinor", rawValue: String(parsed.discountMinor), value: String(parsed.discountMinor), confidence: 0.75},
       {field: "totalMinor", rawValue: String(parsed.totalMinor), value: String(parsed.totalMinor), confidence: 0.75},
     ],
-    modelVersion: model,
+    modelVersion: ocrModelVersion(),
   };
 }
 
@@ -499,6 +504,7 @@ async function generateJson(
   temperature: number,
   timeoutMs: number,
   image?: {mimeType: string; data: string},
+  structuredOutput = true,
 ): Promise<JsonObject> {
   const apiKey = Deno.env.get("GEMINI_API_KEY")?.trim();
   if (!apiKey) throw new FunctionError(503, "AI_NOT_CONFIGURED", "GEMINI_API_KEY chưa được cấu hình trong Supabase Secrets.");
@@ -513,7 +519,7 @@ async function generateJson(
     generationConfig: {
       temperature,
       responseMimeType: "application/json",
-      responseJsonSchema: schema,
+      ...(structuredOutput ? {responseJsonSchema: schema} : {}),
     },
   });
   let response: Response | undefined;
@@ -528,7 +534,12 @@ async function generateJson(
       if (response.ok) break;
       const retryable = response.status === 429 || response.status >= 500;
       if (!retryable || attempt === 1) {
-        throw new FunctionError(502, "MODEL_ERROR", `Gemini trả lỗi ${response.status}.`);
+        const providerReason = await geminiProviderReason(response);
+        const providerMessage = await geminiProviderMessage(response);
+        console.warn("gemini_response_rejected", JSON.stringify({model, upstreamStatus: response.status, providerReason}));
+        const reason = providerReason ? `, Gemini ${providerReason}` : "";
+        const detail = providerMessage ? `, chi tiết: ${providerMessage}` : "";
+        throw new FunctionError(502, "MODEL_ERROR", `Gemini trả lỗi ${response.status}${reason}${detail}.`);
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
@@ -546,6 +557,131 @@ async function generateJson(
   } catch {
     throw new FunctionError(502, "INVALID_MODEL_JSON", "Model không trả JSON hợp lệ.");
   }
+}
+
+async function generateOcrJson(
+  prompt: string,
+  schema: unknown,
+  temperature: number,
+  timeoutMs: number,
+  image?: {mimeType: string; data: string},
+): Promise<JsonObject> {
+  if (ocrProvider === "gemini") {
+    return generateJson(prompt, schema, temperature, timeoutMs, image, false);
+  }
+  if (ocrProvider === "groq") {
+    return generateGroqJson(prompt, schema, temperature, timeoutMs, image);
+  }
+  throw new FunctionError(503, "AI_PROVIDER_NOT_SUPPORTED", "OCR_AI_PROVIDER không được hỗ trợ.");
+}
+
+async function generateGroqJson(
+  prompt: string,
+  schema: unknown,
+  temperature: number,
+  timeoutMs: number,
+  image?: {mimeType: string; data: string},
+): Promise<JsonObject> {
+  const apiKey = Deno.env.get("GROQ_API_KEY")?.trim();
+  if (!apiKey) {
+    throw new FunctionError(503, "AI_NOT_CONFIGURED", "GROQ_API_KEY chưa được cấu hình trong Supabase Secrets.");
+  }
+  const content: JsonObject[] = [{type: "text", text: prompt}];
+  if (image) {
+    content.push({
+      type: "image_url",
+      image_url: {url: `data:${image.mimeType};base64,${image.data}`},
+    });
+  }
+  const requestBody = JSON.stringify({
+    model: groqModel,
+    messages: [{role: "user", content}],
+    temperature,
+    max_completion_tokens: groqMaxCompletionTokens,
+    response_format: envFlag("GROQ_JSON_SCHEMA_STRICT") && groqModel === "qwen/qwen3.8-27b"
+      ? {type: "json_schema", json_schema: {name: "invoice_extraction", strict: true, schema}}
+      : {type: "json_object"},
+  });
+
+  let response: Response | undefined;
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      response = await fetch(`${groqApiRoot}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: requestBody,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (response.ok) break;
+      if (response.status < 500 || attempt === 1) {
+        const providerMessage = await groqProviderMessage(response);
+        const detail = providerMessage ? `: ${providerMessage}` : "";
+        console.warn("groq_response_rejected", JSON.stringify({model: groqModel, upstreamStatus: response.status}));
+        const rateLimited = response.status === 429;
+        throw new FunctionError(
+          rateLimited ? 429 : 502,
+          rateLimited ? "MODEL_RATE_LIMITED" : "MODEL_ERROR",
+          `Groq trả lỗi ${response.status}${detail}.`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  } catch (error) {
+    if (error instanceof FunctionError) throw error;
+    throw new FunctionError(504, "MODEL_TIMEOUT", "Groq không phản hồi đúng hạn.");
+  }
+  if (!response?.ok) throw new FunctionError(502, "MODEL_ERROR", "Groq không thể xử lý yêu cầu.");
+
+  const payload: unknown = await response.json();
+  if (isObject(payload) && Array.isArray(payload.choices) && isObject(payload.choices[0]) &&
+      payload.choices[0].finish_reason === "length") {
+    throw new FunctionError(502, "MODEL_OUTPUT_TRUNCATED", "Groq dừng trước khi hoàn tất JSON hóa đơn.");
+  }
+  const text = groqModelText(payload);
+  try {
+    const value: unknown = JSON.parse(text);
+    if (!isObject(value)) throw new Error("not-object");
+    return value;
+  } catch {
+    throw new FunctionError(502, "INVALID_MODEL_JSON", "Model không trả JSON hợp lệ.");
+  }
+}
+
+async function groqProviderMessage(response: Response): Promise<string | undefined> {
+  try {
+    const payload: unknown = await response.clone().json();
+    if (!isObject(payload) || !isObject(payload.error) || typeof payload.error.message !== "string") {
+      return undefined;
+    }
+    const message = payload.error.message
+      .replace(/gsk_[0-9A-Za-z_-]{12,}/g, "[redacted]")
+      .replace(/[A-Za-z0-9+/]{100,}={0,2}/g, "[redacted]")
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+      .replace(/(?<!\d)(?:\+?84|0)\d{8,10}(?!\d)/g, "[phone]")
+      .replace(/\s+/g, " ")
+      .slice(0, 240);
+    return message || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function groqModelText(payload: unknown): string {
+  if (!isObject(payload) || !Array.isArray(payload.choices) || !isObject(payload.choices[0])) {
+    throw new FunctionError(502, "EMPTY_MODEL_RESPONSE", "Groq không trả dữ liệu.");
+  }
+  const message = payload.choices[0].message;
+  if (!isObject(message) || typeof message.content !== "string") {
+    throw new FunctionError(502, "EMPTY_MODEL_RESPONSE", "Groq không trả nội dung.");
+  }
+  return message.content;
+}
+
+function ocrModelVersion(): string {
+  return ocrProvider === "groq" ? groqModel : model;
 }
 
 async function loadExternalContext(question: string): Promise<ExternalContext> {
@@ -730,11 +866,73 @@ function requiredString(body: JsonObject, key: string, maxLength: number): strin
   return value;
 }
 
+async function geminiProviderReason(response: Response): Promise<string | undefined> {
+  try {
+    const payload: unknown = await response.clone().json();
+    if (!isObject(payload) || !isObject(payload.error)) return undefined;
+    const error = payload.error;
+    if (Array.isArray(error.details)) {
+      for (const detail of error.details) {
+        if (!isObject(detail)) continue;
+        if (typeof detail.reason === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(detail.reason)) {
+          return detail.reason;
+        }
+        if (!Array.isArray(detail.fieldViolations)) continue;
+        for (const violation of detail.fieldViolations) {
+          if (!isObject(violation) || typeof violation.field !== "string") continue;
+          if (/^[A-Za-z0-9_.\[\]-]{1,120}$/.test(violation.field)) {
+            return `INVALID_FIELD_${violation.field.toUpperCase().replaceAll(".", "_")}`;
+          }
+        }
+      }
+    }
+    const message = typeof error.message === "string" ? error.message.toLowerCase() : "";
+    if (message.includes("api key") && (message.includes("invalid") || message.includes("not valid"))) {
+      return "API_KEY_INVALID";
+    }
+    if (message.includes("model") && (message.includes("not found") || message.includes("not supported"))) {
+      return "MODEL_NOT_AVAILABLE";
+    }
+    if (message.includes("schema")) return "INVALID_RESPONSE_SCHEMA";
+    if (message.includes("unknown name") || message.includes("cannot find field")) {
+      return "UNSUPPORTED_REQUEST_FIELD";
+    }
+    if (message.includes("quota") || message.includes("rate limit") || message.includes("resource exhausted")) {
+      return "QUOTA_OR_RATE_LIMIT";
+    }
+    return typeof error.status === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(error.status)
+      ? error.status
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function geminiProviderMessage(response: Response): Promise<string | undefined> {
+  try {
+    const payload: unknown = await response.clone().json();
+    if (!isObject(payload) || !isObject(payload.error) || typeof payload.error.message !== "string") {
+      return undefined;
+    }
+    const message = payload.error.message
+      .replace(/AIza[0-9A-Za-z_-]{20,}/g, "[redacted]")
+      .replace(/[A-Za-z0-9+/]{100,}={0,2}/g, "[redacted]")
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+      .replace(/(?<!\d)(?:\+?84|0)\d{8,10}(?!\d)/g, "[phone]")
+      .replace(/\s+/g, " ")
+      .replace(/[.]+$/g, "")
+      .slice(0, 240);
+    return message || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function validateInvoice(value: JsonObject): void {
   if (typeof value.sellerName !== "string" || value.sellerName.trim().length === 0 || value.sellerName.length > 500) {
     throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Tên bên bán không hợp lệ.");
   }
-  for (const key of ["sellerTaxCode", "invoiceNumber", "invoiceSymbol"]) {
+  for (const key of ["invoiceSymbol"]) {
     const field = value[key];
     if (field !== null && field !== undefined && (typeof field !== "string" || field.length > 300)) {
       throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Trường hóa đơn không hợp lệ.");
@@ -750,7 +948,7 @@ function validateInvoice(value: JsonObject): void {
   if (typeof value.categoryId !== "string" || !supportedCategories.has(value.categoryId)) {
     throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Danh mục hóa đơn không hợp lệ.");
   }
-  for (const key of ["subtotalMinor", "taxMinor", "totalMinor"]) {
+  for (const key of ["subtotalMinor", "taxMinor", "discountMinor", "totalMinor"]) {
     const amount = value[key];
     if (typeof amount !== "number" || !Number.isSafeInteger(amount) || amount < 0) throw new FunctionError(502, "INVALID_AMOUNT", `Trường ${key} không hợp lệ.`);
   }
@@ -773,14 +971,103 @@ function validateInvoice(value: JsonObject): void {
         (typeof unitPrice !== "number" || !Number.isSafeInteger(unitPrice) || unitPrice < 0)) {
       throw new FunctionError(502, "INVALID_AMOUNT", "Đơn giá hàng hóa không hợp lệ.");
     }
-    if (item.taxRate !== null && item.taxRate !== undefined &&
-        (typeof item.taxRate !== "number" || !Number.isFinite(item.taxRate) || item.taxRate < 0 || item.taxRate > 100)) {
-      throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Thuế suất hàng hóa không hợp lệ.");
-    }
     if (typeof item.totalMinor !== "number" || !Number.isSafeInteger(item.totalMinor) || item.totalMinor < 0) {
       throw new FunctionError(502, "INVALID_AMOUNT", "Thành tiền hàng hóa không hợp lệ.");
     }
   }
+}
+
+function normalizeInvoiceItemFields(value: JsonObject): void {
+  if (!Array.isArray(value.items)) return;
+  const aliases: Array<[string, string]> = [
+    ["description", "d"],
+    ["quantity", "q"],
+    ["unitPriceMinor", "u"],
+    ["totalMinor", "t"],
+    ["categoryId", "c"],
+  ];
+  value.items = value.items.map((item) => {
+    if (typeof item === "string") return parseCompactInvoiceItem(item);
+    if (!isObject(item)) return item;
+    delete item.taxRate;
+    delete item.r;
+    for (const [canonical, compact] of aliases) {
+      if (item[canonical] === undefined && item[compact] !== undefined) {
+        item[canonical] = item[compact];
+      }
+      delete item[compact];
+    }
+    return item;
+  });
+}
+
+function parseCompactInvoiceItem(row: string): JsonObject {
+  const columns = row.split("|").map((column) => column.trim());
+  if (columns.length < 5) {
+    throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Dòng hàng hóa compact không hợp lệ.");
+  }
+  // Rows from an older deployment also have taxRate; accept them and discard that field.
+  const legacyTaxField = columns.length >= 6;
+  const itemFields = columns.slice(legacyTaxField ? -5 : -4);
+  const [quantityText, unitPriceText, totalText, categoryId] = legacyTaxField
+    ? [itemFields[0], itemFields[1], itemFields[3], itemFields[4]]
+    : [itemFields[0], itemFields[1], itemFields[2], itemFields[3]];
+  const description = columns.slice(0, legacyTaxField ? -5 : -4).join("|").trim();
+  if (!description) {
+    throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Dòng hàng hóa compact không có mô tả.");
+  }
+  const parseDecimal = (text: string): number | null => {
+    if (!text || text.toLowerCase() === "null") return null;
+    const normalized = /^-?\d+,\d+$/.test(text) ? text.replace(",", ".") : text;
+    if (!/^-?\d+(?:\.\d+)?$/.test(normalized)) {
+      throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Giá trị số của dòng hàng hóa không hợp lệ.");
+    }
+    return Number(normalized);
+  };
+  const parseMoney = (text: string): number | null => {
+    if (!text || text.toLowerCase() === "null") return null;
+    if (/^-?\d{1,3}(?:[.,]\d{3})+$/.test(text)) {
+      return Number(text.replace(/[.,]/g, ""));
+    }
+    if (/^-?\d+$/.test(text)) return Number(text);
+    if (/^-?\d+(?:[.,]0+)$/.test(text)) {
+      return Number(text.replace(/[.,]0+$/, ""));
+    }
+    throw new FunctionError(502, "INVALID_MODEL_RESPONSE", "Số tiền dòng hàng không hợp lệ.");
+  };
+  return {
+    description,
+    quantity: parseDecimal(quantityText),
+    unitPriceMinor: parseMoney(unitPriceText),
+    totalMinor: parseMoney(totalText) ?? 0,
+    categoryId,
+  };
+}
+
+function normalizeInvoiceCategories(value: JsonObject): JsonObject[] {
+  const changes: JsonObject[] = [];
+  const normalize = (raw: unknown, field: string): string => {
+    const candidate = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+    if (supportedCategories.has(candidate)) return candidate;
+    changes.push({field, returnedValue: categoryDiagnosticValue(raw), fallback: "other"});
+    return "other";
+  };
+
+  value.categoryId = normalize(value.categoryId, "categoryId");
+  if (Array.isArray(value.items)) {
+    value.items.forEach((item, index) => {
+      if (isObject(item)) item.categoryId = normalize(item.categoryId, `items[${index}].categoryId`);
+    });
+  }
+  return changes;
+}
+
+function categoryDiagnosticValue(value: unknown): string {
+  if (typeof value === "string") return value.trim().slice(0, 80) || "empty";
+  if (value === null) return "null";
+  if (value === undefined) return "missing";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return Array.isArray(value) ? "array" : "object";
 }
 
 function modelText(payload: unknown): string {
@@ -815,7 +1102,7 @@ async function recordAiMetric(
         p_action: action,
         p_status_code: statusCode,
         p_duration_ms: Math.max(0, Math.min(durationMs, 600000)),
-        p_model: model,
+        p_model: action === "extract" ? ocrModelVersion() : model,
         p_error_code: errorCode ?? null,
       }),
       signal: AbortSignal.timeout(750),
@@ -904,7 +1191,11 @@ async function enforceCostBudget(request: Request, action: string): Promise<void
 
 async function rateLimitIdentifier(request: Request): Promise<string> {
   const authorization = request.headers.get("Authorization")?.trim();
-  if (!authorization) return "anonymous";
+  if (!authorization) {
+    const clientAddress = request.headers.get("cf-connecting-ip")?.trim() ||
+      request.headers.get("x-real-ip")?.trim();
+    return clientAddress ? `ip:${clientAddress.slice(0, 128)}` : "anonymous";
+  }
   const match = /^Bearer\s+([^\s]+)$/i.exec(authorization);
   if (!match) return "invalid-token";
   const parts = match[1].split(".");
@@ -930,7 +1221,7 @@ function configuredInteger(name: string, fallback: number, minimum: number, maxi
   return Number.isInteger(value) && value >= minimum && value <= maximum ? value : fallback;
 }
 
-function enforceRateLimit(identifier: string): void {
+function enforceRateLimit(identifier: string, limit = maxRequestsPerMinute): void {
   const now = Date.now();
   const current = rateBuckets.get(identifier);
   if (!current || now - current.startedAt >= 60_000) {
@@ -943,7 +1234,7 @@ function enforceRateLimit(identifier: string): void {
     return;
   }
   current.count += 1;
-  if (current.count > maxRequestsPerMinute) throw new FunctionError(429, "RATE_LIMITED", "Quá nhiều yêu cầu. Vui lòng thử lại sau một phút.");
+  if (current.count > limit) throw new FunctionError(429, "RATE_LIMITED", "Quá nhiều yêu cầu. Vui lòng thử lại sau một phút.");
 }
 
 async function readObject(request: Request): Promise<JsonObject> {

@@ -13,6 +13,7 @@ import '../../../shared/widgets/category_avatar.dart';
 import '../../../shared/widgets/month_selector.dart';
 import '../../../shared/widgets/money_text.dart';
 import '../../../shared/widgets/section_header.dart';
+import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../../shared/errors/error_presenter.dart';
 
@@ -105,9 +106,8 @@ class BudgetScreen extends ConsumerWidget {
     BudgetEntity? current,
     String monthKey,
   ) async {
-    final controller = TextEditingController(
-      text: current == null ? '' : current.limitMinor.toString(),
-    );
+    final initialValue = current?.limitMinor.toString() ?? '';
+    final controller = TextEditingController(text: initialValue);
     final result = await showDialog<_BudgetDialogResult>(
       context: context,
       builder: (context) => AlertDialog(
@@ -125,15 +125,31 @@ class BudgetScreen extends ConsumerWidget {
         actions: [
           if (current != null)
             TextButton(
-              onPressed: () =>
-                  Navigator.pop(context, const _BudgetDialogResult.delete()),
+              onPressed: () async {
+                final confirmed = await showConfirmDialog(
+                  context,
+                  title: 'Xóa hạn mức ngân sách?',
+                  message: 'Hạn mức cho danh mục “${category.name}” sẽ bị xóa.',
+                  confirmLabel: 'Xóa hạn mức',
+                  destructive: true,
+                );
+                if (confirmed && context.mounted) {
+                  Navigator.pop(context, const _BudgetDialogResult.delete());
+                }
+              },
               child: Text(
                 'Xóa',
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () async {
+              if (controller.text != initialValue) {
+                final discard = await showDiscardChangesDialog(context);
+                if (!discard || !context.mounted) return;
+              }
+              Navigator.pop(context);
+            },
             child: const Text('Hủy'),
           ),
           FilledButton(

@@ -35,13 +35,13 @@ còn session đã lưu cho phép làm việc offline và đồng bộ lại khi 
 
 ## Auth
 
-- [ ] Cấu hình email/password, password recovery và redirect URL trong Supabase Dashboard; Google OAuth là tùy chọn cho bản nội bộ.
-- [ ] Test đăng ký, đăng nhập, đổi mật khẩu, khôi phục mật khẩu, link/unlink Google và đăng xuất.
+- [ ] Cấu hình email/password, password recovery và redirect URL trong Supabase Dashboard; app chỉ dùng email/password, không dùng Google OAuth.
+- [ ] Test đăng ký, đăng nhập, đổi mật khẩu, khôi phục mật khẩu và đăng xuất.
 - [ ] Tạo tài khoản kiểm thử riêng để test xóa tài khoản; không dùng tài khoản cá nhân.
 
 ## Worker and monitoring
 
-- [ ] Tạo GitHub Environment `production` và secrets cho workflow `android-release`: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `SUPABASE_URL` và `SUPABASE_PUBLISHABLE_KEY`; `SUPABASE_OAUTH_REDIRECT_URI` chỉ cần nếu bật OAuth.
+- [ ] Tạo GitHub Environment `production` và secrets cho workflow `android-release`: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `SUPABASE_URL` và `SUPABASE_PUBLISHABLE_KEY`; `SUPABASE_AUTH_REDIRECT_URI` chỉ cần nếu password recovery cần callback khác Site URL. Workflow còn nhận secret OAuth cũ làm fallback tương thích.
 - [ ] Chạy `Android Release` bằng `workflow_dispatch`; xác nhận artifact là AAB đã ký để phân phối nội bộ, không dùng debug keystore.
 - [ ] Tạo GitHub Secrets `SUPABASE_FUNCTION_URL`, `AI_WORKER_SECRET` và `HEALTHCHECK_SECRET`.
 - [ ] Chạy workflow `ai-worker` và `production-health` thành công sau khi deploy.

@@ -8,7 +8,7 @@ void main() {
     _invoice(
       id: 'coffee',
       sellerName: 'Cà phê Bình Minh',
-      invoiceNumber: 'HD-001',
+      invoiceSymbol: 'AA-001',
       categoryId: 'food',
       sourceType: InvoiceSourceType.xml,
       status: InvoiceStatus.confirmed,
@@ -19,7 +19,7 @@ void main() {
     _invoice(
       id: 'office',
       sellerName: 'Văn phòng phẩm Sao Mai',
-      invoiceNumber: 'HD-002',
+      invoiceSymbol: 'AA-002',
       categoryId: 'office',
       sourceType: InvoiceSourceType.imageOcr,
       status: InvoiceStatus.needsReview,
@@ -27,13 +27,13 @@ void main() {
     ),
   ];
 
-  test('searches seller, invoice number, notes and tags', () {
+  test('searches seller, invoice symbol, notes and tags', () {
     expect(
       const InvoiceFilter(query: 'bình minh').apply(invoices),
       hasLength(1),
     );
     expect(
-      const InvoiceFilter(query: 'HD-002').apply(invoices).single.id,
+      const InvoiceFilter(query: 'AA-002').apply(invoices).single.id,
       'office',
     );
     expect(
@@ -65,7 +65,7 @@ void main() {
 InvoiceEntity _invoice({
   required String id,
   required String sellerName,
-  required String invoiceNumber,
+  String? invoiceSymbol,
   required String categoryId,
   required InvoiceSourceType sourceType,
   required InvoiceStatus status,
@@ -76,7 +76,7 @@ InvoiceEntity _invoice({
   return InvoiceEntity(
     id: id,
     sellerName: sellerName,
-    invoiceNumber: invoiceNumber,
+    invoiceSymbol: invoiceSymbol,
     currencyCode: 'VND',
     subtotalMinor: 100000,
     taxMinor: 10000,

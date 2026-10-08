@@ -21,7 +21,6 @@ class InvoiceLineEntity {
     required this.totalMinor,
     this.quantity,
     this.unitPriceMinor,
-    this.taxRate,
     this.categoryId,
   });
 
@@ -29,7 +28,6 @@ class InvoiceLineEntity {
   final String description;
   final double? quantity;
   final int? unitPriceMinor;
-  final double? taxRate;
   final int totalMinor;
   final String? categoryId;
 
@@ -38,7 +36,6 @@ class InvoiceLineEntity {
     description: description,
     quantity: quantity,
     unitPriceMinor: unitPriceMinor,
-    taxRate: taxRate,
     totalMinor: totalMinor,
     categoryId: categoryId ?? this.categoryId,
   );
@@ -78,9 +75,7 @@ class InvoiceEntity {
     required this.status,
     required this.createdAt,
     required this.updatedAt,
-    this.sellerTaxCode,
     this.cloudId,
-    this.invoiceNumber,
     this.invoiceSymbol,
     this.issuedAt,
     this.sourceHash,
@@ -93,18 +88,20 @@ class InvoiceEntity {
     this.deletedAt,
     this.lines = const [],
     this.evidence = const [],
+    this.discountMinor = 0,
   });
 
   final String id;
   final String? cloudId;
   final String sellerName;
-  final String? sellerTaxCode;
-  final String? invoiceNumber;
   final String? invoiceSymbol;
   final DateTime? issuedAt;
   final String currencyCode;
   final int subtotalMinor;
   final int taxMinor;
+
+  /// Tổng giảm giá riêng ở cấp hóa đơn; giữ 0 khi hóa đơn không in khoản này.
+  final int discountMinor;
   final int totalMinor;
   final InvoiceSourceType sourceType;
   final String? sourceHash;
@@ -127,13 +124,12 @@ class InvoiceEntity {
   InvoiceEntity copyWith({
     String? sellerName,
     String? cloudId,
-    String? sellerTaxCode,
-    String? invoiceNumber,
     String? invoiceSymbol,
     DateTime? issuedAt,
     String? currencyCode,
     int? subtotalMinor,
     int? taxMinor,
+    int? discountMinor,
     int? totalMinor,
     InvoiceSourceType? sourceType,
     String? sourceHash,
@@ -154,13 +150,12 @@ class InvoiceEntity {
       id: id,
       cloudId: cloudId ?? this.cloudId,
       sellerName: sellerName ?? this.sellerName,
-      sellerTaxCode: sellerTaxCode ?? this.sellerTaxCode,
-      invoiceNumber: invoiceNumber ?? this.invoiceNumber,
       invoiceSymbol: invoiceSymbol ?? this.invoiceSymbol,
       issuedAt: issuedAt ?? this.issuedAt,
       currencyCode: currencyCode ?? this.currencyCode,
       subtotalMinor: subtotalMinor ?? this.subtotalMinor,
       taxMinor: taxMinor ?? this.taxMinor,
+      discountMinor: discountMinor ?? this.discountMinor,
       totalMinor: totalMinor ?? this.totalMinor,
       sourceType: sourceType ?? this.sourceType,
       sourceHash: sourceHash ?? this.sourceHash,

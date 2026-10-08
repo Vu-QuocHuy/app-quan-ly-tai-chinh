@@ -9,14 +9,11 @@ void main() {
   InvoiceEntity invoice({
     required String id,
     String? hash,
-    String number = '001',
     int total = 110000,
   }) {
     return InvoiceEntity(
       id: id,
       sellerName: 'Demo',
-      sellerTaxCode: '0312345678',
-      invoiceNumber: number,
       issuedAt: date,
       currencyCode: 'VND',
       subtotalMinor: 100000,
@@ -39,11 +36,11 @@ void main() {
     expect(match?.score, 1);
   });
 
-  test('finds fuzzy duplicate from legal identity and totals', () {
+  test('finds fuzzy duplicate from matching amount and date', () {
     final match = detector.findLikelyDuplicate(invoice(id: 'new'), [
       invoice(id: 'old'),
     ]);
-    expect(match?.score, greaterThanOrEqualTo(0.7));
-    expect(match?.reasons, contains('Cùng số hóa đơn'));
+    expect(match?.score, 1);
+    expect(match?.reasons, containsAll(['Cùng tổng tiền', 'Cùng ngày lập']));
   });
 }

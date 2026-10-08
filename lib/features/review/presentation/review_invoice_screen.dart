@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../app/theme/app_tokens.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../ingestion/domain/invoice_validator.dart';
@@ -27,10 +28,9 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
   final _formKey = GlobalKey<FormState>();
   final _validationSummaryFocusNode = FocusNode();
   late final TextEditingController _sellerController;
-  late final TextEditingController _taxCodeController;
-  late final TextEditingController _numberController;
   late final TextEditingController _subtotalController;
   late final TextEditingController _taxController;
+  late final TextEditingController _discountController;
   late final TextEditingController _totalController;
   late final TextEditingController _notesController;
   late final TextEditingController _tagsController;
@@ -45,17 +45,26 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
   AutovalidateMode _autovalidate = AutovalidateMode.disabled;
   bool _dirty = false;
 
+  // Legacy manually entered invoices with tax or item rows keep the full form.
+  bool get _isManualExpense =>
+      widget.invoice.sourceType == InvoiceSourceType.manual &&
+      widget.invoice.lines.isEmpty &&
+      widget.invoice.taxMinor == 0 &&
+      widget.invoice.discountMinor == 0 &&
+      widget.invoice.subtotalMinor == widget.invoice.totalMinor;
+
   @override
   void initState() {
     super.initState();
     final invoice = widget.invoice;
     _sellerController = TextEditingController(text: invoice.sellerName);
-    _taxCodeController = TextEditingController(text: invoice.sellerTaxCode);
-    _numberController = TextEditingController(text: invoice.invoiceNumber);
     _subtotalController = TextEditingController(
       text: invoice.subtotalMinor.toString(),
     );
     _taxController = TextEditingController(text: invoice.taxMinor.toString());
+    _discountController = TextEditingController(
+      text: invoice.discountMinor.toString(),
+    );
     _totalController = TextEditingController(
       text: invoice.totalMinor.toString(),
     );
@@ -66,6 +75,13 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
         .toList(growable: true);
     _issuedAt = invoice.issuedAt;
     _categoryId = invoice.categoryId;
+    if (invoice.sourceType == InvoiceSourceType.imageOcr) {
+      final validation = const InvoiceValidator().validate(invoice);
+      _validationMessages = [...validation.errors, ...validation.warnings];
+      if (validation.errors.isNotEmpty) {
+        _validationTone = CalloutTone.danger;
+      }
+    }
     for (final controller in _watchedControllers) {
       controller.addListener(_recomputeDirty);
     }
@@ -79,10 +95,9 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       controller.removeListener(_recomputeDirty);
     }
     _sellerController.dispose();
-    _taxCodeController.dispose();
-    _numberController.dispose();
     _subtotalController.dispose();
     _taxController.dispose();
+    _discountController.dispose();
     _totalController.dispose();
     _notesController.dispose();
     _tagsController.dispose();
@@ -108,151 +123,200 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
         if (!didPop) _confirmDiscard();
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Kiểm tra hóa đơn')),
+        appBar: AppBar(
+          title: Text(
+            _isManualExpense
+                ? widget.invoice.status == InvoiceStatus.confirmed
+                      ? 'Sửa khoản chi'
+                      : 'Thêm khoản chi'
+                : 'Kiểm tra hóa đơn',
+          ),
+        ),
         body: Form(
           key: _formKey,
           autovalidateMode: _autovalidate,
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _ReviewNotice(source: widget.invoice.sourceType),
-                if (_validationMessages.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  _ValidationSummary(
-                    tone: _validationTone,
-                    messages: _validationMessages,
-                    focusNode: _validationSummaryFocusNode,
-                  ),
-                ],
-                const SizedBox(height: 24),
-                Text(
-                  'Thông tin hóa đơn',
-                  style: Theme.of(context).textTheme.titleLarge,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: AppBreakpoints.readingWidth,
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _sellerController,
-                  decoration: InputDecoration(
-                    labelText: 'Tên người bán *',
-                    helperText: lowConfidence.contains('sellerName')
-                        ? 'Độ tin cậy thấp — vui lòng kiểm tra'
-                        : null,
-                    prefixIcon: const Icon(Icons.storefront_outlined),
-                  ),
-                  textInputAction: TextInputAction.next,
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? 'Hãy nhập tên người bán.'
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _taxCodeController,
-                  decoration: const InputDecoration(
-                    labelText: 'Mã số thuế người bán',
-                    prefixIcon: Icon(Icons.badge_outlined),
-                  ),
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _numberController,
-                  decoration: const InputDecoration(
-                    labelText: 'Số hóa đơn',
-                    prefixIcon: Icon(Icons.numbers),
-                  ),
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 12),
-                Semantics(
-                  button: true,
-                  label: _issuedAt == null
-                      ? 'Chọn ngày lập hóa đơn'
-                      : 'Ngày lập ${DateFormat('dd/MM/yyyy').format(_issuedAt!)}',
-                  child: ListTile(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      side: BorderSide(
-                        color: Theme.of(context).colorScheme.outlineVariant,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!_isManualExpense)
+                      _ReviewNotice(source: widget.invoice.sourceType),
+                    if (_validationMessages.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _ValidationSummary(
+                        tone: _validationTone,
+                        messages: _validationMessages,
+                        focusNode: _validationSummaryFocusNode,
                       ),
-                    ),
-                    leading: const Icon(Icons.calendar_today_outlined),
-                    title: const Text('Ngày lập hóa đơn'),
-                    subtitle: Text(
-                      _issuedAt == null
-                          ? 'Chưa xác định'
-                          : DateFormat('dd/MM/yyyy').format(_issuedAt!),
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _pickDate,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text('Số tiền', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 12),
-                _MoneyField(
-                  controller: _subtotalController,
-                  label: 'Trước thuế',
-                ),
-                const SizedBox(height: 12),
-                _MoneyField(controller: _taxController, label: 'Thuế'),
-                const SizedBox(height: 12),
-                _MoneyField(
-                  controller: _totalController,
-                  label: 'Tổng thanh toán *',
-                  requiredPositive: true,
-                  lowConfidence: lowConfidence.contains('totalMinor'),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Phân loại',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: _categoryId,
-                  decoration: const InputDecoration(
-                    labelText: 'Danh mục',
-                    prefixIcon: Icon(Icons.category_outlined),
-                  ),
-                  items: categories
-                      .map(
-                        (item) => DropdownMenuItem(
-                          value: item.id,
-                          child: Text(item.name),
+                    ],
+                    if (_isManualExpense) ...[
+                      TextFormField(
+                        controller: _sellerController,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          labelText: 'Nội dung chi (tùy chọn)',
+                          hintText: 'Ví dụ: ăn sáng, gửi xe',
+                          prefixIcon: Icon(Icons.payments_outlined),
                         ),
-                      )
-                      .toList(growable: false),
-                  onChanged: (value) => setState(() => _categoryId = value),
+                      ),
+                      const SizedBox(height: 10),
+                      _buildDateField(),
+                      const SizedBox(height: 20),
+                      _MoneyField(
+                        controller: _totalController,
+                        label: 'Số tiền *',
+                        requiredPositive: true,
+                      ),
+                      const SizedBox(height: 20),
+                      DropdownButtonFormField<String>(
+                        initialValue: _categoryForDropdown(
+                          _categoryId,
+                          categories,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Danh mục chi tiêu',
+                          prefixIcon: Icon(Icons.category_outlined),
+                        ),
+                        items: categories
+                            .map(
+                              (item) => DropdownMenuItem(
+                                value: item.id,
+                                child: Text(item.name),
+                              ),
+                            )
+                            .toList(growable: false),
+                        onChanged: (value) {
+                          setState(() => _categoryId = value);
+                          _recomputeDirty();
+                        },
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 20),
+                      Text(
+                        'Thông tin hóa đơn',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _sellerController,
+                        decoration: InputDecoration(
+                          labelText: 'Tên người bán *',
+                          helperText: lowConfidence.contains('sellerName')
+                              ? 'Độ tin cậy thấp — vui lòng kiểm tra'
+                              : null,
+                          prefixIcon: const Icon(Icons.storefront_outlined),
+                        ),
+                        textInputAction: TextInputAction.next,
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'Hãy nhập tên người bán.'
+                            : null,
+                      ),
+                      const SizedBox(height: 10),
+                      _buildDateField(),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Số tiền',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 12),
+                      _fieldPair(
+                        minFieldWidth: 148,
+                        first: _MoneyField(
+                          controller: _subtotalController,
+                          label: 'Trước thuế',
+                        ),
+                        second: _MoneyField(
+                          controller: _discountController,
+                          label: 'Giảm giá',
+                          lowConfidence: lowConfidence.contains(
+                            'discountMinor',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _fieldPair(
+                        minFieldWidth: 148,
+                        first: _MoneyField(
+                          controller: _taxController,
+                          label: 'Thuế',
+                        ),
+                        second: _MoneyField(
+                          controller: _totalController,
+                          label: 'Tổng thanh toán *',
+                          requiredPositive: true,
+                          lowConfidence: lowConfidence.contains('totalMinor'),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Phân loại',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 12),
+                      _fieldPair(
+                        minFieldWidth: 148,
+                        first: DropdownButtonFormField<String>(
+                          initialValue: _categoryForDropdown(
+                            _categoryId,
+                            categories,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Danh mục',
+                            prefixIcon: Icon(Icons.category_outlined),
+                          ),
+                          items: categories
+                              .map(
+                                (item) => DropdownMenuItem(
+                                  value: item.id,
+                                  child: Text(item.name),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (value) {
+                            setState(() => _categoryId = value);
+                            _recomputeDirty();
+                          },
+                        ),
+                        second: TextFormField(
+                          controller: _tagsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Nhãn',
+                            hintText: 'Ví dụ: công việc',
+                            helperText:
+                                'Từ khóa để tìm/lọc; ngăn cách bằng dấu phẩy.',
+                            prefixIcon: Icon(Icons.sell_outlined),
+                          ),
+                          textInputAction: TextInputAction.next,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: _notesController,
+                        decoration: const InputDecoration(
+                          labelText: 'Ghi chú',
+                          hintText: 'Thông tin cần nhớ về hóa đơn này',
+                          prefixIcon: Icon(Icons.notes_outlined),
+                          alignLabelWithHint: true,
+                          helperText:
+                              'Ghi chú riêng, hiển thị trong chi tiết hóa đơn.',
+                        ),
+                        minLines: 1,
+                        maxLines: 3,
+                        textCapitalization: TextCapitalization.sentences,
+                      ),
+                      const SizedBox(height: 24),
+                      _buildLineItemsEditor(context, categories),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _tagsController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nhãn',
-                    hintText: 'Ví dụ: công việc, hoàn tiền',
-                    helperText: 'Phân tách nhiều nhãn bằng dấu phẩy.',
-                    prefixIcon: Icon(Icons.sell_outlined),
-                  ),
-                  textInputAction: TextInputAction.next,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _notesController,
-                  decoration: const InputDecoration(
-                    labelText: 'Ghi chú',
-                    hintText: 'Thông tin cần nhớ về hóa đơn này',
-                    prefixIcon: Icon(Icons.notes_outlined),
-                    alignLabelWithHint: true,
-                  ),
-                  minLines: 2,
-                  maxLines: 4,
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-                const SizedBox(height: 24),
-                _buildLineItemsEditor(context, categories),
-              ],
+              ),
             ),
           ),
         ),
@@ -263,7 +327,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: _saving ? null : () => context.pop(),
-                  child: const Text('Để sau'),
+                  child: Text(_isManualExpense ? 'Hủy' : 'Để sau'),
                 ),
               ),
               const SizedBox(width: 12),
@@ -275,7 +339,15 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                   icon: _saving
                       ? const ButtonSpinner()
                       : const Icon(Icons.check),
-                  label: Text(_saving ? 'Đang lưu' : 'Xác nhận và lưu'),
+                  label: Text(
+                    _saving
+                        ? 'Đang lưu'
+                        : _isManualExpense
+                        ? widget.invoice.status == InvoiceStatus.confirmed
+                              ? 'Cập nhật khoản chi'
+                              : 'Lưu khoản chi'
+                        : 'Xác nhận và lưu',
+                  ),
                 ),
               ),
             ],
@@ -292,19 +364,27 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
   List<String> _collectFieldErrors() {
     final errors = <String>[];
 
-    if (_sellerController.text.trim().isEmpty) {
+    if (!_isManualExpense && _sellerController.text.trim().isEmpty) {
       errors.add('Hãy nhập tên người bán.');
     }
 
     final total = MoneyFormatter.tryParse(_totalController.text);
     if (total == null || total <= 0) {
-      errors.add('Tổng thanh toán phải lớn hơn 0.');
+      errors.add(
+        _isManualExpense
+            ? 'Số tiền phải lớn hơn 0.'
+            : 'Tổng thanh toán phải lớn hơn 0.',
+      );
     }
+    if (_isManualExpense) return errors;
     if ((MoneyFormatter.tryParse(_subtotalController.text) ?? 0) < 0) {
       errors.add('Số tiền trước thuế không hợp lệ.');
     }
     if ((MoneyFormatter.tryParse(_taxController.text) ?? 0) < 0) {
       errors.add('Số tiền thuế không hợp lệ.');
+    }
+    if ((MoneyFormatter.tryParse(_discountController.text) ?? 0) < 0) {
+      errors.add('Số tiền giảm giá không hợp lệ.');
     }
 
     for (var i = 0; i < _lineDrafts.length; i++) {
@@ -323,9 +403,6 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       if (_validateOptionalMoney(draft.unitPriceController.text) != null) {
         errors.add('Dòng hàng $position: đơn giá không hợp lệ.');
       }
-      if (_validateOptionalDecimal(draft.taxRateController.text) != null) {
-        errors.add('Dòng hàng $position: thuế suất không hợp lệ.');
-      }
     }
 
     if (errors.isEmpty) {
@@ -338,17 +415,24 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
   /// Mọi controller đang được theo dõi, để gắn/gỡ listener ở một chỗ.
   Iterable<TextEditingController> get _watchedControllers sync* {
     yield _sellerController;
-    yield _taxCodeController;
-    yield _numberController;
     yield _subtotalController;
     yield _taxController;
+    yield _discountController;
     yield _totalController;
     yield _notesController;
     yield _tagsController;
     for (final draft in _lineDrafts) {
-      yield draft.descriptionController;
-      yield draft.totalController;
+      yield* _lineControllers(draft);
     }
+  }
+
+  Iterable<TextEditingController> _lineControllers(
+    _InvoiceLineDraft draft,
+  ) sync* {
+    yield draft.descriptionController;
+    yield draft.quantityController;
+    yield draft.unitPriceController;
+    yield draft.totalController;
   }
 
   /// `PopScope.canPop` được đọc lúc BUILD, mà gõ chữ vào `TextEditingController`
@@ -367,12 +451,13 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
     String norm(String? value) => value ?? '';
 
     if (_sellerController.text != norm(invoice.sellerName)) return true;
-    if (_taxCodeController.text != norm(invoice.sellerTaxCode)) return true;
-    if (_numberController.text != norm(invoice.invoiceNumber)) return true;
     if (_subtotalController.text != invoice.subtotalMinor.toString()) {
       return true;
     }
     if (_taxController.text != invoice.taxMinor.toString()) return true;
+    if (_discountController.text != invoice.discountMinor.toString()) {
+      return true;
+    }
     if (_totalController.text != invoice.totalMinor.toString()) return true;
     if (_notesController.text != norm(invoice.notes)) return true;
     if (_tagsController.text != invoice.tags.join(', ')) return true;
@@ -383,6 +468,13 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       final draft = _lineDrafts[i];
       final line = invoice.lines[i];
       if (draft.descriptionController.text != norm(line.description)) {
+        return true;
+      }
+      if (draft.quantityController.text != (line.quantity?.toString() ?? '')) {
+        return true;
+      }
+      if (draft.unitPriceController.text !=
+          (line.unitPriceMinor?.toString() ?? '')) {
         return true;
       }
       if (draft.totalController.text != line.totalMinor.toString()) return true;
@@ -412,7 +504,10 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       lastDate: DateTime.now().add(const Duration(days: 1)),
       initialDate: _issuedAt ?? DateTime.now(),
     );
-    if (result != null) setState(() => _issuedAt = result);
+    if (result != null) {
+      setState(() => _issuedAt = result);
+      _recomputeDirty();
+    }
   }
 
   Future<void> _confirm() async {
@@ -428,20 +523,35 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       return;
     }
     final now = DateTime.now();
-    final subtotal = MoneyFormatter.tryParse(_subtotalController.text) ?? 0;
-    final tax = MoneyFormatter.tryParse(_taxController.text) ?? 0;
     final total = MoneyFormatter.tryParse(_totalController.text) ?? 0;
-    final lines = _lineDrafts.map(_toInvoiceLine).toList(growable: false);
+    final subtotal = _isManualExpense
+        ? total
+        : MoneyFormatter.tryParse(_subtotalController.text) ?? 0;
+    final tax = _isManualExpense
+        ? 0
+        : MoneyFormatter.tryParse(_taxController.text) ?? 0;
+    final discount = _isManualExpense
+        ? 0
+        : MoneyFormatter.tryParse(_discountController.text) ?? 0;
+    final sellerName = _sellerController.text.trim().isEmpty && _isManualExpense
+        ? 'Khoản chi'
+        : _sellerController.text.trim();
+    final categories = ref.read(categoriesProvider).asData?.value ?? const [];
+    final categoryId = _categoryForSave(_categoryId, categories);
+    final lines = _lineDrafts
+        .map((draft) => _toInvoiceLine(draft, categories))
+        .toList(growable: false);
     final updated = widget.invoice.copyWith(
-      sellerName: _sellerController.text.trim(),
-      sellerTaxCode: _taxCodeController.text.trim(),
-      invoiceNumber: _numberController.text.trim(),
-      issuedAt: _issuedAt,
+      sellerName: sellerName,
+      issuedAt: _isManualExpense
+          ? (_issuedAt ?? widget.invoice.createdAt)
+          : _issuedAt,
       subtotalMinor: subtotal,
       taxMinor: tax,
+      discountMinor: discount,
       totalMinor: total,
-      lines: lines,
-      categoryId: _categoryId ?? 'other',
+      lines: _isManualExpense ? const [] : lines,
+      categoryId: categoryId,
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
@@ -456,11 +566,10 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       updatedAt: now,
       confirmedAt: now,
       evidence: _updatedEvidence(
-        sellerName: _sellerController.text.trim(),
-        sellerTaxCode: _taxCodeController.text.trim(),
-        invoiceNumber: _numberController.text.trim(),
+        sellerName: sellerName,
         subtotal: subtotal,
         tax: tax,
+        discount: discount,
         total: total,
       ),
     );
@@ -481,7 +590,9 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
     try {
       final repository = ref.read(invoiceRepositoryProvider);
       await repository.saveInvoice(updated);
-      if (_categoryId != null) {
+      if (!_isManualExpense &&
+          _categoryId != null &&
+          categories.any((item) => item.id == _categoryId)) {
         await repository.saveMerchantRule(updated.sellerName, _categoryId!);
       }
       if (mounted) context.pop(true);
@@ -497,20 +608,47 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
     }
   }
 
+  Widget _buildDateField() {
+    final isManualExpense = _isManualExpense;
+    final date =
+        _issuedAt ?? (isManualExpense ? widget.invoice.createdAt : null);
+    return Semantics(
+      button: true,
+      label: date == null
+          ? isManualExpense
+                ? 'Chọn ngày chi'
+                : 'Chọn ngày lập hóa đơn'
+          : '${isManualExpense ? 'Ngày chi' : 'Ngày lập'} ${DateFormat('dd/MM/yyyy').format(date)}',
+      child: ListTile(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
+        leading: const Icon(Icons.calendar_today_outlined),
+        title: Text(isManualExpense ? 'Ngày chi' : 'Ngày lập hóa đơn'),
+        subtitle: Text(
+          date == null
+              ? 'Chưa xác định'
+              : DateFormat('dd/MM/yyyy').format(date),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: _pickDate,
+      ),
+    );
+  }
+
   List<FieldEvidenceEntity> _updatedEvidence({
     required String sellerName,
-    required String sellerTaxCode,
-    required String invoiceNumber,
     required int subtotal,
     required int tax,
+    required int discount,
     required int total,
   }) {
     final values = <String, String>{
       'sellerName': sellerName,
-      'sellerTaxCode': sellerTaxCode,
-      'invoiceNumber': invoiceNumber,
       'subtotalMinor': subtotal.toString(),
       'taxMinor': tax.toString(),
+      'discountMinor': discount.toString(),
       'totalMinor': total.toString(),
     };
     return widget.invoice.evidence
@@ -528,6 +666,31 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
           );
         })
         .toList(growable: false);
+  }
+
+  Widget _fieldPair({
+    required Widget first,
+    required Widget second,
+    required double minFieldWidth,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < minFieldWidth * 2 + 12) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [first, const SizedBox(height: 10), second],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: first),
+            const SizedBox(width: 12),
+            Expanded(child: second),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildLineItemsEditor(
@@ -637,43 +800,35 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: draft.taxRateController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+            const SizedBox(height: 10),
+            _fieldPair(
+              minFieldWidth: 130,
+              first: _MoneyField(
+                controller: draft.totalController,
+                label: 'Thành tiền *',
               ),
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Thuế suất',
-                suffixText: '%',
+              second: DropdownButtonFormField<String>(
+                initialValue: _categoryForDropdown(
+                  draft.categoryId,
+                  categories,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Danh mục chi tiêu',
+                  prefixIcon: Icon(Icons.category_outlined),
+                ),
+                items: categories
+                    .map(
+                      (item) => DropdownMenuItem(
+                        value: item.id,
+                        child: Text(item.name),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: (value) {
+                  setState(() => draft.categoryId = value);
+                  _recomputeDirty();
+                },
               ),
-              validator: (value) => _validateOptionalDecimal(value),
-            ),
-            const SizedBox(height: 12),
-            _MoneyField(
-              controller: draft.totalController,
-              label: 'Thành tiền *',
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue:
-                  categories.any((item) => item.id == draft.categoryId)
-                  ? draft.categoryId
-                  : null,
-              decoration: const InputDecoration(
-                labelText: 'Danh mục chi tiêu',
-                prefixIcon: Icon(Icons.category_outlined),
-              ),
-              items: categories
-                  .map(
-                    (item) => DropdownMenuItem(
-                      value: item.id,
-                      child: Text(item.name),
-                    ),
-                  )
-                  .toList(growable: false),
-              onChanged: (value) => setState(() => draft.categoryId = value),
             ),
           ],
         ),
@@ -685,31 +840,60 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
     final draft = _InvoiceLineDraft.empty();
     // Draft mới cũng phải theo dõi được, nếu không thì sửa dòng vừa thêm sẽ
     // không tính là bẩn.
-    draft.descriptionController.addListener(_recomputeDirty);
-    draft.totalController.addListener(_recomputeDirty);
+    for (final controller in _lineControllers(draft)) {
+      controller.addListener(_recomputeDirty);
+    }
     setState(() => _lineDrafts.add(draft));
     _recomputeDirty();
   }
 
-  void _removeLine(int index) {
+  Future<void> _removeLine(int index) async {
+    final description = _lineDrafts[index].descriptionController.text.trim();
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Xóa dòng hàng?',
+      message:
+          '“${description.isEmpty ? 'Dòng hàng này' : description}” sẽ bị '
+          'xóa khỏi hóa đơn đang chỉnh sửa.',
+      confirmLabel: 'Xóa dòng',
+      destructive: true,
+    );
+    if (!confirmed || !mounted || index >= _lineDrafts.length) return;
     final draft = _lineDrafts.removeAt(index);
-    draft.descriptionController.removeListener(_recomputeDirty);
-    draft.totalController.removeListener(_recomputeDirty);
+    for (final controller in _lineControllers(draft)) {
+      controller.removeListener(_recomputeDirty);
+    }
     draft.dispose();
     setState(() {});
     _recomputeDirty();
   }
 
-  InvoiceLineEntity _toInvoiceLine(_InvoiceLineDraft draft) {
+  InvoiceLineEntity _toInvoiceLine(
+    _InvoiceLineDraft draft,
+    List<CategoryEntity> categories,
+  ) {
     return InvoiceLineEntity(
       id: draft.id,
       description: draft.descriptionController.text.trim(),
       quantity: _parseDecimal(draft.quantityController.text),
       unitPriceMinor: MoneyFormatter.tryParse(draft.unitPriceController.text),
-      taxRate: _parseDecimal(draft.taxRateController.text),
       totalMinor: MoneyFormatter.tryParse(draft.totalController.text) ?? 0,
-      categoryId: draft.categoryId,
+      categoryId: _categoryForSave(draft.categoryId, categories),
     );
+  }
+
+  String? _categoryForDropdown(
+    String? candidate,
+    List<CategoryEntity> categories,
+  ) {
+    if (categories.any((item) => item.id == candidate)) return candidate;
+    if (categories.any((item) => item.id == 'other')) return 'other';
+    return null;
+  }
+
+  String? _categoryForSave(String? candidate, List<CategoryEntity> categories) {
+    if (categories.isEmpty) return 'other';
+    return _categoryForDropdown(candidate, categories);
   }
 
   String? _validateOptionalDecimal(String? value) {
@@ -736,13 +920,11 @@ class _InvoiceLineDraft {
     String? description,
     String? quantity,
     String? unitPrice,
-    String? taxRate,
     String? total,
     String? categoryId,
   }) : descriptionController = TextEditingController(text: description),
        quantityController = TextEditingController(text: quantity),
        unitPriceController = TextEditingController(text: unitPrice),
-       taxRateController = TextEditingController(text: taxRate),
        totalController = TextEditingController(text: total),
        categoryId = categoryId;
 
@@ -755,7 +937,6 @@ class _InvoiceLineDraft {
         description: line.description,
         quantity: line.quantity?.toString(),
         unitPrice: line.unitPriceMinor?.toString(),
-        taxRate: line.taxRate?.toString(),
         total: line.totalMinor.toString(),
         categoryId: line.categoryId,
       );
@@ -764,7 +945,6 @@ class _InvoiceLineDraft {
   final TextEditingController descriptionController;
   final TextEditingController quantityController;
   final TextEditingController unitPriceController;
-  final TextEditingController taxRateController;
   final TextEditingController totalController;
   String? categoryId;
 
@@ -772,7 +952,6 @@ class _InvoiceLineDraft {
     descriptionController.dispose();
     quantityController.dispose();
     unitPriceController.dispose();
-    taxRateController.dispose();
     totalController.dispose();
   }
 }
@@ -798,7 +977,6 @@ class _MoneyField extends StatelessWidget {
       textInputAction: TextInputAction.next,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: const Icon(Icons.payments_outlined),
         suffixText: '₫',
         helperText: lowConfidence
             ? 'Độ tin cậy thấp — vui lòng kiểm tra'
@@ -807,7 +985,7 @@ class _MoneyField extends StatelessWidget {
       validator: (value) {
         final parsed = MoneyFormatter.tryParse(value ?? '');
         if (parsed == null || parsed < 0) return 'Số tiền không hợp lệ.';
-        if (requiredPositive && parsed <= 0) return 'Tổng tiền phải lớn hơn 0.';
+        if (requiredPositive && parsed <= 0) return 'Số tiền phải lớn hơn 0.';
         return null;
       },
     );

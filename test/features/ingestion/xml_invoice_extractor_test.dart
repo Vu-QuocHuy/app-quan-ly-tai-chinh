@@ -28,8 +28,6 @@ void main() {
 
         expect(result.adapterName, 'vietnam-einvoice-xml');
         expect(result.invoice.sellerName, 'CÔNG TY TNHH DEMO');
-        expect(result.invoice.sellerTaxCode, '0312345678');
-        expect(result.invoice.invoiceNumber, '00001234');
         expect(result.invoice.invoiceSymbol, 'C24TAA');
         expect(result.invoice.issuedAt, DateTime(2026, 8, 20));
         expect(result.invoice.subtotalMinor, 100000);
@@ -57,14 +55,12 @@ void main() {
       );
 
       expect(result.invoice.sellerName, 'CÔNG TY GENERIC');
-      expect(result.invoice.sellerTaxCode, '0101234567');
-      expect(result.invoice.invoiceNumber, 'GEN-0001');
       expect(result.invoice.invoiceSymbol, 'G26AA');
       expect(result.invoice.issuedAt, DateTime(2026, 9, 1));
       expect(result.invoice.totalMinor, 54000);
+      expect(result.invoice.taxMinor, 4000);
       expect(result.invoice.lines.single.description, 'Hàng tiêu dùng');
       expect(result.invoice.lines.single.quantity, 2);
-      expect(result.invoice.lines.single.taxRate, 8);
     });
 
     test('parses invoice information schema variant', () async {
@@ -81,8 +77,6 @@ void main() {
       );
 
       expect(result.invoice.sellerName, 'CỬA HÀNG INFORMATION');
-      expect(result.invoice.sellerTaxCode, '0207654321');
-      expect(result.invoice.invoiceNumber, 'INFO-0002');
       expect(result.invoice.invoiceSymbol, 'I26BB');
       expect(result.invoice.issuedAt, DateTime(2026, 9, 2));
       expect(result.invoice.totalMinor, 33000);

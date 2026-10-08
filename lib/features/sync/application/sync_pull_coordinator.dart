@@ -224,13 +224,12 @@ class SyncPullCoordinator {
   bool _sameContent(InvoiceEntity left, InvoiceEntity right) {
     if (left.id != right.id ||
         left.sellerName != right.sellerName ||
-        left.sellerTaxCode != right.sellerTaxCode ||
-        left.invoiceNumber != right.invoiceNumber ||
         left.invoiceSymbol != right.invoiceSymbol ||
         left.issuedAt != right.issuedAt ||
         left.currencyCode != right.currencyCode ||
         left.subtotalMinor != right.subtotalMinor ||
         left.taxMinor != right.taxMinor ||
+        left.discountMinor != right.discountMinor ||
         left.totalMinor != right.totalMinor ||
         left.sourceType != right.sourceType ||
         left.sourceHash != right.sourceHash ||
@@ -264,7 +263,6 @@ class SyncPullCoordinator {
           a.description != b.description ||
           a.quantity != b.quantity ||
           a.unitPriceMinor != b.unitPriceMinor ||
-          a.taxRate != b.taxRate ||
           a.totalMinor != b.totalMinor ||
           a.categoryId != b.categoryId) {
         return false;

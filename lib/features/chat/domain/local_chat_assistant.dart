@@ -254,10 +254,7 @@ class LocalChatAssistant {
     final visible = invoices
         .take(5)
         .map((invoice) {
-          final number = invoice.invoiceNumber == null
-              ? ''
-              : ' · Số ${invoice.invoiceNumber}';
-          return '${invoice.sellerName}$number: '
+          return '${invoice.sellerName}: '
               '${MoneyFormatter.format(invoice.totalMinor)}';
         })
         .join('; ');
@@ -316,10 +313,7 @@ class LocalChatAssistant {
   }
 
   String _invoiceCitationLabel(InvoiceEntity invoice) {
-    final number = invoice.invoiceNumber == null
-        ? ''
-        : ' · Số ${invoice.invoiceNumber}';
-    return 'Mở ${invoice.sellerName}$number · '
+    return 'Mở ${invoice.sellerName} · '
         '${MoneyFormatter.format(invoice.totalMinor)}';
   }
 

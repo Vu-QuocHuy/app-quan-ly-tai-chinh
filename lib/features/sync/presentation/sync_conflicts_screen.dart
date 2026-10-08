@@ -143,11 +143,6 @@ class _ConflictCard extends StatelessWidget {
               remoteValue: _money(remote.totalMinor, remote.currencyCode),
             ),
             _ComparisonRow(
-              label: 'Số hóa đơn',
-              localValue: local.invoiceNumber ?? 'Chưa có',
-              remoteValue: remote.invoiceNumber ?? 'Chưa có',
-            ),
-            _ComparisonRow(
               label: 'Danh mục',
               localValue: local.categoryId ?? 'Chưa phân loại',
               remoteValue: remote.categoryId ?? 'Chưa phân loại',

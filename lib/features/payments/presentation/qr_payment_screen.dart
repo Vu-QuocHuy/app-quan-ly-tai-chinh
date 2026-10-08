@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../application/qr_payment_providers.dart';
 import '../data/qr_payment_draft_store.dart';
@@ -482,6 +483,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
       categoryId: draft.categoryId,
       notes: draft.memo.isEmpty ? 'Thanh toán VietQR' : draft.memo,
       tags: const ['qr-payment'],
+      issuedAt: now,
       createdAt: draft.createdAt,
       updatedAt: now,
       confirmedAt: now,
@@ -526,6 +528,18 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   }
 
   Future<void> _cancelDraft() async {
+    if (_isSaving || _draft == null) return;
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Bỏ bản nháp thanh toán?',
+      message:
+          'Thông tin thanh toán QR này sẽ bị xóa. Khoản chi chưa được ghi '
+          'vào lịch sử.',
+      confirmLabel: 'Bỏ bản nháp',
+      cancelLabel: 'Tiếp tục',
+      destructive: true,
+    );
+    if (!confirmed || !mounted || _draft == null) return;
     final scanRecorded = await (_scanEventFuture ?? Future.value(true));
     if (scanRecorded) {
       await _recordCloudEvent(_draftFromFields(), 'user_cancelled');
@@ -568,6 +582,14 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
         title: Text(
           draft == null ? 'Quét QR thanh toán' : 'Kiểm tra khoản chi',
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Lịch sử thanh toán QR',
+            onPressed: () => context.push('/qr-payment/history'),
+            icon: const Icon(Icons.history),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: _loadingDraft
           ? const Center(child: CircularProgressIndicator())

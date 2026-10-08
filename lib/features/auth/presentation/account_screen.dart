@@ -15,8 +15,8 @@ import '../../invoices/data/drift_invoice_repository.dart';
 import '../../notifications/data/budget_alert_preferences.dart';
 import '../domain/auth_validators.dart';
 import '../../notifications/data/budget_notification_service.dart';
-import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/errors/error_presenter.dart';
+import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/widgets/app_callout.dart';
 import '../../../shared/widgets/app_skeleton.dart';
 
@@ -298,24 +298,24 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  DecoratedBox(
-                    decoration: ShapeDecoration(
-                      color: scheme.tertiaryContainer,
-                      shape: AppShapes.control,
-                    ),
-                    child: SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: Icon(
-                        _registering
-                            ? Icons.person_add_alt_1_outlined
-                            : Icons.login,
-                        color: scheme.onTertiaryContainer,
-                        size: AppIconSizes.md,
+                  if (_registering) ...[
+                    DecoratedBox(
+                      decoration: ShapeDecoration(
+                        color: scheme.tertiaryContainer,
+                        shape: AppShapes.control,
+                      ),
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Icon(
+                          Icons.person_add_alt_1_outlined,
+                          color: scheme.onTertiaryContainer,
+                          size: AppIconSizes.md,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
+                    const SizedBox(width: AppSpacing.md),
+                  ],
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -490,28 +490,23 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 ),
               ],
               const SizedBox(height: AppSpacing.xl),
-              FilledButton.icon(
+              FilledButton(
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
                 ),
                 onPressed: _busy ? null : _submit,
-                icon: _busy
-                    ? const ButtonSpinner()
-                    : Icon(
-                        _registering
-                            ? Icons.person_add_alt_1_outlined
-                            : Icons.login,
-                      ),
-                label: Text(_registering ? 'Tạo tài khoản' : 'Đăng nhập'),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(52),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_busy)
+                      const ButtonSpinner()
+                    else if (_registering)
+                      const Icon(Icons.person_add_alt_1_outlined),
+                    if (_busy || _registering)
+                      const SizedBox(width: AppSpacing.sm),
+                    Text(_registering ? 'Tạo tài khoản' : 'Đăng nhập'),
+                  ],
                 ),
-                onPressed: _busy ? null : _signInWithGoogle,
-                icon: const Icon(Icons.account_circle_outlined),
-                label: const Text('Tiếp tục với Google'),
               ),
             ],
           ),
@@ -724,40 +719,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       setState(() {
         _messageIsError = true;
         _message = 'Không thể kết nối Supabase: ${friendlyMessage(error)}';
-      });
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _signInWithGoogle() async {
-    final auth = ref.read(supabaseAuthServiceProvider);
-    if (auth == null) return;
-    setState(() {
-      _busy = true;
-      _message = null;
-    });
-    try {
-      final launched = await auth.signInWithGoogle();
-      if (!launched) {
-        throw const AuthException('Không thể mở trang đăng nhập Google.');
-      }
-      if (!mounted) return;
-      setState(() {
-        _messageIsError = false;
-        _message = 'Đã mở Google. Hoàn tất đăng nhập để quay lại ứng dụng.';
-      });
-    } on AuthException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _messageIsError = true;
-        _message = friendlyMessage(error);
-      });
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _messageIsError = true;
-        _message = friendlyMessage(error);
       });
     } finally {
       if (mounted) setState(() => _busy = false);

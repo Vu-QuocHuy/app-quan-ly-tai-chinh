@@ -14,6 +14,7 @@ void main() {
     currencyCode: 'VND',
     subtotalMinor: 90000,
     taxMinor: 10000,
+    discountMinor: 5000,
     totalMinor: 100000,
     sourceType: InvoiceSourceType.xml,
     sourceHash: 'restore-hash',
@@ -44,8 +45,25 @@ void main() {
     expect(preview.duplicateCount, 0);
     expect(preview.invoices.single.categoryId, 'other');
     expect(preview.invoices.single.notes, 'Ghi chú cần giữ');
+    expect(preview.invoices.single.discountMinor, 5000);
     expect(preview.invoices.single.tags, ['công việc', 'Q3']);
     expect(preview.invoices.single.lines.single.id, 'line-restore');
+  });
+
+  test('restores older exports without a discount as zero', () {
+    final payload =
+        jsonDecode(InvoiceExportFormatter.toJson([invoice]))
+              as Map<String, dynamic>
+          ..remove('checksumSha256');
+    ((payload['invoices'] as List).single as Map<String, dynamic>).remove(
+      'discountMinor',
+    );
+
+    final preview = InvoiceRestoreParser.parse(
+      jsonEncode(payload),
+      fileName: 'legacy-backup.json',
+    );
+    expect(preview.invoices.single.discountMinor, 0);
   });
 
   test('maps unknown line categories to other during restore', () {

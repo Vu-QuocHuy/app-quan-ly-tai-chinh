@@ -58,6 +58,50 @@ void main() {
     );
     expect(repository.savedBudgets.single.limitMinor, 500000);
   });
+
+  testWidgets('confirms before discarding edited category data', (
+    tester,
+  ) async {
+    const existingCategory = CategoryEntity(
+      id: 'food',
+      name: 'Ăn uống',
+      iconName: 'restaurant',
+      colorValue: 0xFF2563EB,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          categoriesProvider.overrideWith(
+            (ref) => Stream.value(const [existingCategory]),
+          ),
+          selectedMonthProvider.overrideWith((ref) => DateTime(2026, 8)),
+        ],
+        child: const MaterialApp(home: CategoryManagementScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ăn uống'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('category-name-field')),
+      'Ăn uống ngoài nhà',
+    );
+    await tester.tap(find.text('Hủy'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bỏ thay đổi?'), findsOneWidget);
+
+    await tester.tap(find.text('Tiếp tục chỉnh sửa'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('category-name-field')), findsOneWidget);
+
+    await tester.tap(find.text('Hủy'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bỏ thay đổi'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('category-name-field')), findsNothing);
+  });
 }
 
 class _FakeInvoiceRepository extends Fake implements InvoiceRepository {
