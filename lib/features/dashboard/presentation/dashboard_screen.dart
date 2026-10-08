@@ -19,6 +19,7 @@ import '../../../shared/widgets/money_text.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/month_selector.dart';
 import '../../invoices/domain/invoice_models.dart';
+import '../../income/presentation/income_entry_sheet.dart';
 import '../../../shared/widgets/section_header.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -48,6 +49,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final dashboard = ref.watch(dashboardProvider);
+    final incomes = ref.watch(incomesProvider);
     final categories = ref.watch(categoriesProvider).value ?? const [];
     final selectedMonth = ref.watch(selectedMonthProvider);
     return Scaffold(
@@ -103,6 +105,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 children: [
                   _HeroSummary(snapshot: snapshot, month: selectedMonth),
                   const SizedBox(height: AppSpacing.lg),
+                  _CashFlowCard(
+                    incomeError: incomes.hasError,
+                    onRetry: () => ref.invalidate(incomesProvider),
+                    onAddIncome: () => showModalBottomSheet<bool>(
+                      context: context,
+                      showDragHandle: true,
+                      isScrollControlled: true,
+                      builder: (context) => const IncomeEntrySheet(),
+                    ),
+                    incomeTotal: incomes.whenOrNull(
+                      data: (entries) => entries
+                          .where(
+                            (entry) =>
+                                MonthUtils.key(entry.receivedAt) ==
+                                MonthUtils.key(selectedMonth),
+                          )
+                          .fold<int>(
+                            0,
+                            (total, entry) => total + entry.amountMinor,
+                          ),
+                    ),
+                    expenseTotal: snapshot.totalMinor,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
                   _BudgetCard(
                     snapshot: snapshot,
                     month: selectedMonth,
@@ -129,6 +155,95 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 }
 
+class _CashFlowCard extends StatelessWidget {
+  const _CashFlowCard({
+    required this.incomeTotal,
+    required this.expenseTotal,
+    required this.incomeError,
+    required this.onRetry,
+    required this.onAddIncome,
+  });
+
+  final int? incomeTotal;
+  final int expenseTotal;
+  final bool incomeError;
+  final VoidCallback onRetry;
+  final VoidCallback onAddIncome;
+
+  @override
+  Widget build(BuildContext context) {
+    final income = incomeTotal;
+    final finance = Theme.of(context).extension<AppFinanceColors>()!;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tổng thu',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (income == null)
+                      Text(incomeError ? 'Không tải được' : 'Đang tải…')
+                    else
+                      MoneyText(
+                        income,
+                        emphasis: MoneyEmphasis.title,
+                        fitToWidth: true,
+                        tone: finance.income,
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Thu − chi',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (income == null)
+                      Text(incomeError ? 'Không tải được' : 'Đang tải…')
+                    else
+                      MoneyText(
+                        income - expenseTotal,
+                        emphasis: MoneyEmphasis.title,
+                        fitToWidth: true,
+                      ),
+                  ],
+                ),
+              ),
+              if (incomeError)
+                IconButton(
+                  tooltip: 'Tải lại khoản thu',
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh),
+                ),
+            ],
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton.icon(
+              onPressed: onAddIncome,
+              icon: const Icon(Icons.add),
+              label: const Text('Thêm khoản thu'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _HeroSummary extends StatelessWidget {
   const _HeroSummary({required this.snapshot, required this.month});
 
@@ -141,7 +256,7 @@ class _HeroSummary extends StatelessWidget {
     return Semantics(
       container: true,
       label:
-          'Tổng chi ${MonthUtils.label(month)} ${MoneyFormatter.format(snapshot.totalMinor)}, ${snapshot.invoiceCount} hóa đơn',
+          'Tổng chi ${MonthUtils.label(month)} ${MoneyFormatter.format(snapshot.totalMinor)}, ${snapshot.invoiceCount} khoản chi',
       child: DecoratedBox(
         decoration: ShapeDecoration(
           // Gradient bị GIỚI HẠN trong MỘT họ vai VÀ theo brightness — xem
@@ -203,7 +318,7 @@ class _HeroSummary extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.md),
               Text(
-                '${snapshot.invoiceCount} hóa đơn đã xác nhận',
+                '${snapshot.invoiceCount} khoản chi đã xác nhận',
                 style: Theme.of(
                   context,
                 ).textTheme.bodyLarge?.copyWith(color: scheme.onPrimary),

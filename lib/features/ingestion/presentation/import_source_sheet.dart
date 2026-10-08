@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum ImportSource { camera, gallery, qrPayment, manual }
+enum ImportSource { income, camera, gallery, qrPayment, manual }
 
 class ImportSourceSheet extends StatelessWidget {
   const ImportSourceSheet({super.key});
@@ -18,12 +18,18 @@ class ImportSourceSheet extends StatelessWidget {
             Text('Thêm giao dịch', style: theme.textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(
-              'Chụp hóa đơn hoặc ghi nhanh khoản chi không có hóa đơn.',
+              'Ghi khoản thu hoặc thêm khoản chi.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 20),
+            _SourceTile(
+              icon: Icons.add_circle_outline,
+              title: 'Thêm khoản thu',
+              subtitle: 'Chỉ nhập số tiền',
+              onTap: () => Navigator.pop(context, ImportSource.income),
+            ),
             _SourceTile(
               icon: Icons.photo_camera_outlined,
               title: 'Chụp hóa đơn',

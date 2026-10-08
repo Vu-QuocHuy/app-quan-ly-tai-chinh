@@ -1,6 +1,6 @@
 # Quản lý Tài chính
 
-Ứng dụng Flutter offline-first để quản lý thu chi cá nhân và nhóm: ghi giao dịch thủ công, OCR hóa đơn từ camera/thư viện, quét VietQR để mở app ngân hàng rồi tự xác nhận kết quả; kiểm tra dữ liệu trước khi lưu; tự phân loại; phát hiện trùng; theo dõi chi tiêu, ngân sách và xu hướng tài chính. Giao diện hiện không cung cấp XML/PDF như nguồn nhập hóa đơn; parser cũ vẫn được giữ trong repo để kiểm thử tương thích. Người dùng phải đăng nhập Supabase trước khi vào ứng dụng; sau lần đăng nhập đầu tiên, dữ liệu vẫn dùng được offline và sẽ đồng bộ lại khi có mạng.
+Ứng dụng Flutter offline-first để quản lý thu chi cá nhân và nhóm: ghi khoản thu bằng số tiền, ghi khoản chi thủ công, OCR hóa đơn từ camera/thư viện, quét VietQR để mở app ngân hàng rồi tự xác nhận kết quả; kiểm tra dữ liệu trước khi lưu; tự phân loại; phát hiện trùng; theo dõi thu, chi, ngân sách và xu hướng tài chính. Giao diện hiện không cung cấp XML/PDF như nguồn nhập hóa đơn; parser cũ vẫn được giữ trong repo để kiểm thử tương thích. Người dùng phải đăng nhập Supabase trước khi vào ứng dụng; sau lần đăng nhập đầu tiên, dữ liệu vẫn dùng được offline và sẽ đồng bộ lại khi có mạng.
 
 ## Kiến trúc
 

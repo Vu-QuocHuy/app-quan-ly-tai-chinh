@@ -380,8 +380,12 @@ class SettingsScreen extends ConsumerWidget {
           .read(invoiceRepositoryProvider)
           .watchInvoices()
           .first;
+      final incomes = await ref.read(incomeRepositoryProvider).getAll();
       final uri = json
-          ? await const InvoiceExportService().exportJson(invoices)
+          ? await const InvoiceExportService().exportJson(
+              invoices,
+              incomes: incomes,
+            )
           : await const InvoiceExportService().exportCsv(invoices);
       if (uri == null) return;
       await _recordBackup(
@@ -391,7 +395,13 @@ class SettingsScreen extends ConsumerWidget {
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đã xuất ${invoices.length} hóa đơn.')),
+        SnackBar(
+          content: Text(
+            json
+                ? 'Đã xuất ${invoices.length} khoản chi và ${incomes.length} khoản thu.'
+                : 'Đã xuất ${invoices.length} hóa đơn.',
+          ),
+        ),
       );
     } on Object catch (error) {
       if (!context.mounted) return;
@@ -415,16 +425,20 @@ class SettingsScreen extends ConsumerWidget {
           .read(invoiceRepositoryProvider)
           .watchInvoices()
           .first;
+      final incomes = await ref.read(incomeRepositoryProvider).getAll();
       final uri = await const InvoiceExportService().exportEncryptedJson(
         invoices,
         password,
+        incomes: incomes,
       );
       if (uri == null) return;
       await _recordBackup(ref, BackupRecordType.encrypted, uri);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Đã xuất backup mã hóa ${invoices.length} hóa đơn.'),
+          content: Text(
+            'Đã xuất backup mã hóa ${invoices.length} khoản chi và ${incomes.length} khoản thu.',
+          ),
         ),
       );
     } on Object catch (error) {
@@ -454,9 +468,10 @@ class SettingsScreen extends ConsumerWidget {
           .read(invoiceRepositoryProvider)
           .watchInvoices()
           .first;
+      final incomes = await ref.read(incomeRepositoryProvider).getAll();
       final uri = await InvoiceExportService(
         provider: provider,
-      ).exportEncryptedJson(invoices, password);
+      ).exportEncryptedJson(invoices, password, incomes: incomes);
       if (uri == null || !context.mounted) return;
       await _recordBackup(ref, BackupRecordType.encrypted, uri);
       try {
@@ -468,7 +483,7 @@ class SettingsScreen extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Đã sao lưu mã hóa ${invoices.length} hóa đơn lên Supabase.',
+            'Đã sao lưu mã hóa ${invoices.length} khoản chi và ${incomes.length} khoản thu lên Supabase.',
           ),
         ),
       );
@@ -524,17 +539,24 @@ class SettingsScreen extends ConsumerWidget {
               .whereType<String>()
               .toSet(),
           categoryIds: categoryIds.toSet(),
+          existingIncomeIds: (await ref.read(incomeRepositoryProvider).getAll())
+              .map((entry) => entry.id)
+              .toSet(),
           requestPassword: () => _showBackupPasswordDialog(context),
         );
         if (preview == null || !context.mounted) continue;
         final confirmed = await _showRestorePreview(context, preview);
         if (confirmed != true || !context.mounted) continue;
-        await restoreService.restore(preview, repository);
+        await restoreService.restore(
+          preview,
+          repository,
+          incomeRepository: ref.read(incomeRepositoryProvider),
+        );
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Đã khôi phục ${preview.readyCount} hóa đơn từ Supabase.',
+              'Đã khôi phục ${preview.readyCount} giao dịch từ Supabase.',
             ),
           ),
         );
@@ -612,6 +634,7 @@ class SettingsScreen extends ConsumerWidget {
     try {
       final preview = await service.pickAndPreview(
         repository: ref.read(invoiceRepositoryProvider),
+        incomeRepository: ref.read(incomeRepositoryProvider),
         categoryIds: categoryIds,
         requestPassword: () => _showBackupPasswordDialog(context),
       );
@@ -636,12 +659,18 @@ class SettingsScreen extends ConsumerWidget {
         ),
       );
       progressVisible = true;
-      await service.restore(preview, ref.read(invoiceRepositoryProvider));
+      await service.restore(
+        preview,
+        ref.read(invoiceRepositoryProvider),
+        incomeRepository: ref.read(incomeRepositoryProvider),
+      );
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       progressVisible = false;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đã khôi phục ${preview.readyCount} hóa đơn.')),
+        SnackBar(
+          content: Text('Đã khôi phục ${preview.readyCount} giao dịch.'),
+        ),
       );
     } on Object catch (error) {
       if (!context.mounted) return;
@@ -1227,15 +1256,17 @@ class _ExportManagement extends StatelessWidget {
           leading: const Icon(Icons.data_object_outlined),
           title: const Text('Xuất JSON đầy đủ'),
           subtitle: const Text(
-            'Bao gồm hóa đơn, dòng hàng và bằng chứng dữ liệu.',
+            'Bao gồm khoản thu, hóa đơn, dòng hàng và bằng chứng dữ liệu.',
           ),
           trailing: const Icon(Icons.download_outlined),
           onTap: onExportJson,
         ),
         ListTile(
           leading: const Icon(Icons.table_chart_outlined),
-          title: const Text('Xuất CSV'),
-          subtitle: const Text('Phù hợp để mở bằng Excel hoặc Google Sheets.'),
+          title: const Text('Xuất CSV khoản chi'),
+          subtitle: const Text(
+            'Danh sách hóa đơn để mở bằng Excel hoặc Google Sheets.',
+          ),
           trailing: const Icon(Icons.download_outlined),
           onTap: onExportCsv,
         ),
@@ -1243,7 +1274,7 @@ class _ExportManagement extends StatelessWidget {
           leading: const Icon(Icons.enhanced_encryption_outlined),
           title: const Text('Xuất backup mã hóa'),
           subtitle: const Text(
-            'Mã hóa toàn bộ dữ liệu bằng mật khẩu trước khi lưu tệp .hdbak.',
+            'Mã hóa hóa đơn và khoản thu bằng mật khẩu trước khi lưu tệp .hdbak.',
           ),
           trailing: const Icon(Icons.download_outlined),
           onTap: onExportEncrypted,
@@ -1254,7 +1285,7 @@ class _ExportManagement extends StatelessWidget {
           subtitle: Text(
             onBackupCloud == null
                 ? 'Đăng nhập Supabase để bật backup cloud riêng tư.'
-                : 'Chỉ tải lên tệp .hdbak đã mã hóa, không tải plaintext hóa đơn.',
+                : 'Chỉ tải lên tệp .hdbak đã mã hóa.',
           ),
           trailing: const Icon(Icons.cloud_upload_outlined),
           onTap: onBackupCloud,

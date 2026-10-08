@@ -47,6 +47,17 @@ class Invoices extends Table {
   ];
 }
 
+@DataClassName('IncomeRow')
+class Incomes extends Table {
+  TextColumn get id => text()();
+  IntColumn get amountMinor => integer()();
+  DateTimeColumn get receivedAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 @DataClassName('InvoiceLineRow')
 class InvoiceLines extends Table {
   TextColumn get id => text()();
@@ -204,6 +215,7 @@ class ImportJobs extends Table {
 @DriftDatabase(
   tables: [
     Invoices,
+    Incomes,
     InvoiceLines,
     FieldEvidences,
     Categories,
@@ -230,7 +242,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -241,6 +253,7 @@ class AppDatabase extends _$AppDatabase {
       });
     },
     onUpgrade: (migrator, from, to) async {
+      if (from < 8) await migrator.createTable(incomes);
       if (from < 2) {
         await migrator.addColumn(invoices, invoices.cloudId);
         await migrator.addColumn(invoices, invoices.searchText);

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import '../../../core/utils/money_formatter.dart';
+import '../../income/data/income_repository.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../domain/backup_provider.dart';
 import 'encrypted_backup_service.dart';
@@ -14,9 +15,12 @@ class InvoiceExportService {
 
   final BackupProvider _provider;
 
-  Future<Uri?> exportJson(Iterable<InvoiceEntity> invoices) {
+  Future<Uri?> exportJson(
+    Iterable<InvoiceEntity> invoices, {
+    Iterable<IncomeEntry> incomes = const [],
+  }) {
     final bytes = Uint8List.fromList(
-      utf8.encode(InvoiceExportFormatter.toJson(invoices)),
+      utf8.encode(InvoiceExportFormatter.toJson(invoices, incomes: incomes)),
     );
     return _provider.save(
       BackupArtifact(
@@ -31,9 +35,10 @@ class InvoiceExportService {
 
   Future<Uri?> exportEncryptedJson(
     Iterable<InvoiceEntity> invoices,
-    String password,
-  ) async {
-    final plaintext = InvoiceExportFormatter.toJson(invoices);
+    String password, {
+    Iterable<IncomeEntry> incomes = const [],
+  }) async {
+    final plaintext = InvoiceExportFormatter.toJson(invoices, incomes: incomes);
     final encrypted = await const EncryptedBackupService().encrypt(
       plaintext,
       password,
@@ -448,12 +453,18 @@ class _PdfLine {
 }
 
 abstract final class InvoiceExportFormatter {
-  static String toJson(Iterable<InvoiceEntity> invoices) {
+  static String toJson(
+    Iterable<InvoiceEntity> invoices, {
+    Iterable<IncomeEntry> incomes = const [],
+  }) {
     final payload = <String, Object?>{
       'format': 'hoadon-insight.invoice-export',
       'version': 1,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
       'invoices': invoices.map(_invoiceToMap).toList(growable: false),
+      'incomes': incomes
+          .map((entry) => entry.toPayload())
+          .toList(growable: false),
     };
     payload['checksumSha256'] = sha256
         .convert(utf8.encode(jsonEncode(payload)))

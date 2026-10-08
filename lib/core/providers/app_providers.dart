@@ -8,6 +8,7 @@ import '../../features/chat/domain/local_chat_assistant.dart';
 import '../../features/export/data/backup_catalog_store.dart';
 import '../../features/groups/data/group_service.dart';
 import '../../features/groups/domain/group_models.dart';
+import '../../features/income/data/income_repository.dart';
 import '../../features/sharing/data/shared_bill_service.dart';
 import '../../features/sharing/domain/shared_bill_models.dart';
 import '../../features/ingestion/application/import_coordinator.dart';
@@ -98,6 +99,14 @@ final featureFlagsProvider = FutureProvider<FeatureFlags>((ref) {
 
 final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {
   return DriftInvoiceRepository(ref.watch(databaseProvider));
+});
+
+final incomeRepositoryProvider = Provider<IncomeRepository>((ref) {
+  return IncomeRepository(ref.watch(databaseProvider));
+});
+
+final incomesProvider = StreamProvider<List<IncomeEntry>>((ref) {
+  return ref.watch(incomeRepositoryProvider).watchAll();
 });
 
 final invoiceAttachmentStoreProvider =
@@ -290,11 +299,13 @@ final referenceSyncPullCoordinatorsProvider =
           'category',
           'budget',
           'merchant_rule',
+          'income',
         ])
           SyncPullCoordinator(
             repository: repository,
             cursors: cursors,
             gateway: gateway,
+            incomeRepository: ref.watch(incomeRepositoryProvider),
             aggregateType: aggregateType,
           ),
       ];

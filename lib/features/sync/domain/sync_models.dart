@@ -6,6 +6,7 @@ enum SyncOperation { upsert, delete }
 
 const supportedSyncAggregateTypes = <String>{
   'invoice',
+  'income',
   'category',
   'budget',
   'merchant_rule',

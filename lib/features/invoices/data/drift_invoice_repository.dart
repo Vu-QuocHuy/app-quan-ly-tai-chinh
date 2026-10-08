@@ -494,6 +494,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
       await _db.delete(_db.extractionAttempts).go();
       await _db.delete(_db.invoiceConflicts).go();
       await _db.delete(_db.invoices).go();
+      await _db.delete(_db.incomes).go();
       await _db.delete(_db.budgets).go();
       await _db.delete(_db.merchantRules).go();
       await (_db.delete(

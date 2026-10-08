@@ -14,6 +14,7 @@ import '../../features/ingestion/application/import_queue.dart';
 import '../../features/ingestion/data/pending_import_store.dart';
 import '../../features/ingestion/domain/import_job.dart';
 import '../../features/ingestion/presentation/import_source_sheet.dart';
+import '../../features/income/presentation/income_entry_sheet.dart';
 import '../../features/payments/application/qr_payment_providers.dart';
 import '../../shared/dialogs/confirm_dialog.dart';
 import '../../shared/errors/error_presenter.dart';
@@ -327,6 +328,13 @@ class _AppShellState extends ConsumerState<AppShell>
     );
     if (source == null || !mounted) return;
     switch (source) {
+      case ImportSource.income:
+        await showModalBottomSheet<bool>(
+          context: context,
+          showDragHandle: true,
+          isScrollControlled: true,
+          builder: (context) => const IncomeEntrySheet(),
+        );
       case ImportSource.camera:
         await _pickImage(ImageSource.camera);
       case ImportSource.gallery:

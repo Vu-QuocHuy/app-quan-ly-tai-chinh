@@ -1,4 +1,5 @@
 import '../../invoices/domain/invoice_models.dart';
+import '../../income/data/income_repository.dart';
 import '../../invoices/domain/invoice_repository.dart';
 import '../data/drift_sync_cursor_store.dart';
 import '../data/invoice_sync_codec.dart';
@@ -11,14 +12,17 @@ class SyncPullCoordinator {
     required InvoiceRepository repository,
     required DriftSyncCursorStore cursors,
     required SyncPullGateway gateway,
+    IncomeRepository? incomeRepository,
     this.aggregateType = 'invoice',
   }) : _repository = repository,
        _cursors = cursors,
-       _gateway = gateway;
+       _gateway = gateway,
+       _incomeRepository = incomeRepository;
 
   final InvoiceRepository _repository;
   final DriftSyncCursorStore _cursors;
   final SyncPullGateway _gateway;
+  final IncomeRepository? _incomeRepository;
   final String aggregateType;
 
   Future<SyncPullResult> runOnce({
@@ -103,6 +107,26 @@ class SyncPullCoordinator {
               remote: incoming,
             );
             conflicts++;
+          }
+        } else if (aggregateType == 'income') {
+          final incomeRepository = _incomeRepository;
+          if (incomeRepository == null) {
+            throw StateError('Kho khoản thu chưa được cấu hình.');
+          }
+          final id = change.payload['id'];
+          if (id is! String || id != change.id) {
+            throw const FormatException('Delta khoản thu sai id.');
+          }
+          if (await incomeRepository.hasPendingChange(change.id)) {
+            skipped++;
+          } else if (change.operation == 'delete') {
+            await incomeRepository.deleteRemote(change.id);
+            applied++;
+          } else {
+            await incomeRepository.saveRemote(
+              IncomeEntry.fromPayload(change.payload),
+            );
+            applied++;
           }
         } else {
           await _applyReference(change);

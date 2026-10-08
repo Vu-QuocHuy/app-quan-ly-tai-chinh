@@ -11,6 +11,7 @@ import '../../core/database/local_database_scope.dart';
 import '../../core/security/supabase_bootstrap.dart';
 import '../../core/utils/month_utils.dart';
 import '../../features/export/data/supabase_backup_provider.dart';
+import '../../features/income/data/income_repository.dart';
 import '../../features/invoices/data/drift_invoice_repository.dart';
 import '../../features/invoices/domain/invoice_models.dart';
 import '../../features/notifications/data/budget_alert_preferences.dart';
@@ -121,11 +122,13 @@ Future<bool> _runBackgroundMaintenance() async {
             'category',
             'budget',
             'merchant_rule',
+            'income',
           ])
             SyncPullCoordinator(
               repository: repository,
               cursors: cursors,
               gateway: gateway,
+              incomeRepository: IncomeRepository(database),
               aggregateType: aggregateType,
             ),
         ];

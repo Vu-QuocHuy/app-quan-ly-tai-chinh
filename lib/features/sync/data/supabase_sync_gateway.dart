@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../income/data/income_repository.dart';
 import 'invoice_sync_codec.dart';
 import 'reference_sync_codec.dart';
 import '../domain/sync_gateway.dart';
@@ -20,6 +21,13 @@ typedef SupabaseReferenceSyncInvoker =
       required String expectedUserId,
       required String eventId,
       required String aggregateType,
+      required String operation,
+      required Map<String, dynamic> payload,
+    });
+
+typedef SupabaseIncomeSyncInvoker =
+    Future<void> Function({
+      required String expectedUserId,
       required String operation,
       required Map<String, dynamic> payload,
     });
@@ -92,15 +100,32 @@ class SupabaseSyncGateway implements SyncGateway, SyncPullGateway {
                 },
               );
             },
+        invokeIncome:
+            ({
+              required expectedUserId,
+              required operation,
+              required payload,
+            }) async {
+              await client.rpc<void>(
+                'apply_income_sync_checked',
+                params: {
+                  'p_expected_user_id': expectedUserId,
+                  'p_operation': operation,
+                  'p_payload': payload,
+                },
+              );
+            },
         pull:
             ({required aggregateType, required cursor, required limit}) async {
-              final functionName = aggregateType == 'invoice'
-                  ? 'pull_invoice_changes'
-                  : 'pull_reference_changes';
+              final functionName = switch (aggregateType) {
+                'invoice' => 'pull_invoice_changes',
+                'income' => 'pull_income_changes',
+                _ => 'pull_reference_changes',
+              };
               final dynamic response = await client.rpc(
                 functionName,
                 params: {
-                  if (aggregateType != 'invoice')
+                  if (aggregateType != 'invoice' && aggregateType != 'income')
                     'p_aggregate_type': aggregateType,
                   'p_since': cursor?.updatedAt?.toUtc().toIso8601String(),
                   'p_after_id': cursor?.updatedId,
@@ -143,17 +168,20 @@ class SupabaseSyncGateway implements SyncGateway, SyncPullGateway {
     required String? Function() currentUserId,
     required SupabaseInvoiceSyncInvoker invoke,
     SupabaseReferenceSyncInvoker? invokeReference,
+    SupabaseIncomeSyncInvoker? invokeIncome,
     SupabaseDeltaPullInvoker? pull,
     SupabaseSyncMetricRecorder? recordMetric,
   }) : _currentUserId = currentUserId,
        _invoke = invoke,
        _invokeReference = invokeReference,
+       _invokeIncome = invokeIncome,
        _pull = pull,
        _recordMetric = recordMetric ?? _ignoreSyncMetric;
 
   final String? Function() _currentUserId;
   final SupabaseInvoiceSyncInvoker _invoke;
   final SupabaseReferenceSyncInvoker? _invokeReference;
+  final SupabaseIncomeSyncInvoker? _invokeIncome;
   final SupabaseDeltaPullInvoker? _pull;
   final SupabaseSyncMetricRecorder _recordMetric;
 
@@ -193,6 +221,18 @@ class SupabaseSyncGateway implements SyncGateway, SyncPullGateway {
           operation: entry.operation.name,
           payload: decoded,
           revision: entry.revision,
+        );
+        return;
+      }
+      if (entry.aggregateType == 'income') {
+        final invokeIncome = _invokeIncome;
+        if (invokeIncome == null) {
+          throw UnsupportedError('Chưa hỗ trợ đồng bộ khoản thu.');
+        }
+        await invokeIncome(
+          expectedUserId: userId,
+          operation: entry.operation.name,
+          payload: decoded,
         );
         return;
       }
@@ -239,6 +279,8 @@ class SupabaseSyncGateway implements SyncGateway, SyncPullGateway {
     switch (entry.aggregateType) {
       case 'invoice':
         InvoiceSyncCodec.fromPayload(payload, revision: entry.revision);
+      case 'income':
+        IncomeEntry.fromPayload(payload);
       case 'category':
         ReferenceSyncCodec.categoryFromPayload(payload);
       case 'budget':
