@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:hoadon_insight/app/theme/app_theme.dart';
 import 'package:hoadon_insight/core/providers/app_providers.dart';
 import 'package:hoadon_insight/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:hoadon_insight/features/invoices/domain/invoice_models.dart';
@@ -53,6 +54,10 @@ void main() {
       ProviderScope(
         overrides: [
           selectedMonthProvider.overrideWith((ref) => DateTime(2026, 9)),
+          incomesProvider.overrideWith((ref) => Stream.value(const [])),
+          monthlyExpenseTotalsProvider.overrideWith(
+            (ref) => Stream.value(const <String, int>{}),
+          ),
           dashboardProvider.overrideWith((ref) => Stream.value(snapshot)),
           spendingInsightsProvider.overrideWith(
             (ref) => Stream.value(insights),
@@ -61,7 +66,10 @@ void main() {
           budgetAlertsEnabledProvider.overrideWith((ref) async => false),
           dismissedAnomalyIdsProvider.overrideWith((ref) async => const {}),
         ],
-        child: const MaterialApp(home: DashboardScreen()),
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const DashboardScreen(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -124,6 +132,10 @@ void main() {
       ProviderScope(
         overrides: [
           selectedMonthProvider.overrideWith((ref) => DateTime(2026, 9)),
+          incomesProvider.overrideWith((ref) => Stream.value(const [])),
+          monthlyExpenseTotalsProvider.overrideWith(
+            (ref) => Stream.value(const <String, int>{}),
+          ),
           dashboardProvider.overrideWith((ref) => Stream.value(snapshot)),
           spendingInsightsProvider.overrideWith(
             (ref) => Stream.value(insights),
@@ -132,7 +144,10 @@ void main() {
           budgetAlertsEnabledProvider.overrideWith((ref) async => false),
           dismissedAnomalyIdsProvider.overrideWith((ref) async => const {}),
         ],
-        child: const MaterialApp(home: DashboardScreen()),
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const DashboardScreen(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -206,6 +221,10 @@ void main() {
       ProviderScope(
         overrides: [
           selectedMonthProvider.overrideWith((ref) => DateTime(2026, 9)),
+          incomesProvider.overrideWith((ref) => Stream.value(const [])),
+          monthlyExpenseTotalsProvider.overrideWith(
+            (ref) => Stream.value(const <String, int>{}),
+          ),
           dashboardProvider.overrideWith((ref) => Stream.value(snapshot)),
           spendingInsightsProvider.overrideWith(
             (ref) => Stream.value(insights),
@@ -214,7 +233,10 @@ void main() {
           budgetAlertsEnabledProvider.overrideWith((ref) async => false),
           dismissedAnomalyIdsProvider.overrideWith((ref) async => const {}),
         ],
-        child: const MaterialApp(home: DashboardScreen()),
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const DashboardScreen(),
+        ),
       ),
     );
     await tester.pumpAndSettle();

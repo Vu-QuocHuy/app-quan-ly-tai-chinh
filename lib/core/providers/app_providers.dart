@@ -394,6 +394,14 @@ final dashboardProvider = StreamProvider<DashboardSnapshot>((ref) {
       .watchDashboard(MonthUtils.key(month));
 });
 
+final monthlyExpenseTotalsProvider =
+    StreamProvider.autoDispose<Map<String, int>>((ref) {
+      final month = ref.watch(selectedMonthProvider);
+      return ref
+          .watch(invoiceRepositoryProvider)
+          .watchMonthlyExpenseTotals(MonthUtils.key(month));
+    });
+
 final spendingInsightsProvider = StreamProvider<SpendingInsights>((ref) {
   final month = ref.watch(selectedMonthProvider);
   return ref

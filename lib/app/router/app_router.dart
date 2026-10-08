@@ -92,8 +92,12 @@ final appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/invoices',
-              pageBuilder: (context, state) =>
-                  _tabPage(context, const InvoiceListScreen()),
+              pageBuilder: (context, state) => _tabPage(
+                context,
+                InvoiceListScreen(
+                  initialMonthKey: state.uri.queryParameters['month'],
+                ),
+              ),
               routes: [
                 GoRoute(
                   path: ':id',

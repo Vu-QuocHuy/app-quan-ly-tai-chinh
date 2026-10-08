@@ -16,6 +16,7 @@ abstract interface class InvoiceRepository {
   Stream<List<MerchantRuleEntity>> watchMerchantRules();
   Stream<List<BudgetEntity>> watchBudgets(String monthKey);
   Stream<DashboardSnapshot> watchDashboard(String monthKey);
+  Stream<Map<String, int>> watchMonthlyExpenseTotals(String monthKey);
   Stream<SpendingInsights> watchSpendingInsights(String monthKey);
   Future<InvoiceEntity?> findById(String id);
   Future<InvoiceEntity?> findBySourceHash(String hash);

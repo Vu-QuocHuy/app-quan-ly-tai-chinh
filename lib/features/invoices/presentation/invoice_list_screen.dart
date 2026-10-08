@@ -23,7 +23,9 @@ import '../domain/invoice_filters.dart';
 import '../domain/invoice_models.dart';
 
 class InvoiceListScreen extends ConsumerStatefulWidget {
-  const InvoiceListScreen({super.key});
+  const InvoiceListScreen({super.key, this.initialMonthKey});
+
+  final String? initialMonthKey;
 
   @override
   ConsumerState<InvoiceListScreen> createState() => _InvoiceListScreenState();
@@ -38,6 +40,29 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   Timer? _searchDebounce;
   int _limit = 50;
   _TransactionKind _kind = _TransactionKind.all;
+
+  @override
+  void initState() {
+    super.initState();
+    _month = _parseMonthKey(widget.initialMonthKey);
+  }
+
+  @override
+  void didUpdateWidget(covariant InvoiceListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialMonthKey != oldWidget.initialMonthKey) {
+      _month = _parseMonthKey(widget.initialMonthKey);
+      _limit = 50;
+    }
+  }
+
+  DateTime? _parseMonthKey(String? key) {
+    if (key == null || !RegExp(r'^\d{4}-\d{2}$').hasMatch(key)) return null;
+    final year = int.parse(key.substring(0, 4));
+    final month = int.parse(key.substring(5));
+    if (year < 2000 || year > 2100 || month < 1 || month > 12) return null;
+    return DateTime(year, month);
+  }
 
   @override
   void dispose() {

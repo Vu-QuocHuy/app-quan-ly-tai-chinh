@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/utils/month_utils.dart';
 import '../../../core/utils/string_normalizer.dart';
 import '../../insights/domain/spending_insight_engine.dart';
 import '../../sync/data/invoice_sync_codec.dart';
@@ -138,6 +139,32 @@ class DriftInvoiceRepository implements InvoiceRepository {
       readsFrom: {_db.invoices, _db.budgets},
     );
     return trigger.watch().asyncMap((_) => _loadDashboard(monthKey));
+  }
+
+  @override
+  Stream<Map<String, int>> watchMonthlyExpenseTotals(String monthKey) {
+    final month = _parseMonthKey(monthKey);
+    final start = DateTime(month.year, month.month - 5);
+    final end = DateTime(month.year, month.month + 1);
+    final query = _db.select(_db.invoices)
+      ..where(
+        (row) =>
+            row.deletedAt.isNull() &
+            row.status.equals(InvoiceStatus.confirmed.name) &
+            _dateInRange(row, start, end),
+      );
+    return query.watch().map((rows) {
+      final totals = <String, int>{};
+      for (final row in rows) {
+        final key = MonthUtils.key(row.issuedAt ?? row.createdAt);
+        totals.update(
+          key,
+          (total) => total + row.totalMinor,
+          ifAbsent: () => row.totalMinor,
+        );
+      }
+      return totals;
+    });
   }
 
   @override

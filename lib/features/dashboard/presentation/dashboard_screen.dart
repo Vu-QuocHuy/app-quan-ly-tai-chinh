@@ -21,6 +21,7 @@ import '../../../shared/widgets/month_selector.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../income/presentation/income_entry_sheet.dart';
 import '../../../shared/widgets/section_header.dart';
+import 'cash_flow_trend_card.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -128,6 +129,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                     expenseTotal: snapshot.totalMinor,
                   ),
+                  const SizedBox(height: AppSpacing.xl),
+                  const SectionHeader(
+                    title: 'Dòng tiền 6 tháng',
+                    subtitle: 'Chạm vào tháng để xem giao dịch',
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  const CashFlowTrendCard(),
                   const SizedBox(height: AppSpacing.lg),
                   _BudgetCard(
                     snapshot: snapshot,
