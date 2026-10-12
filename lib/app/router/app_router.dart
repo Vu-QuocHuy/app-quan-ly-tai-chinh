@@ -12,6 +12,7 @@ import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/invoices/domain/invoice_models.dart';
 import '../../features/invoices/presentation/invoice_detail_screen.dart';
 import '../../features/invoices/presentation/invoice_attachments_screen.dart';
+import '../../features/invoices/presentation/daily_expense_history_screen.dart';
 import '../../features/invoices/presentation/invoice_list_screen.dart';
 import '../../features/groups/presentation/group_screen.dart';
 import '../../features/groups/presentation/group_fund_screen.dart';
@@ -101,6 +102,22 @@ final appRouter = GoRouter(
                 ),
               ),
               routes: [
+                GoRoute(
+                  path: 'day/:date',
+                  parentNavigatorKey: _rootKey,
+                  builder: (context, state) {
+                    final date = DateTime.tryParse(
+                      state.pathParameters['date'] ?? '',
+                    );
+                    if (date == null) {
+                      return Scaffold(
+                        appBar: AppBar(title: const Text('Lịch sử chi tiêu')),
+                        body: Center(child: Text('Ngày không hợp lệ.')),
+                      );
+                    }
+                    return DailyExpenseHistoryScreen(date: date);
+                  },
+                ),
                 GoRoute(
                   path: ':id',
                   parentNavigatorKey: _rootKey,

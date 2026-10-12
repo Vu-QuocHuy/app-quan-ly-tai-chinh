@@ -24,6 +24,7 @@ import '../../income/presentation/income_entry_sheet.dart';
 import '../../planning/domain/plan_models.dart';
 import '../../../shared/widgets/section_header.dart';
 import 'cash_flow_trend_card.dart';
+import 'monthly_transaction_calendar.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -149,6 +150,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   const SizedBox(height: AppSpacing.md),
                   _DailyChart(snapshot: snapshot, month: selectedMonth),
                   const SizedBox(height: AppSpacing.xl),
+                  const SectionHeader(
+                    title: 'Lịch thu chi',
+                    subtitle: 'Chạm vào một ngày để xem lịch sử chi tiêu',
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  MonthlyTransactionCalendar(
+                    month: selectedMonth,
+                    snapshot: snapshot,
+                    incomes: incomes.valueOrNull ?? const <IncomeEntry>[],
+                    onSelectDay: (day) => context.push(
+                      '/invoices/day/${day.toIso8601String().substring(0, 10)}',
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
                   const SectionHeader(title: 'Cơ cấu chi tiêu'),
                   const SizedBox(height: AppSpacing.md),
                   _CategoryBreakdown(
@@ -185,7 +200,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   const SectionHeader(
-                    title: 'Dòng tiền 6 tháng',
+                    title: 'Dòng tiền 3 tháng gần nhất',
                     subtitle: 'Chạm vào tháng để xem giao dịch',
                   ),
                   const SizedBox(height: AppSpacing.md),
