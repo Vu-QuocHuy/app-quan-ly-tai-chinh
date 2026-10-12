@@ -1,5 +1,7 @@
 import '../../invoices/domain/invoice_models.dart';
 import '../../income/data/income_repository.dart';
+import '../../planning/data/plan_repository.dart';
+import '../../planning/domain/plan_models.dart';
 import '../../invoices/domain/invoice_repository.dart';
 import '../data/drift_sync_cursor_store.dart';
 import '../data/invoice_sync_codec.dart';
@@ -13,16 +15,19 @@ class SyncPullCoordinator {
     required DriftSyncCursorStore cursors,
     required SyncPullGateway gateway,
     IncomeRepository? incomeRepository,
+    PlanRepository? planRepository,
     this.aggregateType = 'invoice',
   }) : _repository = repository,
        _cursors = cursors,
        _gateway = gateway,
-       _incomeRepository = incomeRepository;
+       _incomeRepository = incomeRepository,
+       _planRepository = planRepository;
 
   final InvoiceRepository _repository;
   final DriftSyncCursorStore _cursors;
   final SyncPullGateway _gateway;
   final IncomeRepository? _incomeRepository;
+  final PlanRepository? _planRepository;
   final String aggregateType;
 
   Future<SyncPullResult> runOnce({
@@ -125,6 +130,26 @@ class SyncPullCoordinator {
           } else {
             await incomeRepository.saveRemote(
               IncomeEntry.fromPayload(change.payload),
+            );
+            applied++;
+          }
+        } else if (aggregateType == 'plan') {
+          final planRepository = _planRepository;
+          if (planRepository == null) {
+            throw StateError('Kho kế hoạch chưa được cấu hình.');
+          }
+          final id = change.payload['id'];
+          if (id is! String || id != change.id) {
+            throw const FormatException('Delta kế hoạch sai id.');
+          }
+          if (await planRepository.hasPendingChange(change.id)) {
+            skipped++;
+          } else if (change.operation == 'delete') {
+            await planRepository.deleteRemote(change.id);
+            applied++;
+          } else {
+            await planRepository.saveRemote(
+              PlanItem.fromPayload(change.payload),
             );
             applied++;
           }

@@ -8,6 +8,8 @@ import '../../../core/constants/app_constants.dart';
 import '../../income/data/income_repository.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../invoices/domain/invoice_repository.dart';
+import '../../planning/data/plan_repository.dart';
+import '../../planning/domain/plan_models.dart';
 import 'encrypted_backup_service.dart';
 
 class InvoiceRestorePreview {
@@ -18,6 +20,7 @@ class InvoiceRestorePreview {
     required this.invalidCount,
     required this.invoices,
     this.incomes = const [],
+    this.plans = const [],
     required this.issues,
   });
 
@@ -27,9 +30,10 @@ class InvoiceRestorePreview {
   final int invalidCount;
   final List<InvoiceEntity> invoices;
   final List<IncomeEntry> incomes;
+  final List<PlanItem> plans;
   final List<String> issues;
 
-  int get readyCount => invoices.length + incomes.length;
+  int get readyCount => invoices.length + incomes.length + plans.length;
   bool get canRestore => readyCount > 0;
 }
 
@@ -39,6 +43,7 @@ class InvoiceRestoreService {
   Future<InvoiceRestorePreview?> pickAndPreview({
     required InvoiceRepository repository,
     IncomeRepository? incomeRepository,
+    PlanRepository? planRepository,
     required Iterable<String> categoryIds,
     Future<String?> Function()? requestPassword,
   }) async {
@@ -65,6 +70,9 @@ class InvoiceRestoreService {
           (await incomeRepository?.getAll() ?? const <IncomeEntry>[])
               .map((entry) => entry.id)
               .toSet(),
+      existingPlanIds: (await planRepository?.getAll() ?? const <PlanItem>[])
+          .map((item) => item.id)
+          .toSet(),
       requestPassword: requestPassword,
     );
   }
@@ -76,6 +84,7 @@ class InvoiceRestoreService {
     Set<String> existingSourceHashes = const {},
     Set<String> categoryIds = const {},
     Set<String> existingIncomeIds = const {},
+    Set<String> existingPlanIds = const {},
     Future<String?> Function()? requestPassword,
   }) async {
     if (bytes.isEmpty) {
@@ -102,6 +111,7 @@ class InvoiceRestoreService {
       existingSourceHashes: existingSourceHashes,
       categoryIds: categoryIds,
       existingIncomeIds: existingIncomeIds,
+      existingPlanIds: existingPlanIds,
     );
   }
 
@@ -109,15 +119,28 @@ class InvoiceRestoreService {
     InvoiceRestorePreview preview,
     InvoiceRepository repository, {
     IncomeRepository? incomeRepository,
+    PlanRepository? planRepository,
   }) async {
     if (!preview.canRestore) return;
     if (preview.incomes.isNotEmpty && incomeRepository == null) {
       throw StateError('Chưa cấu hình kho khoản thu để khôi phục.');
     }
+    if (preview.plans.isNotEmpty && planRepository == null) {
+      throw StateError('Chưa cấu hình kho kế hoạch để khôi phục.');
+    }
     await repository.saveInvoices(preview.invoices);
     if (incomeRepository != null) {
       for (final entry in preview.incomes) {
-        await incomeRepository.save(entry.amountMinor, existing: entry);
+        await incomeRepository.save(
+          entry.amountMinor,
+          source: entry.source,
+          existing: entry,
+        );
+      }
+    }
+    if (planRepository != null) {
+      for (final item in preview.plans) {
+        await planRepository.save(item);
       }
     }
   }
@@ -138,6 +161,7 @@ abstract final class InvoiceRestoreParser {
     Set<String> existingSourceHashes = const {},
     Set<String> categoryIds = const {},
     Set<String> existingIncomeIds = const {},
+    Set<String> existingPlanIds = const {},
   }) {
     if (content.length > _maxContentCharacters) {
       throw const FormatException('Tệp backup vượt quá giới hạn 15 MB.');
@@ -157,6 +181,7 @@ abstract final class InvoiceRestoreParser {
     _verifyChecksum(decoded);
     final rawInvoices = decoded['invoices'];
     final rawIncomes = decoded['incomes'] ?? const [];
+    final rawPlans = decoded['plans'] ?? const [];
     if (rawInvoices is! List) {
       throw const FormatException('Bản sao lưu không có danh sách hóa đơn.');
     }
@@ -170,6 +195,11 @@ abstract final class InvoiceRestoreParser {
         'Danh sách khoản thu trong backup không hợp lệ.',
       );
     }
+    if (rawPlans is! List || rawPlans.length > 5000) {
+      throw const FormatException(
+        'Danh sách kế hoạch trong backup không hợp lệ.',
+      );
+    }
 
     final knownIds = {...existingIds};
     final knownHashes = {...existingSourceHashes};
@@ -181,6 +211,39 @@ abstract final class InvoiceRestoreParser {
     var invalid = 0;
 
     final incomes = <IncomeEntry>[];
+    final plans = <PlanItem>[];
+    final knownPlanIds = {...existingPlanIds};
+    for (var index = 0; index < rawPlans.length; index++) {
+      try {
+        final raw = rawPlans[index];
+        if (raw is! Map) {
+          throw const FormatException('Kế hoạch không phải object.');
+        }
+        var item = PlanItem.fromPayload(Map<String, dynamic>.from(raw));
+        if (categoryIds.isNotEmpty) {
+          if (item is RecurringBill &&
+              item.categoryId != null &&
+              !categoryIds.contains(item.categoryId)) {
+            item = item.copyWith(clearCategory: true);
+          } else if (item is RecurringIncome &&
+              !categoryIds.contains(item.categoryId)) {
+            item = item.copyWith(
+              categoryId: IncomeEntry.unclassifiedCategoryId,
+            );
+          }
+        }
+        if (!knownPlanIds.add(item.id)) {
+          duplicates++;
+          continue;
+        }
+        plans.add(item);
+      } on Object catch (error) {
+        invalid++;
+        if (issues.length < 20) {
+          issues.add('Kế hoạch ${index + 1}: ${_message(error)}');
+        }
+      }
+    }
     final knownIncomeIds = {...existingIncomeIds};
     for (var index = 0; index < rawIncomes.length; index++) {
       try {
@@ -188,7 +251,21 @@ abstract final class InvoiceRestoreParser {
         if (raw is! Map) {
           throw const FormatException('Khoản thu không phải object.');
         }
-        final entry = IncomeEntry.fromPayload(Map<String, dynamic>.from(raw));
+        final parsedEntry = IncomeEntry.fromPayload(
+          Map<String, dynamic>.from(raw),
+        );
+        final entry =
+            categoryIds.isNotEmpty &&
+                !categoryIds.contains(parsedEntry.categoryId)
+            ? IncomeEntry(
+                id: parsedEntry.id,
+                amountMinor: parsedEntry.amountMinor,
+                source: parsedEntry.source,
+                receivedAt: parsedEntry.receivedAt,
+                updatedAt: parsedEntry.updatedAt,
+                categoryId: IncomeEntry.unclassifiedCategoryId,
+              )
+            : parsedEntry;
         if (!knownIncomeIds.add(entry.id)) {
           duplicates++;
           continue;
@@ -242,11 +319,12 @@ abstract final class InvoiceRestoreParser {
 
     return InvoiceRestorePreview(
       fileName: fileName,
-      totalCount: rawInvoices.length + rawIncomes.length,
+      totalCount: rawInvoices.length + rawIncomes.length + rawPlans.length,
       duplicateCount: duplicates,
       invalidCount: invalid,
       invoices: List.unmodifiable(invoices),
       incomes: List.unmodifiable(incomes),
+      plans: List.unmodifiable(plans),
       issues: List.unmodifiable(issues),
     );
   }

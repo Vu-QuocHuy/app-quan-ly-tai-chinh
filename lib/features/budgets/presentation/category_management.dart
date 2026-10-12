@@ -11,12 +11,24 @@ import '../../invoices/domain/invoice_models.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
 
-class CategoryManagementScreen extends ConsumerWidget {
+class CategoryManagementScreen extends ConsumerStatefulWidget {
   const CategoryManagementScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final categoryState = ref.watch(categoriesProvider);
+  ConsumerState<CategoryManagementScreen> createState() =>
+      _CategoryManagementScreenState();
+}
+
+class _CategoryManagementScreenState
+    extends ConsumerState<CategoryManagementScreen> {
+  CategoryKind _kind = CategoryKind.expense;
+
+  @override
+  Widget build(BuildContext context) {
+    final categoryProvider = _kind == CategoryKind.income
+        ? incomeCategoriesProvider
+        : categoriesProvider;
+    final categoryState = ref.watch(categoryProvider);
     final categories = categoryState.asData?.value;
     final selectedMonth = ref.watch(selectedMonthProvider);
     final monthKey = MonthUtils.key(selectedMonth);
@@ -33,6 +45,7 @@ class CategoryManagementScreen extends ConsumerWidget {
                     context,
                     ref,
                     categories,
+                    _kind,
                     monthKey,
                     monthLabel,
                   ),
@@ -40,40 +53,66 @@ class CategoryManagementScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: switch (categoryState) {
-        AsyncData(value: final items) => _CategoryList(
-          categories: items,
-          onEdit: (category) => _editCategory(
-            context,
-            ref,
-            items,
-            monthKey,
-            monthLabel,
-            editing: category,
-          ),
-          onDelete: (category) => _deleteCategory(context, ref, category),
-        ),
-        AsyncError(:final error) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline),
-                const SizedBox(height: 12),
-                Text('Không thể tải danh mục: ${friendlyMessage(error)}'),
-                const SizedBox(height: 8),
-                TextButton.icon(
-                  onPressed: () => ref.invalidate(categoriesProvider),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Thử lại'),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: SegmentedButton<CategoryKind>(
+              segments: const [
+                ButtonSegment(
+                  value: CategoryKind.expense,
+                  label: Text('Chi tiêu'),
+                ),
+                ButtonSegment(
+                  value: CategoryKind.income,
+                  label: Text('Thu nhập'),
                 ),
               ],
+              selected: {_kind},
+              onSelectionChanged: (selection) =>
+                  setState(() => _kind = selection.first),
             ),
           ),
-        ),
-        _ => const Center(child: CircularProgressIndicator()),
-      },
+          Expanded(
+            child: switch (categoryState) {
+              AsyncData(value: final items) => _CategoryList(
+                categories: items,
+                kind: _kind,
+                onEdit: (category) => _editCategory(
+                  context,
+                  ref,
+                  items,
+                  _kind,
+                  monthKey,
+                  monthLabel,
+                  editing: category,
+                ),
+                onDelete: (category) => _deleteCategory(context, ref, category),
+              ),
+              AsyncError(:final error) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline),
+                      const SizedBox(height: 12),
+                      Text('Không thể tải danh mục: ${friendlyMessage(error)}'),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: () => ref.invalidate(categoryProvider),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Thử lại'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              _ => const Center(child: CircularProgressIndicator()),
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -81,6 +120,7 @@ class CategoryManagementScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     List<CategoryEntity> categories,
+    CategoryKind kind,
     String monthKey,
     String monthLabel, {
     CategoryEntity? editing,
@@ -88,6 +128,7 @@ class CategoryManagementScreen extends ConsumerWidget {
     final result = await _showCategoryDialog(
       context,
       categories: categories,
+      kind: kind,
       monthLabel: monthLabel,
       editing: editing,
     );
@@ -137,9 +178,10 @@ class CategoryManagementScreen extends ConsumerWidget {
     final confirmed = await showConfirmDialog(
       context,
       title: 'Xóa “${category.name}”?',
-      message:
-          'Hóa đơn đang dùng danh mục này sẽ chuyển về “Khác”. Ngân sách và '
-          'quy tắc merchant của danh mục sẽ bị xóa.',
+      message: category.kind == CategoryKind.income
+          ? 'Các khoản thu dùng danh mục này sẽ chuyển về “Chưa phân loại”.'
+          : 'Hóa đơn đang dùng danh mục này sẽ chuyển về “Khác”. Ngân sách và '
+                'quy tắc merchant của danh mục sẽ bị xóa.',
       confirmLabel: 'Xóa danh mục',
       destructive: true,
     );
@@ -164,11 +206,13 @@ class CategoryManagementScreen extends ConsumerWidget {
 class _CategoryList extends StatelessWidget {
   const _CategoryList({
     required this.categories,
+    required this.kind,
     required this.onEdit,
     required this.onDelete,
   });
 
   final List<CategoryEntity> categories;
+  final CategoryKind kind;
   final ValueChanged<CategoryEntity> onEdit;
   final ValueChanged<CategoryEntity> onDelete;
 
@@ -176,12 +220,19 @@ class _CategoryList extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
       children: [
-        Text('Danh mục chi tiêu', style: textTheme.titleLarge),
+        Text(
+          kind == CategoryKind.income
+              ? 'Danh mục thu nhập'
+              : 'Danh mục chi tiêu',
+          style: textTheme.titleLarge,
+        ),
         const SizedBox(height: 8),
         Text(
-          'Tùy chỉnh danh mục tại đây. Hạn mức có thể đặt khi thêm mới hoặc sửa trong trang Ngân sách.',
+          kind == CategoryKind.income
+              ? 'Tạo các nhóm thu như lương, thưởng hoặc khoản thu khác.'
+              : 'Tùy chỉnh danh mục tại đây. Hạn mức có thể đặt khi thêm mới hoặc sửa trong trang Ngân sách.',
           style: textTheme.bodyMedium,
         ),
         const SizedBox(height: 16),
@@ -236,6 +287,7 @@ typedef _CategoryDialogResult = ({
 Future<_CategoryDialogResult?> _showCategoryDialog(
   BuildContext context, {
   required List<CategoryEntity> categories,
+  required CategoryKind kind,
   required String monthLabel,
   CategoryEntity? editing,
 }) {
@@ -243,6 +295,7 @@ Future<_CategoryDialogResult?> _showCategoryDialog(
     context: context,
     builder: (_) => _CategoryDialog(
       categories: categories,
+      kind: kind,
       monthLabel: monthLabel,
       editing: editing,
     ),
@@ -252,11 +305,13 @@ Future<_CategoryDialogResult?> _showCategoryDialog(
 class _CategoryDialog extends StatefulWidget {
   const _CategoryDialog({
     required this.categories,
+    required this.kind,
     required this.monthLabel,
     this.editing,
   });
 
   final List<CategoryEntity> categories;
+  final CategoryKind kind;
   final String monthLabel;
   final CategoryEntity? editing;
 
@@ -332,7 +387,8 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                   return duplicate ? 'Tên danh mục đã tồn tại.' : null;
                 },
               ),
-              if (widget.editing == null) ...[
+              if (widget.kind == CategoryKind.expense &&
+                  widget.editing == null) ...[
                 const SizedBox(height: 16),
                 TextFormField(
                   key: const ValueKey('category-budget-field'),
@@ -435,13 +491,18 @@ class _CategoryDialogState extends State<_CategoryDialog> {
     final editing = widget.editing;
     Navigator.pop(context, (
       category: CategoryEntity(
-        id: editing?.id ?? 'custom-${const Uuid().v4()}',
+        id:
+            editing?.id ??
+            '${widget.kind == CategoryKind.income ? 'income-' : ''}custom-${const Uuid().v4()}',
         name: _nameController.text.trim(),
         iconName: _iconName,
         colorValue: _colorValue,
         isSystem: editing?.isSystem ?? false,
+        kind: widget.kind,
       ),
-      initialBudgetMinor: editing == null ? initialBudgetMinor : null,
+      initialBudgetMinor: widget.kind == CategoryKind.expense && editing == null
+          ? initialBudgetMinor
+          : null,
     ));
   }
 }

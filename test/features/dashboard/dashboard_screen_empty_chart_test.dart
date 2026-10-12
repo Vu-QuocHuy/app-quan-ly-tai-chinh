@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/app/theme/app_theme.dart';
 import 'package:hoadon_insight/core/providers/app_providers.dart';
 import 'package:hoadon_insight/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:hoadon_insight/features/income/data/income_repository.dart';
 import 'package:hoadon_insight/features/invoices/domain/invoice_models.dart';
 
 void main() {
@@ -54,7 +55,26 @@ void main() {
       ProviderScope(
         overrides: [
           selectedMonthProvider.overrideWith((ref) => DateTime(2026, 9)),
-          incomesProvider.overrideWith((ref) => Stream.value(const [])),
+          incomesProvider.overrideWith(
+            (ref) => Stream.value([
+              IncomeEntry(
+                id: 'fixed-income',
+                amountMinor: 300000,
+                source: IncomeSource.fixed,
+                categoryId: 'income_salary',
+                receivedAt: DateTime(2026, 9, 3),
+                updatedAt: DateTime(2026, 9, 3),
+              ),
+              IncomeEntry(
+                id: 'manual-income',
+                amountMinor: 100000,
+                source: IncomeSource.manual,
+                categoryId: 'income_other',
+                receivedAt: DateTime(2026, 9, 10),
+                updatedAt: DateTime(2026, 9, 10),
+              ),
+            ]),
+          ),
           monthlyExpenseTotalsProvider.overrideWith(
             (ref) => Stream.value(const <String, int>{}),
           ),
@@ -63,6 +83,24 @@ void main() {
             (ref) => Stream.value(insights),
           ),
           categoriesProvider.overrideWith((ref) => Stream.value(categories)),
+          incomeCategoriesProvider.overrideWith(
+            (ref) => Stream.value([
+              const CategoryEntity(
+                id: 'income_salary',
+                name: 'Lương',
+                iconName: 'payments',
+                colorValue: 0xFF2563EB,
+                kind: CategoryKind.income,
+              ),
+              const CategoryEntity(
+                id: 'income_other',
+                name: 'Khoản khác',
+                iconName: 'category',
+                colorValue: 0xFF64748B,
+                kind: CategoryKind.income,
+              ),
+            ]),
+          ),
           budgetAlertsEnabledProvider.overrideWith((ref) async => false),
           dismissedAnomalyIdsProvider.overrideWith((ref) async => const {}),
         ],
@@ -82,6 +120,20 @@ void main() {
     expect(find.textContaining('Còn lại'), findsOneWidget);
 
     await tester.scrollUntilVisible(
+      find.text('Chi tiêu theo ngày'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Chưa có dữ liệu chi tiêu'), findsOneWidget);
+    final emptyChartCard = find
+        .ancestor(
+          of: find.text('Chưa có dữ liệu chi tiêu'),
+          matching: find.byType(Card),
+        )
+        .first;
+    expect(tester.getSize(emptyChartCard).height, lessThan(320));
+
+    await tester.scrollUntilVisible(
       find.byType(PieChart),
       400,
       scrollable: find.byType(Scrollable).first,
@@ -94,20 +146,52 @@ void main() {
           .ancestor(of: find.byType(PieChart), matching: find.byType(Card))
           .first,
     );
-    final lastLegendLabel = tester.getRect(find.text('Còn lại (2 danh mục)'));
     expect(chart.data.sections, hasLength(6));
     expect(
       chart.data.sections.map((section) => section.value),
       orderedEquals([70000, 60000, 50000, 40000, 30000, 30000]),
     );
+    expect(
+      chart.data.sections.map((section) => section.title),
+      orderedEquals(['25%', '21%', '18%', '14%', '11%', '11%']),
+    );
     expect(find.text('TỔNG CHI'), findsOneWidget);
-    expect(find.text('Còn lại (2 danh mục)'), findsOneWidget);
+    expect(find.text('Còn lại (2 danh mục)'), findsNothing);
     expect(chartCardBounds.height, greaterThan(chartBounds.height));
     expect(chartCardBounds.top, lessThan(chartBounds.top));
     expect(chartCardBounds.bottom, greaterThan(chartBounds.bottom));
-    expect(lastLegendLabel.top, greaterThan(chartBounds.bottom));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('income-composition-chart')),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final incomeChart = tester.widget<PieChart>(
+      find.byKey(const ValueKey('income-composition-chart')),
+    );
+    expect(
+      incomeChart.data.sections.map((section) => section.value),
+      orderedEquals([300000, 100000]),
+    );
+    expect(
+      incomeChart.data.sections.map((section) => section.title),
+      orderedEquals(['75%', '25%']),
+    );
+    expect(find.text('Lương'), findsOneWidget);
+    expect(find.text('Khoản khác'), findsOneWidget);
+    final fixedLabel = tester.getRect(
+      find.byKey(const ValueKey('income-composition-label-income_salary')),
+    );
+    final fixedAmount = tester.getRect(
+      find.byKey(const ValueKey('income-composition-amount-income_salary')),
+    );
+    expect((fixedLabel.center.dy - fixedAmount.center.dy).abs(), lessThan(1));
+    await tester.scrollUntilVisible(
+      find.text('Danh mục 7'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Danh mục 7'), findsOneWidget);
     expect(tester.takeException(), isNull);
-    expect(find.textContaining('%'), findsNothing);
   });
 
   testWidgets('plots every day and puts missing daily totals at zero', (
@@ -141,6 +225,9 @@ void main() {
             (ref) => Stream.value(insights),
           ),
           categoriesProvider.overrideWith((ref) => Stream.value(const [])),
+          incomeCategoriesProvider.overrideWith(
+            (ref) => Stream.value(const []),
+          ),
           budgetAlertsEnabledProvider.overrideWith((ref) async => false),
           dismissedAnomalyIdsProvider.overrideWith((ref) async => const {}),
         ],
@@ -159,6 +246,11 @@ void main() {
     );
     expect(find.text('Chi tiêu theo ngày'), findsOneWidget);
     expect(find.text('Chưa có dữ liệu chi tiêu'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.byType(LineChart),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
 
     final chart = tester.widget<LineChart>(find.byType(LineChart));
     final spots = chart.data.lineBarsData.single.spots;
@@ -230,6 +322,9 @@ void main() {
             (ref) => Stream.value(insights),
           ),
           categoriesProvider.overrideWith((ref) => Stream.value(categories)),
+          incomeCategoriesProvider.overrideWith(
+            (ref) => Stream.value(const []),
+          ),
           budgetAlertsEnabledProvider.overrideWith((ref) async => false),
           dismissedAnomalyIdsProvider.overrideWith((ref) async => const {}),
         ],
@@ -251,10 +346,19 @@ void main() {
     expect(dailyHeading.dy, lessThan(categoryHeading.dy));
 
     await tester.scrollUntilVisible(
+      find.byType(LineChart),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final dailyChartBounds = tester.getRect(find.byType(LineChart));
+    expect(dailyChartBounds.width / dailyChartBounds.height, greaterThan(1.7));
+
+    await tester.scrollUntilVisible(
       find.byType(PieChart),
       400,
       scrollable: find.byType(Scrollable).first,
     );
+    final chart = tester.widget<PieChart>(find.byType(PieChart));
     final chartBounds = tester.getRect(find.byType(PieChart));
     final chartCardBounds = tester.getRect(
       find
@@ -265,13 +369,72 @@ void main() {
     final legendRowBounds = tester.getRect(
       find.ancestor(of: find.text('Ăn uống'), matching: find.byType(Row)).first,
     );
+    expect(chartBounds.center.dx, lessThan(cardMidpoint));
     expect(legendRowBounds.center.dx, greaterThan(cardMidpoint));
     expect(
-      chartBounds.center.dx,
-      closeTo(cardMidpoint - (chartCardBounds.width - 32) / 4, 3),
+      (legendRowBounds.left - chartCardBounds.left) / chartCardBounds.width,
+      closeTo(2 / 3, 0.04),
+    );
+    expect(legendRowBounds.left - chartBounds.right, greaterThan(150));
+    final legendLabel = tester.getRect(
+      find.byKey(const ValueKey('composition-legend-label-category-1')),
+    );
+    final legendAmount = tester.getRect(
+      find.byKey(const ValueKey('composition-legend-amount-category-1')),
+    );
+    expect(legendAmount.left - legendLabel.right, lessThan(32));
+    expect(chart.data.sections.single.title, '100%');
+    expect(
+      chart.data.sections.single.titleStyle?.color,
+      chart.data.sections.single.color.computeLuminance() > 0.18
+          ? Colors.black
+          : Colors.white,
+    );
+    expect(
+      find.byKey(const ValueKey('composition-legend-share-category-1')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('composition-center-share')),
+      findsNothing,
     );
     expect(chartCardBounds.top + 36, lessThan(chartBounds.top));
     expect(chartCardBounds.bottom - 36, greaterThan(chartBounds.bottom));
+
+    await tester.tap(
+      find.byKey(const ValueKey('composition-legend-category-1')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('composition-center-label')))
+          .data,
+      'Ăn uống',
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('composition-center-share')))
+          .data,
+      '100% tổng chi',
+    );
+
+    tester.view.physicalSize = const Size(700, 1000);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('composition-legend-label-category-1')),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final narrowLegendLabel = tester.getRect(
+      find.byKey(const ValueKey('composition-legend-label-category-1')),
+    );
+    final narrowLegendAmount = tester.getRect(
+      find.byKey(const ValueKey('composition-legend-amount-category-1')),
+    );
+    expect(
+      narrowLegendAmount.center.dy,
+      closeTo(narrowLegendLabel.center.dy, 1),
+    );
     expect(tester.takeException(), isNull);
   });
 }

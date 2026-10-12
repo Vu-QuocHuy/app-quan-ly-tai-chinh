@@ -16,6 +16,7 @@ import '../../features/ingestion/domain/import_job.dart';
 import '../../features/ingestion/presentation/import_source_sheet.dart';
 import '../../features/income/presentation/income_entry_sheet.dart';
 import '../../features/payments/application/qr_payment_providers.dart';
+import '../../features/notifications/data/budget_notification_service.dart';
 import '../../shared/dialogs/confirm_dialog.dart';
 import '../../shared/errors/error_presenter.dart';
 import '../../shared/widgets/reading_pane.dart';
@@ -55,6 +56,7 @@ class _AppShellState extends ConsumerState<AppShell>
     _startAutoSyncTimer();
     if (!kIsWeb) unawaited(_resumePendingImports());
     unawaited(_syncCloud());
+    unawaited(_processDueRecurringIncomes());
   }
 
   @override
@@ -70,6 +72,7 @@ class _AppShellState extends ConsumerState<AppShell>
     if (state == AppLifecycleState.resumed) {
       _startAutoSyncTimer();
       unawaited(_syncCloud());
+      unawaited(_processDueRecurringIncomes());
       if (!kIsWeb) unawaited(_resumePendingImports());
     } else {
       _autoSyncTimer?.cancel();
@@ -107,6 +110,22 @@ class _AppShellState extends ConsumerState<AppShell>
       if (_syncRequestedWhileRunning && mounted) {
         _syncRequestedWhileRunning = false;
         unawaited(_syncCloud());
+      }
+    }
+  }
+
+  Future<void> _processDueRecurringIncomes() async {
+    try {
+      final created = await ref.read(recurringIncomeProcessorProvider).runDue();
+      if (created > 0 && mounted) {
+        _showMessage('Đã tự ghi $created khoản thu cố định đến hạn.');
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        _showMessage(
+          'Không thể tự ghi khoản thu định kỳ: ${friendlyMessage(error)}',
+          isError: true,
+        );
       }
     }
   }
@@ -157,6 +176,17 @@ class _AppShellState extends ConsumerState<AppShell>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(plansProvider, (previous, next) {
+      final plans = next.asData?.value;
+      if (plans != null) {
+        unawaited(_processDueRecurringIncomes());
+        unawaited(
+          BudgetNotificationService.instance
+              .schedulePlanReminders(plans)
+              .catchError((Object _) {}),
+        );
+      }
+    });
     ref.listen(syncHealthProvider, (previous, next) {
       final health = next.asData?.value;
       if (health != null && health.pendingCount > 0) _requestAutoSync();
@@ -169,7 +199,17 @@ class _AppShellState extends ConsumerState<AppShell>
     final useRail = AppBreakpoints.useRail(width);
     final content = widget.navigationShell;
     final scheme = Theme.of(context).colorScheme;
-    final showInvoiceAction = widget.navigationShell.currentIndex == 1;
+    final showInvoiceAction = widget.navigationShell.currentIndex <= 1;
+    final invoiceAction = _isImporting ? _cancelImport : _showImportSources;
+    final invoiceActionTooltip = _isImporting && _importFileName != null
+        ? 'Đang xử lý $_importFileName · Nhấn để hủy'
+        : 'Thêm giao dịch';
+    final invoiceActionIcon = _isImporting
+        ? const Icon(Icons.stop_circle_outlined)
+        : const Icon(Icons.note_add_outlined);
+    final invoiceActionLabel = _isImporting
+        ? 'Hủy $_importIndex/$_importTotal'
+        : 'Thêm giao dịch';
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -294,20 +334,18 @@ class _AppShellState extends ConsumerState<AppShell>
               destinations: _destinations,
             ),
       floatingActionButton: showInvoiceAction
-          ? FloatingActionButton.extended(
-              onPressed: _isImporting ? _cancelImport : _showImportSources,
-              tooltip: _isImporting && _importFileName != null
-                  ? 'Đang xử lý $_importFileName · Nhấn để hủy'
-                  : 'Thêm giao dịch',
-              icon: _isImporting
-                  ? const Icon(Icons.stop_circle_outlined)
-                  : const Icon(Icons.note_add_outlined),
-              label: Text(
-                _isImporting
-                    ? 'Hủy $_importIndex/$_importTotal'
-                    : 'Thêm giao dịch',
-              ),
-            )
+          ? useRail
+                ? FloatingActionButton.extended(
+                    onPressed: invoiceAction,
+                    tooltip: invoiceActionTooltip,
+                    icon: invoiceActionIcon,
+                    label: Text(invoiceActionLabel),
+                  )
+                : FloatingActionButton(
+                    onPressed: invoiceAction,
+                    tooltip: invoiceActionTooltip,
+                    child: invoiceActionIcon,
+                  )
           : null,
     );
   }
@@ -348,11 +386,7 @@ class _AppShellState extends ConsumerState<AppShell>
   }
 
   Future<void> _pickImage(ImageSource source) async {
-    final image = await ImagePicker().pickImage(
-      source: source,
-      imageQuality: 92,
-      maxWidth: 2400,
-    );
+    final image = await ImagePicker().pickImage(source: source);
     if (image == null) return;
     await _importImageFile(image);
   }
@@ -587,29 +621,51 @@ class _AppShellState extends ConsumerState<AppShell>
     final bytes = outcome.sourceImageBytes;
     final fileName = outcome.sourceImageFileName;
     if (bytes == null || fileName == null) return;
+
+    Object? localError;
     try {
-      final flags =
-          ref.read(featureFlagsProvider).value ?? FeatureFlags.defaults;
-      if (!flags.cloudSync) {
-        throw StateError('Đồng bộ cloud đang tắt.');
-      }
-      final store = ref.read(invoiceAttachmentStoreProvider);
-      if (store == null) throw StateError('Supabase chưa được cấu hình.');
-      await ref.read(syncCoordinatorProvider).runOnce(batchSize: 100);
-      await store.upload(
-        invoiceId: outcome.result.invoice.id,
-        fileName: fileName,
-        bytes: bytes,
-      );
-      ref.invalidate(invoiceAttachmentsProvider(outcome.result.invoice.id));
+      await ref
+          .read(databaseProvider)
+          .saveInvoiceOriginalImage(
+            invoiceId: outcome.result.invoice.id,
+            fileName: fileName,
+            imageBytes: bytes,
+          );
     } on Object catch (error) {
-      if (mounted) {
-        _showMessage(
-          'Hóa đơn đã lưu, nhưng chưa lưu được ảnh gốc: ${friendlyMessage(error)}. '
-          'Bạn có thể thử thêm lại trong mục Chứng từ gốc.',
-          isError: true,
+      localError = error;
+    }
+
+    Object? cloudError;
+    final flags = ref.read(featureFlagsProvider).value ?? FeatureFlags.defaults;
+    if (flags.cloudSync) {
+      try {
+        final store = ref.read(invoiceAttachmentStoreProvider);
+        if (store == null) throw StateError('Supabase chưa được cấu hình.');
+        await ref.read(syncCoordinatorProvider).runOnce(batchSize: 100);
+        await store.upload(
+          invoiceId: outcome.result.invoice.id,
+          fileName: fileName,
+          bytes: bytes,
         );
+        ref.invalidate(invoiceAttachmentsProvider(outcome.result.invoice.id));
+      } on Object catch (error) {
+        cloudError = error;
       }
+    }
+
+    if (!mounted) return;
+    if (localError != null) {
+      _showMessage(
+        'Hóa đơn đã lưu, nhưng ảnh gốc chưa lưu được trên thiết bị: '
+        '${friendlyMessage(localError)}.',
+        isError: true,
+      );
+    } else if (cloudError != null) {
+      _showMessage(
+        'Ảnh gốc đã lưu trên thiết bị, nhưng chưa đồng bộ lên cloud: '
+        '${friendlyMessage(cloudError)}. Bạn có thể thử lại trong mục Chứng từ gốc.',
+        isError: true,
+      );
     }
   }
 

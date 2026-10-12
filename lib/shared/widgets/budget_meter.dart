@@ -7,8 +7,7 @@ import 'status_pill.dart';
 
 /// Thanh ngân sách ba tầng, có đuôi tràn và vạch nhịp.
 ///
-/// Thay hai thanh khác nhau vẽ cùng một con số: một cái cao 10 bo 999 màu
-/// tertiary trên Dashboard, một cái cao 8 bo 8 màu primary trên Ngân sách.
+/// Thanh dùng chung cho hạn mức tổng ở Tổng quan và Ngân sách.
 class BudgetMeter extends StatelessWidget {
   const BudgetMeter({
     required this.spentMinor,
@@ -163,7 +162,7 @@ class _MeterBar extends StatelessWidget {
   final bool animate;
   final bool colorTransition;
 
-  static const double _height = 10;
+  static const double _height = 12;
 
   @override
   Widget build(BuildContext context) {
@@ -210,7 +209,7 @@ class _MeterBar extends StatelessWidget {
                     ),
                     child: const SizedBox(width: double.infinity),
                   ),
-                  // ClipRRect ở đây là an toàn: widget cố định 10dp, KHÔNG bọc
+                  // ClipRRect ở đây là an toàn: widget cố định 12dp, KHÔNG bọc
                   // nội dung cuộn (thứ bị cấm vì buộc saveLayer mỗi frame).
                   ClipRRect(
                     borderRadius: BorderRadius.circular(999),

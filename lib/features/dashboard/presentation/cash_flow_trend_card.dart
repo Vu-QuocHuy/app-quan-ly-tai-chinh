@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -48,8 +49,8 @@ class CashFlowTrendCard extends ConsumerWidget {
       );
     }
     final expenseTotals = expenses.valueOrNull ?? const <String, int>{};
-    final months = List.generate(6, (index) {
-      final month = MonthUtils.shift(selectedMonth, index - 5);
+    final months = List.generate(3, (index) {
+      final month = MonthUtils.shift(selectedMonth, index - 2);
       final key = MonthUtils.key(month);
       return (
         month: month,
@@ -62,95 +63,211 @@ class CashFlowTrendCard extends ConsumerWidget {
       final current = item.income > item.expense ? item.income : item.expense;
       return current > max ? current : max;
     });
-    final finance = Theme.of(context).extension<AppFinanceColors>()!;
+    final theme = Theme.of(context);
+    final finance = theme.extension<AppFinanceColors>()!;
+    final scheme = theme.colorScheme;
+    final axisMax = maxAmount == 0 ? 1.0 : maxAmount * 1.2;
 
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
+          Wrap(
+            spacing: AppSpacing.lg,
+            runSpacing: AppSpacing.sm,
             children: [
               _Legend(color: finance.income.color, label: 'Thu'),
-              const SizedBox(width: AppSpacing.lg),
-              _Legend(color: finance.expense.color, label: 'Chi'),
+              _Legend(color: finance.budgetOver.color, label: 'Chi'),
+              _Legend(
+                color: finance.cashFlowBalance.color,
+                label: 'Chênh lệch |Thu − Chi|',
+              ),
             ],
           ),
           if (!hasData)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
-              child: Text('Chưa có khoản thu hoặc chi trong 6 tháng này.'),
+              child: Text('Chưa có khoản thu hoặc chi trong 3 tháng này.'),
             )
           else ...[
-            const SizedBox(height: AppSpacing.sm),
-            for (final item in months) ...[
-              const Divider(height: 1, indent: 0, endIndent: 0),
-              Semantics(
-                button: true,
-                onTap: () =>
-                    context.go('/invoices?month=${MonthUtils.key(item.month)}'),
-                label:
-                    '${MonthUtils.label(item.month)}, '
-                    'thu ${MoneyFormatter.format(item.income)}, '
-                    'chi ${MoneyFormatter.format(item.expense)}, '
-                    'thu trừ chi ${MoneyFormatter.format(item.income - item.expense)}. '
-                    'Xem giao dịch.',
-                child: ExcludeSemantics(
-                  child: InkWell(
-                    onTap: () => context.go(
-                      '/invoices?month=${MonthUtils.key(item.month)}',
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: AppSpacing.md,
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                '${item.month.month.toString().padLeft(2, '0')}/${item.month.year}',
-                                style: Theme.of(context).textTheme.titleSmall,
+            const SizedBox(height: AppSpacing.lg),
+            Semantics(
+              label:
+                  'Biểu đồ cột dòng tiền 3 tháng gần nhất. Cả ba cột đều ở phía trên đường 0: '
+                  'cột xanh là thu, cột đỏ là chi, cột vàng là độ lớn chênh lệch thu trừ chi. '
+                  'Chạm cột để xem giao dịch.',
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final chartWidth = constraints.maxWidth;
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: chartWidth,
+                      height: 260,
+                      child: BarChart(
+                        BarChartData(
+                          minY: 0,
+                          maxY: axisMax,
+                          alignment: BarChartAlignment.spaceAround,
+                          barGroups: [
+                            for (var index = 0; index < months.length; index++)
+                              BarChartGroupData(
+                                x: index,
+                                barsSpace: 4,
+                                barRods: [
+                                  BarChartRodData(
+                                    toY: months[index].income.toDouble(),
+                                    width: 20,
+                                    color: finance.income.color,
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(AppSpacing.xs),
+                                    ),
+                                  ),
+                                  BarChartRodData(
+                                    toY: months[index].expense.toDouble(),
+                                    width: 20,
+                                    color: finance.budgetOver.color,
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(AppSpacing.xs),
+                                    ),
+                                  ),
+                                  BarChartRodData(
+                                    toY:
+                                        (months[index].income -
+                                                months[index].expense)
+                                            .abs()
+                                            .toDouble(),
+                                    width: 20,
+                                    color: finance.cashFlowBalance.color,
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(AppSpacing.xs),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: AppSpacing.sm),
-                              Expanded(
-                                child: Text(
-                                  'Thu − chi ${MoneyFormatter.compact(item.income - item.expense)}',
-                                  textAlign: TextAlign.right,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.labelMedium
-                                      ?.copyWith(
-                                        color: item.income >= item.expense
-                                            ? finance.income.color
-                                            : finance.budgetWarn.color,
-                                      ),
-                                ),
+                          ],
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: false,
+                            horizontalInterval: axisMax / 2,
+                            checkToShowHorizontalLine: (value) => value != 0,
+                            getDrawingHorizontalLine: (_) => FlLine(
+                              color: scheme.outlineVariant.withValues(
+                                alpha: 0.5,
                               ),
-                              const SizedBox(width: AppSpacing.xs),
-                              const Icon(Icons.chevron_right, size: 18),
+                              strokeWidth: 1,
+                            ),
+                          ),
+                          extraLinesData: ExtraLinesData(
+                            horizontalLines: [
+                              HorizontalLine(
+                                y: 0,
+                                color: scheme.outline,
+                                strokeWidth: 1.5,
+                              ),
                             ],
                           ),
-                          const SizedBox(height: AppSpacing.sm),
-                          _AmountBar(
-                            label: 'Thu',
-                            amount: item.income,
-                            maxAmount: maxAmount,
-                            color: finance.income.color,
+                          borderData: FlBorderData(show: false),
+                          titlesData: FlTitlesData(
+                            topTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            rightTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 54,
+                                interval: axisMax / 2,
+                                getTitlesWidget: (value, meta) => Padding(
+                                  padding: const EdgeInsets.only(
+                                    right: AppSpacing.xs,
+                                  ),
+                                  child: Text(
+                                    MoneyFormatter.compact(value.round()),
+                                    textAlign: TextAlign.right,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 28,
+                                getTitlesWidget: (value, meta) {
+                                  final index = value.round();
+                                  if (index != value ||
+                                      index < 0 ||
+                                      index >= months.length) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final month = months[index].month;
+                                  return SideTitleWidget(
+                                    meta: meta,
+                                    child: Text(
+                                      '${month.month}/${month.year % 100}',
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            color: scheme.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                           ),
-                          const SizedBox(height: AppSpacing.xs),
-                          _AmountBar(
-                            label: 'Chi',
-                            amount: item.expense,
-                            maxAmount: maxAmount,
-                            color: finance.expense.color,
+                          barTouchData: BarTouchData(
+                            touchExtraThreshold: const EdgeInsets.all(14),
+                            mouseCursorResolver: (event, response) =>
+                                response?.spot == null
+                                ? SystemMouseCursors.basic
+                                : SystemMouseCursors.click,
+                            touchCallback: (event, response) {
+                              if (event is FlTapUpEvent) {
+                                final spot = response?.spot;
+                                if (spot != null) {
+                                  context.go(
+                                    '/invoices?month=${MonthUtils.key(months[spot.touchedBarGroupIndex].month)}',
+                                  );
+                                }
+                              }
+                            },
+                            touchTooltipData: BarTouchTooltipData(
+                              getTooltipColor: (_) => scheme.inverseSurface,
+                              fitInsideHorizontally: true,
+                              fitInsideVertically: true,
+                              maxContentWidth: 180,
+                              getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                                final item = months[groupIndex];
+                                final amount = switch (rodIndex) {
+                                  0 => item.income,
+                                  1 => item.expense,
+                                  _ => item.income - item.expense,
+                                };
+                                final label = switch (rodIndex) {
+                                  0 => 'Thu',
+                                  1 => 'Chi',
+                                  _ => 'Chênh lệch',
+                                };
+                                return BarTooltipItem(
+                                  '${item.month.month}/${item.month.year} · $label\n'
+                                  '${MoneyFormatter.format(amount)}',
+                                  TextStyle(color: scheme.onInverseSurface),
+                                );
+                              },
+                            ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
-            ],
+            ),
           ],
         ],
       ),
@@ -177,53 +294,6 @@ class _Legend extends StatelessWidget {
       ),
       const SizedBox(width: AppSpacing.xs),
       Text(label, style: Theme.of(context).textTheme.bodySmall),
-    ],
-  );
-}
-
-class _AmountBar extends StatelessWidget {
-  const _AmountBar({
-    required this.label,
-    required this.amount,
-    required this.maxAmount,
-    required this.color,
-  });
-
-  final String label;
-  final int amount;
-  final int maxAmount;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      SizedBox(
-        width: 32,
-        child: Text(label, style: Theme.of(context).textTheme.bodySmall),
-      ),
-      Expanded(
-        child: LinearProgressIndicator(
-          value: maxAmount == 0 ? 0 : amount / maxAmount,
-          minHeight: 8,
-          color: color,
-          backgroundColor: Theme.of(
-            context,
-          ).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(4),
-        ),
-      ),
-      const SizedBox(width: AppSpacing.sm),
-      SizedBox(
-        width: 88,
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerRight,
-          child: Text(
-            MoneyFormatter.compact(amount),
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-        ),
-      ),
     ],
   );
 }

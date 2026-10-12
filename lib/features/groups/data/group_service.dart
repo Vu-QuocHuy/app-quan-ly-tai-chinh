@@ -13,6 +13,61 @@ class ExpenseGroupService {
 
   final SupabaseClient _client;
 
+  Future<List<GroupFundEntry>> listFundEntries(String groupId) async {
+    _requiredUuid(groupId, 'group.id');
+    final rows = _asRows(
+      await _client
+          .from('group_fund_entries')
+          .select(
+            'id, group_id, actor_id, kind, amount_minor, note, created_at',
+          )
+          .eq('group_id', groupId)
+          .order('created_at', ascending: false),
+    );
+    return rows
+        .map(
+          (row) => GroupFundEntry(
+            id: _requiredUuid(row['id'], 'fund.id'),
+            groupId: _requiredUuid(row['group_id'], 'fund.group_id'),
+            actorId: _requiredUuid(row['actor_id'], 'fund.actor_id'),
+            kind: _requiredString(row['kind'], 'Loại', 16),
+            amountMinor: _positiveInteger(row['amount_minor'], 'Số tiền'),
+            note: (row['note'] as String?) ?? '',
+            createdAt: _requiredDate(row['created_at'], 'Ngày tạo'),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> addFundEntry({
+    required String groupId,
+    required String kind,
+    required int amountMinor,
+    required String note,
+  }) async {
+    _requiredUuid(groupId, 'group.id');
+    if (kind != 'deposit' && kind != 'expense') {
+      throw const FormatException('Loại giao dịch quỹ không hợp lệ.');
+    }
+    if (amountMinor < 1 || amountMinor > _maxSafeInteger || note.length > 160) {
+      throw const FormatException('Số tiền hoặc ghi chú không hợp lệ.');
+    }
+    await _client.rpc(
+      'add_group_fund_entry',
+      params: {
+        'p_group_id': groupId,
+        'p_kind': kind,
+        'p_amount_minor': amountMinor,
+        'p_note': note.trim(),
+      },
+    );
+  }
+
+  Future<void> deleteFundEntry(String id) async {
+    _requiredUuid(id, 'fund.id');
+    await _client.rpc('delete_group_fund_entry', params: {'p_id': id});
+  }
+
   String get currentUserId {
     final id = _client.auth.currentUser?.id;
     if (id == null) throw StateError('Bạn cần đăng nhập để dùng nhóm.');

@@ -28,7 +28,7 @@ class AccountScreen extends ConsumerStatefulWidget {
 }
 
 class _AccountScreenState extends ConsumerState<AccountScreen> {
-  final _formKey = GlobalKey<FormState>();
+  GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmationController = TextEditingController();
@@ -52,8 +52,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   Widget build(BuildContext context) {
     final client = ref.watch(supabaseClientProvider);
     final user = ref.watch(authUserProvider);
+    final isSignedOut =
+        client != null && user.hasValue && user.valueOrNull == null;
     return Scaffold(
-      appBar: AppBar(title: const Text('Tài khoản')),
+      appBar: isSignedOut ? null : AppBar(title: const Text('Tài khoản')),
       body: SafeArea(
         child: client == null
             ? _buildCenteredContent(const _ConfigurationMissingCard())
@@ -280,6 +282,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       key: _formKey,
       autovalidateMode: AutovalidateMode.onUserInteraction,
       child: Card(
+        key: ValueKey(_registering),
         color: scheme.cardSurface,
         shape: RoundedRectangleBorder(
           borderRadius: AppShapes.cardRadius,
@@ -355,6 +358,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 container: true,
                 label: 'Chọn đăng nhập hoặc đăng ký',
                 child: SegmentedButton<bool>(
+                  style: ButtonStyle(
+                    minimumSize: const WidgetStatePropertyAll(
+                      Size.fromHeight(48),
+                    ),
+                    tapTargetSize: MaterialTapTargetSize.padded,
+                  ),
                   segments: const [
                     ButtonSegment(value: false, label: Text('Đăng nhập')),
                     ButtonSegment(value: true, label: Text('Đăng ký')),
@@ -365,6 +374,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                       : (selection) {
                           setState(() {
                             _registering = selection.first;
+                            _formKey = GlobalKey<FormState>();
                             _verificationEmail = null;
                             _message = null;
                           });
@@ -460,6 +470,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                      tapTargetSize: MaterialTapTargetSize.padded,
+                    ),
                     onPressed: _busy ? null : _sendPasswordReset,
                     child: const Text('Quên mật khẩu?'),
                   ),
@@ -1129,7 +1143,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
   Future<void> _clearBudgetNotifications() async {
     try {
-      await BudgetNotificationService.instance.cancelBudgetNotifications();
+      await BudgetNotificationService.instance.cancelAllNotifications();
     } on Object {
       return;
     }

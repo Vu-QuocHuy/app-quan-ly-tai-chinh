@@ -13,6 +13,7 @@ abstract interface class InvoiceRepository {
     InvoicePageCursor? cursor,
   });
   Stream<List<CategoryEntity>> watchCategories();
+  Stream<List<CategoryEntity>> watchIncomeCategories();
   Stream<List<MerchantRuleEntity>> watchMerchantRules();
   Stream<List<BudgetEntity>> watchBudgets(String monthKey);
   Stream<DashboardSnapshot> watchDashboard(String monthKey);

@@ -4,17 +4,44 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../invoices/domain/invoice_models.dart';
+
+enum IncomeSource {
+  fixed('Thu cố định'),
+  manual('Thu tự thêm'),
+  unclassified('Chưa phân loại');
+
+  const IncomeSource(this.label);
+
+  final String label;
+
+  static IncomeSource fromPayload(Object? value) {
+    if (value == null) return IncomeSource.unclassified;
+    if (value is String) {
+      for (final source in IncomeSource.values) {
+        if (source.name == value) return source;
+      }
+    }
+    throw const FormatException('Nguồn khoản thu không hợp lệ.');
+  }
+}
 
 class IncomeEntry {
+  static const unclassifiedCategoryId = unclassifiedIncomeCategoryId;
+
   const IncomeEntry({
     required this.id,
     required this.amountMinor,
+    required this.source,
     required this.receivedAt,
     required this.updatedAt,
+    this.categoryId = unclassifiedCategoryId,
   });
 
   final String id;
   final int amountMinor;
+  final IncomeSource source;
+  final String categoryId;
   final DateTime receivedAt;
   final DateTime updatedAt;
 
@@ -23,12 +50,17 @@ class IncomeEntry {
     final amount = payload['amountMinor'];
     final receivedAt = DateTime.tryParse('${payload['receivedAt'] ?? ''}');
     final updatedAt = DateTime.tryParse('${payload['updatedAt'] ?? ''}');
+    final rawCategoryId = payload['categoryId'];
     if (id is! String ||
         id.trim().isEmpty ||
         id.length > 128 ||
         amount is! int ||
         amount <= 0 ||
         amount > 9007199254740991 ||
+        (rawCategoryId != null &&
+            (rawCategoryId is! String ||
+                rawCategoryId.trim().isEmpty ||
+                rawCategoryId.length > 128)) ||
         receivedAt == null ||
         updatedAt == null) {
       throw const FormatException('Khoản thu không hợp lệ.');
@@ -36,14 +68,18 @@ class IncomeEntry {
     return IncomeEntry(
       id: id,
       amountMinor: amount,
+      source: IncomeSource.fromPayload(payload['source']),
       receivedAt: receivedAt.toLocal(),
       updatedAt: updatedAt.toLocal(),
+      categoryId: rawCategoryId as String? ?? unclassifiedCategoryId,
     );
   }
 
   Map<String, Object> toPayload() => {
     'id': id,
     'amountMinor': amountMinor,
+    'source': source.name,
+    'categoryId': categoryId,
     'receivedAt': receivedAt.toUtc().toIso8601String(),
     'updatedAt': updatedAt.toUtc().toIso8601String(),
   };
@@ -67,7 +103,12 @@ class IncomeRepository {
           .map(_fromRow)
           .toList(growable: false);
 
-  Future<void> save(int amountMinor, {IncomeEntry? existing}) async {
+  Future<void> save(
+    int amountMinor, {
+    required IncomeSource source,
+    String? categoryId,
+    IncomeEntry? existing,
+  }) async {
     if (amountMinor <= 0 || amountMinor > 9007199254740991) {
       throw const FormatException('Số tiền thu phải lớn hơn 0.');
     }
@@ -75,12 +116,32 @@ class IncomeRepository {
     final entry = IncomeEntry(
       id: existing?.id ?? _uuid.v4(),
       amountMinor: amountMinor,
+      source: source,
+      categoryId:
+          categoryId ??
+          existing?.categoryId ??
+          IncomeEntry.unclassifiedCategoryId,
       receivedAt: existing?.receivedAt ?? now,
       updatedAt: now,
     );
     await _db.transaction(() async {
       await _db.into(_db.incomes).insertOnConflictUpdate(_companion(entry));
       await _enqueue(entry.id, 'upsert', entry.toPayload());
+    });
+  }
+
+  Future<bool> saveScheduled(IncomeEntry entry) async {
+    IncomeEntry.fromPayload(entry.toPayload());
+    return _db.transaction(() async {
+      final inserted = await _db
+          .into(_db.incomes)
+          .insert(_companion(entry), mode: InsertMode.insertOrIgnore);
+      final affected = await _db
+          .customSelect('SELECT changes() AS count')
+          .getSingle();
+      if (inserted == 0 || affected.read<int>('count') == 0) return false;
+      await _enqueue(entry.id, 'upsert', entry.toPayload());
+      return true;
     });
   }
 
@@ -147,6 +208,8 @@ class IncomeRepository {
       IncomesCompanion.insert(
         id: entry.id,
         amountMinor: entry.amountMinor,
+        source: Value(entry.source.name),
+        categoryId: Value(entry.categoryId),
         receivedAt: entry.receivedAt,
         updatedAt: entry.updatedAt,
       );
@@ -154,7 +217,9 @@ class IncomeRepository {
   static IncomeEntry _fromRow(IncomeRow row) => IncomeEntry(
     id: row.id,
     amountMinor: row.amountMinor,
+    source: IncomeSource.fromPayload(row.source),
     receivedAt: row.receivedAt,
     updatedAt: row.updatedAt,
+    categoryId: row.categoryId,
   );
 }

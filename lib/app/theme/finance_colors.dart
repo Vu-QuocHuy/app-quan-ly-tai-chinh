@@ -31,6 +31,7 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
     required this.expense,
     required this.budgetSafe,
     required this.budgetWarn,
+    required this.cashFlowBalance,
     required this.budgetOver,
     required this.confidenceHigh,
     required this.confidenceLow,
@@ -56,6 +57,7 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
   /// Tầng 80% — khớp `BudgetAlertPolicy.approachingThreshold`. Hôm nay policy
   /// bắn thông báo ở ngưỡng này nhưng KHÔNG màn hình nào render nó.
   final FinanceTone budgetWarn;
+  final FinanceTone cashFlowBalance;
 
   final FinanceTone budgetOver;
   final FinanceTone confidenceHigh;
@@ -127,6 +129,12 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
       container: Color(0xFFF4E4C9),
       onContainer: Color(0xFF3E2D18),
     ),
+    cashFlowBalance: FinanceTone(
+      color: Color(0xFFD4A017),
+      onColor: Color(0xFF241900),
+      container: Color(0xFFFFE8A0),
+      onContainer: Color(0xFF3B2A00),
+    ),
     budgetOver: FinanceTone(
       color: Color(0xFFB3261E),
       onColor: Color(0xFFFFFFFF),
@@ -194,6 +202,12 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
       container: Color(0xFF5C421F),
       onContainer: Color(0xFFF4E4C9),
     ),
+    cashFlowBalance: FinanceTone(
+      color: Color(0xFFF2C84B),
+      onColor: Color(0xFF2A2000),
+      container: Color(0xFF5B4500),
+      onContainer: Color(0xFFFFE8A0),
+    ),
     budgetOver: FinanceTone(
       color: Color(0xFFFFB4AB),
       onColor: Color(0xFF5A1A15),
@@ -242,6 +256,7 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
     FinanceTone? expense,
     FinanceTone? budgetSafe,
     FinanceTone? budgetWarn,
+    FinanceTone? cashFlowBalance,
     FinanceTone? budgetOver,
     FinanceTone? confidenceHigh,
     FinanceTone? confidenceLow,
@@ -258,6 +273,7 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
       expense: expense ?? this.expense,
       budgetSafe: budgetSafe ?? this.budgetSafe,
       budgetWarn: budgetWarn ?? this.budgetWarn,
+      cashFlowBalance: cashFlowBalance ?? this.cashFlowBalance,
       budgetOver: budgetOver ?? this.budgetOver,
       confidenceHigh: confidenceHigh ?? this.confidenceHigh,
       confidenceLow: confidenceLow ?? this.confidenceLow,
@@ -279,6 +295,11 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
       expense: FinanceTone.lerp(expense, other.expense, t),
       budgetSafe: FinanceTone.lerp(budgetSafe, other.budgetSafe, t),
       budgetWarn: FinanceTone.lerp(budgetWarn, other.budgetWarn, t),
+      cashFlowBalance: FinanceTone.lerp(
+        cashFlowBalance,
+        other.cashFlowBalance,
+        t,
+      ),
       budgetOver: FinanceTone.lerp(budgetOver, other.budgetOver, t),
       confidenceHigh: FinanceTone.lerp(confidenceHigh, other.confidenceHigh, t),
       confidenceLow: FinanceTone.lerp(confidenceLow, other.confidenceLow, t),

@@ -44,7 +44,7 @@ class SettingsScreen extends ConsumerWidget {
         slivers: [
           const SliverAppBar(pinned: true, title: Text('Cài đặt')),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 112),
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 112),
             sliver: SliverList.list(
               children: [
                 _Section(
@@ -381,10 +381,12 @@ class SettingsScreen extends ConsumerWidget {
           .watchInvoices()
           .first;
       final incomes = await ref.read(incomeRepositoryProvider).getAll();
+      final plans = await ref.read(planRepositoryProvider).getAll();
       final uri = json
           ? await const InvoiceExportService().exportJson(
               invoices,
               incomes: incomes,
+              plans: plans,
             )
           : await const InvoiceExportService().exportCsv(invoices);
       if (uri == null) return;
@@ -398,7 +400,7 @@ class SettingsScreen extends ConsumerWidget {
         SnackBar(
           content: Text(
             json
-                ? 'Đã xuất ${invoices.length} khoản chi và ${incomes.length} khoản thu.'
+                ? 'Đã xuất ${invoices.length} khoản chi, ${incomes.length} khoản thu và ${plans.length} kế hoạch.'
                 : 'Đã xuất ${invoices.length} hóa đơn.',
           ),
         ),
@@ -426,10 +428,12 @@ class SettingsScreen extends ConsumerWidget {
           .watchInvoices()
           .first;
       final incomes = await ref.read(incomeRepositoryProvider).getAll();
+      final plans = await ref.read(planRepositoryProvider).getAll();
       final uri = await const InvoiceExportService().exportEncryptedJson(
         invoices,
         password,
         incomes: incomes,
+        plans: plans,
       );
       if (uri == null) return;
       await _recordBackup(ref, BackupRecordType.encrypted, uri);
@@ -437,7 +441,7 @@ class SettingsScreen extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Đã xuất backup mã hóa ${invoices.length} khoản chi và ${incomes.length} khoản thu.',
+            'Đã xuất backup mã hóa ${invoices.length} khoản chi, ${incomes.length} khoản thu và ${plans.length} kế hoạch.',
           ),
         ),
       );
@@ -469,9 +473,10 @@ class SettingsScreen extends ConsumerWidget {
           .watchInvoices()
           .first;
       final incomes = await ref.read(incomeRepositoryProvider).getAll();
+      final plans = await ref.read(planRepositoryProvider).getAll();
       final uri = await InvoiceExportService(
         provider: provider,
-      ).exportEncryptedJson(invoices, password, incomes: incomes);
+      ).exportEncryptedJson(invoices, password, incomes: incomes, plans: plans);
       if (uri == null || !context.mounted) return;
       await _recordBackup(ref, BackupRecordType.encrypted, uri);
       try {
@@ -483,7 +488,7 @@ class SettingsScreen extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Đã sao lưu mã hóa ${invoices.length} khoản chi và ${incomes.length} khoản thu lên Supabase.',
+            'Đã sao lưu mã hóa ${invoices.length} khoản chi, ${incomes.length} khoản thu và ${plans.length} kế hoạch lên Supabase.',
           ),
         ),
       );
@@ -542,6 +547,9 @@ class SettingsScreen extends ConsumerWidget {
           existingIncomeIds: (await ref.read(incomeRepositoryProvider).getAll())
               .map((entry) => entry.id)
               .toSet(),
+          existingPlanIds: (await ref.read(planRepositoryProvider).getAll())
+              .map((item) => item.id)
+              .toSet(),
           requestPassword: () => _showBackupPasswordDialog(context),
         );
         if (preview == null || !context.mounted) continue;
@@ -551,12 +559,13 @@ class SettingsScreen extends ConsumerWidget {
           preview,
           repository,
           incomeRepository: ref.read(incomeRepositoryProvider),
+          planRepository: ref.read(planRepositoryProvider),
         );
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Đã khôi phục ${preview.readyCount} giao dịch từ Supabase.',
+              'Đã khôi phục ${preview.readyCount} mục từ Supabase.',
             ),
           ),
         );
@@ -635,6 +644,7 @@ class SettingsScreen extends ConsumerWidget {
       final preview = await service.pickAndPreview(
         repository: ref.read(invoiceRepositoryProvider),
         incomeRepository: ref.read(incomeRepositoryProvider),
+        planRepository: ref.read(planRepositoryProvider),
         categoryIds: categoryIds,
         requestPassword: () => _showBackupPasswordDialog(context),
       );
@@ -663,14 +673,13 @@ class SettingsScreen extends ConsumerWidget {
         preview,
         ref.read(invoiceRepositoryProvider),
         incomeRepository: ref.read(incomeRepositoryProvider),
+        planRepository: ref.read(planRepositoryProvider),
       );
       if (!context.mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       progressVisible = false;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Đã khôi phục ${preview.readyCount} giao dịch.'),
-        ),
+        SnackBar(content: Text('Đã khôi phục ${preview.readyCount} mục.')),
       );
     } on Object catch (error) {
       if (!context.mounted) return;

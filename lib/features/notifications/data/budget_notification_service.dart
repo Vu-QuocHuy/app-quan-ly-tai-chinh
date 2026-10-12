@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
 import '../../invoices/domain/invoice_models.dart';
+import '../../planning/domain/plan_models.dart';
 import '../domain/budget_alert_policy.dart';
 import 'budget_alert_preferences.dart';
 
@@ -41,6 +43,7 @@ class BudgetNotificationService {
   NotificationTapHandler? _onTap;
   Future<String?>? _initialization;
   Future<void> _notificationLock = Future<void>.value();
+  Future<void> _planReminderLock = Future<void>.value();
 
   Future<String?> initialize({NotificationTapHandler? onTap}) {
     if (!_isSupportedPlatform) return Future<String?>.value();
@@ -115,7 +118,67 @@ class BudgetNotificationService {
   Future<void> cancelBudgetNotifications() async {
     if (!_isSupportedPlatform) return;
     if (!_initialized) await initialize();
+    for (final notification in await _plugin.getActiveNotifications()) {
+      if (notification.payload == _payload && notification.id != null) {
+        await _plugin.cancel(id: notification.id!);
+      }
+    }
+  }
+
+  Future<void> cancelAllNotifications() async {
+    if (!_isSupportedPlatform) return;
+    if (!_initialized) await initialize();
     await _plugin.cancelAll();
+  }
+
+  Future<void> schedulePlanReminders(Iterable<PlanItem> plans) {
+    final items = plans.toList(growable: false);
+    final operation = _planReminderLock.then(
+      (_) => _schedulePlanReminders(items),
+    );
+    _planReminderLock = operation.then<void>((_) {}, onError: (_, _) {});
+    return operation;
+  }
+
+  Future<void> _schedulePlanReminders(Iterable<PlanItem> plans) async {
+    if (!_isSupportedPlatform) return;
+    if (!_initialized) await initialize();
+    for (final pending in await _plugin.pendingNotificationRequests()) {
+      if (pending.payload == '/plans') await _plugin.cancel(id: pending.id);
+    }
+    final now = DateTime.now();
+    final bills = plans.whereType<RecurringBill>().toList()
+      ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
+    for (final bill in bills.take(50)) {
+      final due = DateTime(
+        bill.nextDueDate.year,
+        bill.nextDueDate.month,
+        bill.nextDueDate.day,
+        9,
+      );
+      if (!due.isAfter(now)) continue;
+      final advance = due.subtract(const Duration(days: 1));
+      final reminder = advance.isAfter(now)
+          ? advance
+          : now.add(const Duration(minutes: 1));
+      await _plugin.zonedSchedule(
+        id: _stableHash('plan:${bill.id}'),
+        title: 'Sắp đến hạn: ${bill.title}',
+        body:
+            '${MoneyFormatter.format(bill.amountMinor)} · Hạn ${bill.nextDueDate.day}/${bill.nextDueDate.month}',
+        scheduledDate: tz.TZDateTime.from(reminder, tz.UTC),
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'plan_reminders',
+            'Nhắc khoản định kỳ',
+            channelDescription: 'Nhắc trước khi khoản định kỳ đến hạn.',
+          ),
+          iOS: DarwinNotificationDetails(threadIdentifier: 'plan_reminders'),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: '/plans',
+      );
+    }
   }
 
   Future<BudgetNotificationResult> notifyIfNeeded(DashboardSnapshot snapshot) {

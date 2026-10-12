@@ -14,6 +14,8 @@ import '../../features/export/data/supabase_backup_provider.dart';
 import '../../features/income/data/income_repository.dart';
 import '../../features/invoices/data/drift_invoice_repository.dart';
 import '../../features/invoices/domain/invoice_models.dart';
+import '../../features/planning/application/recurring_income_processor.dart';
+import '../../features/planning/data/plan_repository.dart';
 import '../../features/notifications/data/budget_alert_preferences.dart';
 import '../../features/notifications/data/budget_notification_service.dart';
 import '../../features/sync/application/sync_coordinator.dart';
@@ -106,6 +108,14 @@ Future<bool> _runBackgroundMaintenance() async {
     var maintenanceSucceeded = true;
 
     final flags = await RemoteConfigService(client).load(userId: userId);
+    try {
+      await RecurringIncomeProcessor(
+        plans: PlanRepository(database),
+        incomes: IncomeRepository(database),
+      ).runDue();
+    } on Object {
+      maintenanceSucceeded = false;
+    }
     if (flags.cloudSync) {
       try {
         final outbox = DriftSyncOutboxStore(database);

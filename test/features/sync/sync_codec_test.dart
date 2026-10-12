@@ -118,8 +118,30 @@ void main() {
       });
 
       expect(category.isSystem, isTrue);
+      expect(category.kind, CategoryKind.expense);
       expect(budget.monthKey, '2026-09');
       expect(rule.normalizedMerchant, 'cloud store');
+    });
+
+    test('decodes income category kind and rejects unknown kinds', () {
+      final incomeCategory = ReferenceSyncCodec.categoryFromPayload({
+        'id': 'income_salary',
+        'name': 'Lương',
+        'iconName': 'payments',
+        'colorValue': 4293548044,
+        'kind': 'income',
+      });
+      expect(incomeCategory.kind, CategoryKind.income);
+      expect(
+        () => ReferenceSyncCodec.categoryFromPayload({
+          'id': 'income_salary',
+          'name': 'Lương',
+          'iconName': 'payments',
+          'colorValue': 4293548044,
+          'kind': 'salary',
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('rejects invalid month, amount and timestamp values', () {

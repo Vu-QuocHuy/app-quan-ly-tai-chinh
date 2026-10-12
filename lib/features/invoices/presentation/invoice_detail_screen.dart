@@ -12,6 +12,7 @@ import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/widgets/app_error_state.dart';
 import '../../../shared/widgets/app_empty_state.dart';
+import '../../../shared/widgets/reading_pane.dart';
 import '../../sharing/presentation/invoice_share_dialog.dart';
 
 class InvoiceDetailScreen extends ConsumerWidget {
@@ -84,10 +85,12 @@ class InvoiceDetailScreen extends ConsumerWidget {
             label: const Text('Quay lại danh sách'),
           ),
         ),
-        _ => _InvoiceDetail(
-          invoice: invoice,
-          categories: categories,
-          category: _findCategory(categories, invoice.categoryId),
+        _ => ReadingPane(
+          child: _InvoiceDetail(
+            invoice: invoice,
+            categories: categories,
+            category: _findCategory(categories, invoice.categoryId),
+          ),
         ),
       },
     );

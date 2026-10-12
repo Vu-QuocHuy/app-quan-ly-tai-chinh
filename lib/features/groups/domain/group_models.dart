@@ -12,6 +12,26 @@ class ExpenseGroup {
   final String ownerId;
 }
 
+class GroupFundEntry {
+  const GroupFundEntry({
+    required this.id,
+    required this.groupId,
+    required this.actorId,
+    required this.kind,
+    required this.amountMinor,
+    required this.note,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String groupId;
+  final String actorId;
+  final String kind;
+  final int amountMinor;
+  final String note;
+  final DateTime createdAt;
+}
+
 class GroupMember {
   const GroupMember({
     required this.userId,

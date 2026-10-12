@@ -1,10 +1,17 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:drift/drift.dart' show Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/core/database/app_database.dart';
+import 'package:hoadon_insight/core/constants/app_constants.dart';
 import 'package:hoadon_insight/features/invoices/data/drift_invoice_repository.dart';
 import 'package:hoadon_insight/features/invoices/domain/invoice_filters.dart';
 import 'package:hoadon_insight/features/invoices/domain/invoice_models.dart';
+import 'package:hoadon_insight/features/income/data/income_repository.dart';
+import 'package:hoadon_insight/features/planning/data/plan_repository.dart';
+import 'package:hoadon_insight/features/planning/domain/plan_models.dart';
 
 void main() {
   late AppDatabase database;
@@ -64,6 +71,51 @@ void main() {
     expect(summary.lines, isEmpty);
     expect(summary.evidence, isEmpty);
     expect(summary.totalMinor, 105000);
+  });
+
+  test('persists original image bytes in the local database', () async {
+    final now = DateTime(2026, 8, 20);
+    final invoice = InvoiceEntity(
+      id: 'invoice-with-image',
+      sellerName: 'Demo',
+      currencyCode: 'VND',
+      subtotalMinor: 0,
+      taxMinor: 0,
+      totalMinor: 0,
+      sourceType: InvoiceSourceType.imageOcr,
+      status: InvoiceStatus.needsReview,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final imageBytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
+
+    await repository.saveInvoice(invoice);
+    await database.saveInvoiceOriginalImage(
+      invoiceId: invoice.id,
+      fileName: 'receipt.png',
+      imageBytes: imageBytes,
+    );
+
+    final saved = await (database.select(
+      database.invoiceOriginalImages,
+    )..where((row) => row.invoiceId.equals(invoice.id))).getSingle();
+    expect(saved.fileName, 'receipt.png');
+    expect(saved.imageBytes, imageBytes);
+  });
+
+  test('rejects empty or oversized original image data', () async {
+    Future<void> save(Uint8List imageBytes) =>
+        database.saveInvoiceOriginalImage(
+          invoiceId: 'invoice-with-image',
+          fileName: 'receipt.png',
+          imageBytes: imageBytes,
+        );
+
+    await expectLater(save(Uint8List(0)), throwsFormatException);
+    await expectLater(
+      save(Uint8List(AppConstants.maxImportBytes + 1)),
+      throwsFormatException,
+    );
   });
 
   test('QR payment history includes confirmed QR payments only', () async {
@@ -215,6 +267,91 @@ void main() {
     );
     expect(await repository.watchBudgets('2026-08').first, isEmpty);
     expect(await repository.watchMerchantRules().first, isEmpty);
+  });
+
+  test(
+    'reassigns incomes and queues sync when an income category is deleted',
+    () async {
+      const category = CategoryEntity(
+        id: 'income-contract',
+        name: 'Hợp đồng',
+        iconName: 'category',
+        colorValue: 0xFF0F766E,
+        isSystem: false,
+        kind: CategoryKind.income,
+      );
+      final incomes = IncomeRepository(database);
+      await repository.saveCategory(category);
+      await incomes.save(
+        500000,
+        source: IncomeSource.manual,
+        categoryId: category.id,
+      );
+      expect(
+        (await repository.watchIncomeCategories().first).map((item) => item.id),
+        contains(category.id),
+      );
+      expect(
+        (await repository.watchCategories().first).map((item) => item.id),
+        isNot(contains(category.id)),
+      );
+
+      await repository.deleteCategory(category.id);
+
+      expect(
+        (await incomes.getAll()).single.categoryId,
+        unclassifiedIncomeCategoryId,
+      );
+      expect(
+        (await repository.watchIncomeCategories().first).map((item) => item.id),
+        isNot(contains(category.id)),
+      );
+      final event = await database
+          .customSelect(
+            "SELECT payload_json FROM sync_outbox_events "
+            "WHERE aggregate_type = 'income'",
+          )
+          .getSingle();
+      final payload = jsonDecode(event.read<String>('payload_json')) as Map;
+      expect(payload['categoryId'], unclassifiedIncomeCategoryId);
+    },
+  );
+
+  test('reassigns recurring income when its category is deleted', () async {
+    const category = CategoryEntity(
+      id: 'income-contract',
+      name: 'Hợp đồng',
+      iconName: 'category',
+      colorValue: 0xFF0F766E,
+      isSystem: false,
+      kind: CategoryKind.income,
+    );
+    final plans = PlanRepository(database);
+    final recurringIncome = RecurringIncome(
+      id: 'monthly-contract',
+      title: 'Hợp đồng',
+      amountMinor: 5000000,
+      categoryId: category.id,
+      anchorDate: DateTime(2026, 8, 1),
+      nextDueDate: DateTime(2026, 9, 1),
+      updatedAt: DateTime(2026, 8, 1),
+    );
+    await repository.saveCategory(category);
+    await plans.save(recurringIncome);
+
+    await repository.deleteCategory(category.id);
+
+    final saved = await plans.findById(recurringIncome.id) as RecurringIncome;
+    expect(saved.categoryId, unclassifiedIncomeCategoryId);
+    final event = await database
+        .customSelect(
+          "SELECT payload_json FROM sync_outbox_events "
+          "WHERE aggregate_type = 'plan' AND aggregate_id = ?",
+          variables: [Variable.withString(recurringIncome.id)],
+        )
+        .getSingle();
+    final payload = jsonDecode(event.read<String>('payload_json')) as Map;
+    expect(payload['categoryId'], unclassifiedIncomeCategoryId);
   });
 
   test('queues reference data changes in the shared outbox', () async {

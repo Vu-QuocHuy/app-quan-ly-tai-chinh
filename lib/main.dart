@@ -71,4 +71,5 @@ void _configureErrorMonitoring() {
 
 void _handleNotificationTap(String? payload) {
   if (payload == '/budgets') appRouter.go('/budgets');
+  if (payload == '/plans') appRouter.go('/plans');
 }

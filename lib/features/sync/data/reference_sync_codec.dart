@@ -11,6 +11,7 @@ abstract final class ReferenceSyncCodec {
       iconName: _requiredString(payload['iconName'], 'category.iconName', 64),
       colorValue: _integer(payload['colorValue'], 'category.colorValue'),
       isSystem: _optionalBool(payload['isSystem'], 'category.isSystem'),
+      kind: CategoryKind.fromValue(payload['kind']),
     );
   }
 

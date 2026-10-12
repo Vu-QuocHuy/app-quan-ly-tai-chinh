@@ -129,4 +129,120 @@ void main() {
       }
     },
   );
+
+  test('adds an income source to v10 rows without losing their data', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'income-migration-',
+    );
+    final file = File('${directory.path}/database.sqlite');
+    AppDatabase? database;
+    try {
+      database = AppDatabase(NativeDatabase(file));
+      await database.customSelect('SELECT id FROM incomes').get();
+      await database.customStatement('''
+        INSERT INTO incomes (id, amount_minor, received_at, updated_at)
+        VALUES ('legacy-income', 125000, 1791504000000, 1791504000000)
+      ''');
+      await database.customStatement('ALTER TABLE incomes DROP COLUMN source');
+      await database.customStatement('PRAGMA user_version = 10');
+      await database.close();
+
+      database = AppDatabase(NativeDatabase(file));
+      final income = await database
+          .customSelect(
+            "SELECT amount_minor, source FROM incomes WHERE id = 'legacy-income'",
+          )
+          .getSingle();
+      expect(income.read<int>('amount_minor'), 125000);
+      expect(income.read<String>('source'), 'unclassified');
+    } finally {
+      await database?.close();
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test(
+    'resumes v10 migration when source was added before version update',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'income-partial-migration-',
+      );
+      final file = File('${directory.path}/database.sqlite');
+      AppDatabase? database;
+      try {
+        database = AppDatabase(NativeDatabase(file));
+        await database.customSelect('SELECT id FROM incomes').get();
+        await database.customStatement('''
+        INSERT INTO incomes (id, amount_minor, source, received_at, updated_at)
+        VALUES ('partial-income', 250000, 'fixed', 1791504000000, 1791504000000)
+      ''');
+        await database.customStatement('PRAGMA user_version = 10');
+        await database.close();
+
+        database = AppDatabase(NativeDatabase(file));
+        final income = await database
+            .customSelect(
+              "SELECT amount_minor, source FROM incomes WHERE id = 'partial-income'",
+            )
+            .getSingle();
+        expect(income.read<int>('amount_minor'), 250000);
+        expect(income.read<String>('source'), 'fixed');
+      } finally {
+        await database?.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
+  test(
+    'adds income categories to v11 data without losing income values',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'income-category-migration-',
+      );
+      final file = File('${directory.path}/database.sqlite');
+      AppDatabase? database;
+      try {
+        database = AppDatabase(NativeDatabase(file));
+        await database.customSelect('SELECT id FROM incomes').get();
+        await database.customStatement('''
+        INSERT INTO incomes (
+          id, amount_minor, source, received_at, updated_at
+        ) VALUES ('legacy-income', 125000, 'fixed', 1791504000000, 1791504000000)
+      ''');
+        await database.customStatement(
+          "DELETE FROM categories WHERE id = 'income_uncategorized'",
+        );
+        await database.customStatement(
+          'ALTER TABLE incomes DROP COLUMN category_id',
+        );
+        await database.customStatement(
+          'ALTER TABLE categories DROP COLUMN kind',
+        );
+        await database.customStatement('PRAGMA user_version = 11');
+        await database.close();
+
+        database = AppDatabase(NativeDatabase(file));
+        final income = await database
+            .customSelect(
+              "SELECT amount_minor, source, category_id FROM incomes "
+              "WHERE id = 'legacy-income'",
+            )
+            .getSingle();
+        final category = await database
+            .customSelect(
+              "SELECT name, kind FROM categories WHERE id = 'income_uncategorized'",
+            )
+            .getSingle();
+        expect(income.read<int>('amount_minor'), 125000);
+        expect(income.read<String>('source'), 'fixed');
+        expect(income.read<String>('category_id'), 'income_uncategorized');
+        expect(category.read<String>('name'), 'Chưa phân loại');
+        expect(category.read<String>('kind'), 'income');
+      } finally {
+        await database?.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 }

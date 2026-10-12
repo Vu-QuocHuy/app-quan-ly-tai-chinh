@@ -7,6 +7,44 @@ import 'package:hoadon_insight/features/invoices/domain/invoice_models.dart';
 import 'package:hoadon_insight/features/invoices/domain/invoice_repository.dart';
 
 void main() {
+  testWidgets('creates income categories without attaching a budget', (
+    tester,
+  ) async {
+    final repository = _FakeInvoiceRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          invoiceRepositoryProvider.overrideWithValue(repository),
+          categoriesProvider.overrideWith((ref) => Stream.value(const [])),
+          incomeCategoriesProvider.overrideWith(
+            (ref) => Stream.value(const []),
+          ),
+          selectedMonthProvider.overrideWith((ref) => DateTime(2026, 8)),
+        ],
+        child: const MaterialApp(home: CategoryManagementScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Thu nhập').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Thêm danh mục'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('category-budget-field')), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('category-name-field')),
+      'Lương',
+    );
+    await tester.tap(find.text('Lưu danh mục'));
+    await tester.pumpAndSettle();
+
+    expect(repository.savedCategories.single.name, 'Lương');
+    expect(repository.savedCategories.single.kind, CategoryKind.income);
+    expect(repository.savedBudgets, isEmpty);
+  });
+
   testWidgets('creates a category with an optional selected-month budget', (
     tester,
   ) async {

@@ -224,6 +224,7 @@ void main() {
         child: MaterialApp(home: ReviewInvoiceScreen(invoice: invoice)),
       ),
     );
+    await tester.pumpAndSettle();
 
     final deleteButton = find.byTooltip('Xóa dòng 1');
     await tester.ensureVisible(deleteButton);
@@ -350,6 +351,55 @@ void main() {
     expect(saved.categoryId, 'other');
     expect(saved.lines, isEmpty);
     expect(saved.status, InvoiceStatus.confirmed);
+  });
+
+  testWidgets('keeps manual invoices with tax in the expense flow', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 960));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final now = DateTime(2026, 8, 20);
+    final invoice = InvoiceEntity(
+      id: 'manual-expense-with-tax',
+      sellerName: 'Quán ăn',
+      currencyCode: 'VND',
+      subtotalMinor: 100000,
+      taxMinor: 10000,
+      totalMinor: 110000,
+      sourceType: InvoiceSourceType.manual,
+      status: InvoiceStatus.confirmed,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          categoriesProvider.overrideWith((ref) => Stream.value(const [])),
+        ],
+        child: MaterialApp(home: ReviewInvoiceScreen(invoice: invoice)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sửa khoản chi'), findsOneWidget);
+    expect(find.textContaining('Dữ liệu OCR/AI'), findsNothing);
+    expect(find.text('Thông tin khoản chi'), findsOneWidget);
+    expect(find.text('Thông tin hóa đơn'), findsNothing);
+    expect(find.text('Nơi chi *'), findsOneWidget);
+    expect(find.text('Ngày lập hóa đơn'), findsNothing);
+    expect(find.text('Hủy'), findsOneWidget);
+    expect(find.text('Cập nhật khoản chi'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Thuế'), findsOneWidget);
+    expect(
+      tester.getRect(find.byKey(const Key('confirm-invoice-button'))).right,
+      lessThan(1100),
+    );
+    expect(
+      tester.getRect(find.byKey(const Key('confirm-invoice-button'))).bottom,
+      greaterThan(900),
+    );
   });
 }
 

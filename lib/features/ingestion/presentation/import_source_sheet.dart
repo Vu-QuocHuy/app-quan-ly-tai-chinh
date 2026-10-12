@@ -31,6 +31,12 @@ class ImportSourceSheet extends StatelessWidget {
               onTap: () => Navigator.pop(context, ImportSource.income),
             ),
             _SourceTile(
+              icon: Icons.edit_note,
+              title: 'Thêm khoản chi',
+              subtitle: 'Không cần hóa đơn; nhập số tiền và danh mục',
+              onTap: () => Navigator.pop(context, ImportSource.manual),
+            ),
+            _SourceTile(
               icon: Icons.photo_camera_outlined,
               title: 'Chụp hóa đơn',
               subtitle: 'OCR trên thiết bị, sau đó kiểm tra dữ liệu',
@@ -47,12 +53,6 @@ class ImportSourceSheet extends StatelessWidget {
               title: 'Quét QR thanh toán',
               subtitle: 'Đọc thông tin người nhận, rồi mở app ngân hàng',
               onTap: () => Navigator.pop(context, ImportSource.qrPayment),
-            ),
-            _SourceTile(
-              icon: Icons.edit_note,
-              title: 'Thêm khoản chi',
-              subtitle: 'Không cần hóa đơn; nhập số tiền và danh mục',
-              onTap: () => Navigator.pop(context, ImportSource.manual),
             ),
           ],
         ),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../income/data/income_repository.dart';
+import '../../planning/domain/plan_models.dart';
 import 'invoice_sync_codec.dart';
 import 'reference_sync_codec.dart';
 import '../domain/sync_gateway.dart';
@@ -31,6 +32,8 @@ typedef SupabaseIncomeSyncInvoker =
       required String operation,
       required Map<String, dynamic> payload,
     });
+
+typedef SupabasePlanSyncInvoker = SupabaseIncomeSyncInvoker;
 
 typedef SupabaseDeltaPullInvoker =
     Future<SyncPullPage> Function({
@@ -115,17 +118,35 @@ class SupabaseSyncGateway implements SyncGateway, SyncPullGateway {
                 },
               );
             },
+        invokePlan:
+            ({
+              required expectedUserId,
+              required operation,
+              required payload,
+            }) async {
+              await client.rpc<void>(
+                'apply_plan_sync_checked',
+                params: {
+                  'p_expected_user_id': expectedUserId,
+                  'p_operation': operation,
+                  'p_payload': payload,
+                },
+              );
+            },
         pull:
             ({required aggregateType, required cursor, required limit}) async {
               final functionName = switch (aggregateType) {
                 'invoice' => 'pull_invoice_changes',
                 'income' => 'pull_income_changes',
+                'plan' => 'pull_plan_changes',
                 _ => 'pull_reference_changes',
               };
               final dynamic response = await client.rpc(
                 functionName,
                 params: {
-                  if (aggregateType != 'invoice' && aggregateType != 'income')
+                  if (aggregateType != 'invoice' &&
+                      aggregateType != 'income' &&
+                      aggregateType != 'plan')
                     'p_aggregate_type': aggregateType,
                   'p_since': cursor?.updatedAt?.toUtc().toIso8601String(),
                   'p_after_id': cursor?.updatedId,
@@ -169,12 +190,14 @@ class SupabaseSyncGateway implements SyncGateway, SyncPullGateway {
     required SupabaseInvoiceSyncInvoker invoke,
     SupabaseReferenceSyncInvoker? invokeReference,
     SupabaseIncomeSyncInvoker? invokeIncome,
+    SupabasePlanSyncInvoker? invokePlan,
     SupabaseDeltaPullInvoker? pull,
     SupabaseSyncMetricRecorder? recordMetric,
   }) : _currentUserId = currentUserId,
        _invoke = invoke,
        _invokeReference = invokeReference,
        _invokeIncome = invokeIncome,
+       _invokePlan = invokePlan,
        _pull = pull,
        _recordMetric = recordMetric ?? _ignoreSyncMetric;
 
@@ -182,6 +205,7 @@ class SupabaseSyncGateway implements SyncGateway, SyncPullGateway {
   final SupabaseInvoiceSyncInvoker _invoke;
   final SupabaseReferenceSyncInvoker? _invokeReference;
   final SupabaseIncomeSyncInvoker? _invokeIncome;
+  final SupabasePlanSyncInvoker? _invokePlan;
   final SupabaseDeltaPullInvoker? _pull;
   final SupabaseSyncMetricRecorder _recordMetric;
 
@@ -236,6 +260,18 @@ class SupabaseSyncGateway implements SyncGateway, SyncPullGateway {
         );
         return;
       }
+      if (entry.aggregateType == 'plan') {
+        final invokePlan = _invokePlan;
+        if (invokePlan == null) {
+          throw UnsupportedError('Chưa hỗ trợ đồng bộ kế hoạch.');
+        }
+        await invokePlan(
+          expectedUserId: userId,
+          operation: entry.operation.name,
+          payload: decoded,
+        );
+        return;
+      }
       final invokeReference = _invokeReference;
       if (invokeReference == null) {
         throw UnsupportedError(
@@ -281,6 +317,8 @@ class SupabaseSyncGateway implements SyncGateway, SyncPullGateway {
         InvoiceSyncCodec.fromPayload(payload, revision: entry.revision);
       case 'income':
         IncomeEntry.fromPayload(payload);
+      case 'plan':
+        PlanItem.fromPayload(payload);
       case 'category':
         ReferenceSyncCodec.categoryFromPayload(payload);
       case 'budget':

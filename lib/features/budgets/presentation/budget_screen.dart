@@ -44,8 +44,22 @@ class BudgetScreen extends ConsumerWidget {
           ),
           const SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+              padding: EdgeInsets.fromLTRB(16, 24, 16, 12),
               child: MonthSelector(),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Card(
+                child: ListTile(
+                  leading: const Icon(Icons.event_repeat),
+                  title: const Text('Kế hoạch tiền bạc'),
+                  subtitle: const Text('Khoản định kỳ và mục tiêu tiết kiệm'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/plans'),
+                ),
+              ),
             ),
           ),
           SliverToBoxAdapter(
@@ -83,8 +97,23 @@ class BudgetScreen extends ConsumerWidget {
               (_, AsyncError(error: final error)) => SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(
-                  child: Text(
-                    'Không thể tải ngân sách: ${friendlyMessage(error)}',
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Không thể tải ngân sách: ${friendlyMessage(error)}',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: () {
+                          ref.invalidate(categoriesProvider);
+                          ref.invalidate(budgetsProvider);
+                        },
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Thử lại'),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -107,13 +136,14 @@ class BudgetScreen extends ConsumerWidget {
     String monthKey,
   ) async {
     final initialValue = current?.limitMinor.toString() ?? '';
-    final controller = TextEditingController(text: initialValue);
+    var inputValue = initialValue;
     final result = await showDialog<_BudgetDialogResult>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Ngân sách ${category.name}'),
-        content: TextField(
-          controller: controller,
+        content: TextFormField(
+          initialValue: initialValue,
+          onChanged: (text) => inputValue = text,
           autofocus: true,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
@@ -144,7 +174,7 @@ class BudgetScreen extends ConsumerWidget {
             ),
           TextButton(
             onPressed: () async {
-              if (controller.text != initialValue) {
+              if (inputValue != initialValue) {
                 final discard = await showDiscardChangesDialog(context);
                 if (!discard || !context.mounted) return;
               }
@@ -154,7 +184,7 @@ class BudgetScreen extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () {
-              final parsed = MoneyFormatter.tryParse(controller.text);
+              final parsed = MoneyFormatter.tryParse(inputValue);
               if (parsed == null || parsed < 0) return;
               Navigator.pop(context, _BudgetDialogResult.value(parsed));
             },
@@ -163,7 +193,6 @@ class BudgetScreen extends ConsumerWidget {
         ],
       ),
     );
-    controller.dispose();
     if (result == null) return;
     if (result.delete && current != null) {
       await ref.read(invoiceRepositoryProvider).deleteBudget(current.id);
@@ -271,7 +300,7 @@ class _BudgetTile extends StatelessWidget {
                   const SizedBox(height: AppSpacing.sm),
                   LinearProgressIndicator(
                     value: ratio.clamp(0.0, 1.0),
-                    minHeight: 8,
+                    minHeight: 10,
                     color: progressColor,
                     backgroundColor: scheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(AppSpacing.sm),

@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 
 import '../../../core/utils/money_formatter.dart';
 import '../../income/data/income_repository.dart';
+import '../../planning/domain/plan_models.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../domain/backup_provider.dart';
 import 'encrypted_backup_service.dart';
@@ -18,9 +19,12 @@ class InvoiceExportService {
   Future<Uri?> exportJson(
     Iterable<InvoiceEntity> invoices, {
     Iterable<IncomeEntry> incomes = const [],
+    Iterable<PlanItem> plans = const [],
   }) {
     final bytes = Uint8List.fromList(
-      utf8.encode(InvoiceExportFormatter.toJson(invoices, incomes: incomes)),
+      utf8.encode(
+        InvoiceExportFormatter.toJson(invoices, incomes: incomes, plans: plans),
+      ),
     );
     return _provider.save(
       BackupArtifact(
@@ -37,8 +41,13 @@ class InvoiceExportService {
     Iterable<InvoiceEntity> invoices,
     String password, {
     Iterable<IncomeEntry> incomes = const [],
+    Iterable<PlanItem> plans = const [],
   }) async {
-    final plaintext = InvoiceExportFormatter.toJson(invoices, incomes: incomes);
+    final plaintext = InvoiceExportFormatter.toJson(
+      invoices,
+      incomes: incomes,
+      plans: plans,
+    );
     final encrypted = await const EncryptedBackupService().encrypt(
       plaintext,
       password,
@@ -456,6 +465,7 @@ abstract final class InvoiceExportFormatter {
   static String toJson(
     Iterable<InvoiceEntity> invoices, {
     Iterable<IncomeEntry> incomes = const [],
+    Iterable<PlanItem> plans = const [],
   }) {
     final payload = <String, Object?>{
       'format': 'hoadon-insight.invoice-export',
@@ -465,6 +475,7 @@ abstract final class InvoiceExportFormatter {
       'incomes': incomes
           .map((entry) => entry.toPayload())
           .toList(growable: false),
+      'plans': plans.map((item) => item.toPayload()).toList(growable: false),
     };
     payload['checksumSha256'] = sha256
         .convert(utf8.encode(jsonEncode(payload)))

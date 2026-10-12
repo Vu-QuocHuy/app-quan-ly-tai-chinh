@@ -64,6 +64,16 @@ class $CategoriesTable extends Categories
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('expense'),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -71,6 +81,7 @@ class $CategoriesTable extends Categories
     iconName,
     colorValue,
     isSystem,
+    kind,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -119,6 +130,12 @@ class $CategoriesTable extends Categories
         isSystem.isAcceptableOrUnknown(data['is_system']!, _isSystemMeta),
       );
     }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
     return context;
   }
 
@@ -148,6 +165,10 @@ class $CategoriesTable extends Categories
         DriftSqlType.bool,
         data['${effectivePrefix}is_system'],
       )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
     );
   }
 
@@ -163,12 +184,14 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
   final String iconName;
   final int colorValue;
   final bool isSystem;
+  final String kind;
   const CategoryRow({
     required this.id,
     required this.name,
     required this.iconName,
     required this.colorValue,
     required this.isSystem,
+    required this.kind,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -178,6 +201,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     map['icon_name'] = Variable<String>(iconName);
     map['color_value'] = Variable<int>(colorValue);
     map['is_system'] = Variable<bool>(isSystem);
+    map['kind'] = Variable<String>(kind);
     return map;
   }
 
@@ -188,6 +212,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
       iconName: Value(iconName),
       colorValue: Value(colorValue),
       isSystem: Value(isSystem),
+      kind: Value(kind),
     );
   }
 
@@ -202,6 +227,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
       iconName: serializer.fromJson<String>(json['iconName']),
       colorValue: serializer.fromJson<int>(json['colorValue']),
       isSystem: serializer.fromJson<bool>(json['isSystem']),
+      kind: serializer.fromJson<String>(json['kind']),
     );
   }
   @override
@@ -213,6 +239,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
       'iconName': serializer.toJson<String>(iconName),
       'colorValue': serializer.toJson<int>(colorValue),
       'isSystem': serializer.toJson<bool>(isSystem),
+      'kind': serializer.toJson<String>(kind),
     };
   }
 
@@ -222,12 +249,14 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     String? iconName,
     int? colorValue,
     bool? isSystem,
+    String? kind,
   }) => CategoryRow(
     id: id ?? this.id,
     name: name ?? this.name,
     iconName: iconName ?? this.iconName,
     colorValue: colorValue ?? this.colorValue,
     isSystem: isSystem ?? this.isSystem,
+    kind: kind ?? this.kind,
   );
   CategoryRow copyWithCompanion(CategoriesCompanion data) {
     return CategoryRow(
@@ -238,6 +267,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
           ? data.colorValue.value
           : this.colorValue,
       isSystem: data.isSystem.present ? data.isSystem.value : this.isSystem,
+      kind: data.kind.present ? data.kind.value : this.kind,
     );
   }
 
@@ -248,13 +278,15 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
           ..write('name: $name, ')
           ..write('iconName: $iconName, ')
           ..write('colorValue: $colorValue, ')
-          ..write('isSystem: $isSystem')
+          ..write('isSystem: $isSystem, ')
+          ..write('kind: $kind')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, iconName, colorValue, isSystem);
+  int get hashCode =>
+      Object.hash(id, name, iconName, colorValue, isSystem, kind);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -263,7 +295,8 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
           other.name == this.name &&
           other.iconName == this.iconName &&
           other.colorValue == this.colorValue &&
-          other.isSystem == this.isSystem);
+          other.isSystem == this.isSystem &&
+          other.kind == this.kind);
 }
 
 class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
@@ -272,6 +305,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
   final Value<String> iconName;
   final Value<int> colorValue;
   final Value<bool> isSystem;
+  final Value<String> kind;
   final Value<int> rowid;
   const CategoriesCompanion({
     this.id = const Value.absent(),
@@ -279,6 +313,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
     this.iconName = const Value.absent(),
     this.colorValue = const Value.absent(),
     this.isSystem = const Value.absent(),
+    this.kind = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CategoriesCompanion.insert({
@@ -287,6 +322,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
     required String iconName,
     required int colorValue,
     this.isSystem = const Value.absent(),
+    this.kind = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
@@ -298,6 +334,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
     Expression<String>? iconName,
     Expression<int>? colorValue,
     Expression<bool>? isSystem,
+    Expression<String>? kind,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -306,6 +343,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
       if (iconName != null) 'icon_name': iconName,
       if (colorValue != null) 'color_value': colorValue,
       if (isSystem != null) 'is_system': isSystem,
+      if (kind != null) 'kind': kind,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -316,6 +354,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
     Value<String>? iconName,
     Value<int>? colorValue,
     Value<bool>? isSystem,
+    Value<String>? kind,
     Value<int>? rowid,
   }) {
     return CategoriesCompanion(
@@ -324,6 +363,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
       iconName: iconName ?? this.iconName,
       colorValue: colorValue ?? this.colorValue,
       isSystem: isSystem ?? this.isSystem,
+      kind: kind ?? this.kind,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -346,6 +386,9 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
     if (isSystem.present) {
       map['is_system'] = Variable<bool>(isSystem.value);
     }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -360,6 +403,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryRow> {
           ..write('iconName: $iconName, ')
           ..write('colorValue: $colorValue, ')
           ..write('isSystem: $isSystem, ')
+          ..write('kind: $kind, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1630,6 +1674,343 @@ class InvoicesCompanion extends UpdateCompanion<InvoiceRow> {
   }
 }
 
+class $InvoiceOriginalImagesTable extends InvoiceOriginalImages
+    with TableInfo<$InvoiceOriginalImagesTable, InvoiceOriginalImageRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $InvoiceOriginalImagesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _invoiceIdMeta = const VerificationMeta(
+    'invoiceId',
+  );
+  @override
+  late final GeneratedColumn<String> invoiceId = GeneratedColumn<String>(
+    'invoice_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES invoices (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _fileNameMeta = const VerificationMeta(
+    'fileName',
+  );
+  @override
+  late final GeneratedColumn<String> fileName = GeneratedColumn<String>(
+    'file_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _imageBytesMeta = const VerificationMeta(
+    'imageBytes',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> imageBytes = GeneratedColumn<Uint8List>(
+    'image_bytes',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _savedAtMeta = const VerificationMeta(
+    'savedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> savedAt = GeneratedColumn<DateTime>(
+    'saved_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    invoiceId,
+    fileName,
+    imageBytes,
+    savedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'invoice_original_images';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<InvoiceOriginalImageRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('invoice_id')) {
+      context.handle(
+        _invoiceIdMeta,
+        invoiceId.isAcceptableOrUnknown(data['invoice_id']!, _invoiceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_invoiceIdMeta);
+    }
+    if (data.containsKey('file_name')) {
+      context.handle(
+        _fileNameMeta,
+        fileName.isAcceptableOrUnknown(data['file_name']!, _fileNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fileNameMeta);
+    }
+    if (data.containsKey('image_bytes')) {
+      context.handle(
+        _imageBytesMeta,
+        imageBytes.isAcceptableOrUnknown(data['image_bytes']!, _imageBytesMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_imageBytesMeta);
+    }
+    if (data.containsKey('saved_at')) {
+      context.handle(
+        _savedAtMeta,
+        savedAt.isAcceptableOrUnknown(data['saved_at']!, _savedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_savedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {invoiceId};
+  @override
+  InvoiceOriginalImageRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return InvoiceOriginalImageRow(
+      invoiceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}invoice_id'],
+      )!,
+      fileName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}file_name'],
+      )!,
+      imageBytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}image_bytes'],
+      )!,
+      savedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}saved_at'],
+      )!,
+    );
+  }
+
+  @override
+  $InvoiceOriginalImagesTable createAlias(String alias) {
+    return $InvoiceOriginalImagesTable(attachedDatabase, alias);
+  }
+}
+
+class InvoiceOriginalImageRow extends DataClass
+    implements Insertable<InvoiceOriginalImageRow> {
+  final String invoiceId;
+  final String fileName;
+  final Uint8List imageBytes;
+  final DateTime savedAt;
+  const InvoiceOriginalImageRow({
+    required this.invoiceId,
+    required this.fileName,
+    required this.imageBytes,
+    required this.savedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['invoice_id'] = Variable<String>(invoiceId);
+    map['file_name'] = Variable<String>(fileName);
+    map['image_bytes'] = Variable<Uint8List>(imageBytes);
+    map['saved_at'] = Variable<DateTime>(savedAt);
+    return map;
+  }
+
+  InvoiceOriginalImagesCompanion toCompanion(bool nullToAbsent) {
+    return InvoiceOriginalImagesCompanion(
+      invoiceId: Value(invoiceId),
+      fileName: Value(fileName),
+      imageBytes: Value(imageBytes),
+      savedAt: Value(savedAt),
+    );
+  }
+
+  factory InvoiceOriginalImageRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return InvoiceOriginalImageRow(
+      invoiceId: serializer.fromJson<String>(json['invoiceId']),
+      fileName: serializer.fromJson<String>(json['fileName']),
+      imageBytes: serializer.fromJson<Uint8List>(json['imageBytes']),
+      savedAt: serializer.fromJson<DateTime>(json['savedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'invoiceId': serializer.toJson<String>(invoiceId),
+      'fileName': serializer.toJson<String>(fileName),
+      'imageBytes': serializer.toJson<Uint8List>(imageBytes),
+      'savedAt': serializer.toJson<DateTime>(savedAt),
+    };
+  }
+
+  InvoiceOriginalImageRow copyWith({
+    String? invoiceId,
+    String? fileName,
+    Uint8List? imageBytes,
+    DateTime? savedAt,
+  }) => InvoiceOriginalImageRow(
+    invoiceId: invoiceId ?? this.invoiceId,
+    fileName: fileName ?? this.fileName,
+    imageBytes: imageBytes ?? this.imageBytes,
+    savedAt: savedAt ?? this.savedAt,
+  );
+  InvoiceOriginalImageRow copyWithCompanion(
+    InvoiceOriginalImagesCompanion data,
+  ) {
+    return InvoiceOriginalImageRow(
+      invoiceId: data.invoiceId.present ? data.invoiceId.value : this.invoiceId,
+      fileName: data.fileName.present ? data.fileName.value : this.fileName,
+      imageBytes: data.imageBytes.present
+          ? data.imageBytes.value
+          : this.imageBytes,
+      savedAt: data.savedAt.present ? data.savedAt.value : this.savedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('InvoiceOriginalImageRow(')
+          ..write('invoiceId: $invoiceId, ')
+          ..write('fileName: $fileName, ')
+          ..write('imageBytes: $imageBytes, ')
+          ..write('savedAt: $savedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    invoiceId,
+    fileName,
+    $driftBlobEquality.hash(imageBytes),
+    savedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is InvoiceOriginalImageRow &&
+          other.invoiceId == this.invoiceId &&
+          other.fileName == this.fileName &&
+          $driftBlobEquality.equals(other.imageBytes, this.imageBytes) &&
+          other.savedAt == this.savedAt);
+}
+
+class InvoiceOriginalImagesCompanion
+    extends UpdateCompanion<InvoiceOriginalImageRow> {
+  final Value<String> invoiceId;
+  final Value<String> fileName;
+  final Value<Uint8List> imageBytes;
+  final Value<DateTime> savedAt;
+  final Value<int> rowid;
+  const InvoiceOriginalImagesCompanion({
+    this.invoiceId = const Value.absent(),
+    this.fileName = const Value.absent(),
+    this.imageBytes = const Value.absent(),
+    this.savedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  InvoiceOriginalImagesCompanion.insert({
+    required String invoiceId,
+    required String fileName,
+    required Uint8List imageBytes,
+    required DateTime savedAt,
+    this.rowid = const Value.absent(),
+  }) : invoiceId = Value(invoiceId),
+       fileName = Value(fileName),
+       imageBytes = Value(imageBytes),
+       savedAt = Value(savedAt);
+  static Insertable<InvoiceOriginalImageRow> custom({
+    Expression<String>? invoiceId,
+    Expression<String>? fileName,
+    Expression<Uint8List>? imageBytes,
+    Expression<DateTime>? savedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (invoiceId != null) 'invoice_id': invoiceId,
+      if (fileName != null) 'file_name': fileName,
+      if (imageBytes != null) 'image_bytes': imageBytes,
+      if (savedAt != null) 'saved_at': savedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  InvoiceOriginalImagesCompanion copyWith({
+    Value<String>? invoiceId,
+    Value<String>? fileName,
+    Value<Uint8List>? imageBytes,
+    Value<DateTime>? savedAt,
+    Value<int>? rowid,
+  }) {
+    return InvoiceOriginalImagesCompanion(
+      invoiceId: invoiceId ?? this.invoiceId,
+      fileName: fileName ?? this.fileName,
+      imageBytes: imageBytes ?? this.imageBytes,
+      savedAt: savedAt ?? this.savedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (invoiceId.present) {
+      map['invoice_id'] = Variable<String>(invoiceId.value);
+    }
+    if (fileName.present) {
+      map['file_name'] = Variable<String>(fileName.value);
+    }
+    if (imageBytes.present) {
+      map['image_bytes'] = Variable<Uint8List>(imageBytes.value);
+    }
+    if (savedAt.present) {
+      map['saved_at'] = Variable<DateTime>(savedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('InvoiceOriginalImagesCompanion(')
+          ..write('invoiceId: $invoiceId, ')
+          ..write('fileName: $fileName, ')
+          ..write('imageBytes: $imageBytes, ')
+          ..write('savedAt: $savedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $IncomesTable extends Incomes with TableInfo<$IncomesTable, IncomeRow> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -1654,6 +2035,31 @@ class $IncomesTable extends Incomes with TableInfo<$IncomesTable, IncomeRow> {
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('unclassified'),
+  );
+  static const VerificationMeta _categoryIdMeta = const VerificationMeta(
+    'categoryId',
+  );
+  @override
+  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
+    'category_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES categories (id)',
+    ),
+    defaultValue: const Constant('income_uncategorized'),
   );
   static const VerificationMeta _receivedAtMeta = const VerificationMeta(
     'receivedAt',
@@ -1681,6 +2087,8 @@ class $IncomesTable extends Incomes with TableInfo<$IncomesTable, IncomeRow> {
   List<GeneratedColumn> get $columns => [
     id,
     amountMinor,
+    source,
+    categoryId,
     receivedAt,
     updatedAt,
   ];
@@ -1711,6 +2119,18 @@ class $IncomesTable extends Incomes with TableInfo<$IncomesTable, IncomeRow> {
       );
     } else if (isInserting) {
       context.missing(_amountMinorMeta);
+    }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    }
+    if (data.containsKey('category_id')) {
+      context.handle(
+        _categoryIdMeta,
+        categoryId.isAcceptableOrUnknown(data['category_id']!, _categoryIdMeta),
+      );
     }
     if (data.containsKey('received_at')) {
       context.handle(
@@ -1745,6 +2165,14 @@ class $IncomesTable extends Incomes with TableInfo<$IncomesTable, IncomeRow> {
         DriftSqlType.int,
         data['${effectivePrefix}amount_minor'],
       )!,
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
+      )!,
+      categoryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category_id'],
+      )!,
       receivedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}received_at'],
@@ -1765,11 +2193,15 @@ class $IncomesTable extends Incomes with TableInfo<$IncomesTable, IncomeRow> {
 class IncomeRow extends DataClass implements Insertable<IncomeRow> {
   final String id;
   final int amountMinor;
+  final String source;
+  final String categoryId;
   final DateTime receivedAt;
   final DateTime updatedAt;
   const IncomeRow({
     required this.id,
     required this.amountMinor,
+    required this.source,
+    required this.categoryId,
     required this.receivedAt,
     required this.updatedAt,
   });
@@ -1778,6 +2210,8 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['amount_minor'] = Variable<int>(amountMinor);
+    map['source'] = Variable<String>(source);
+    map['category_id'] = Variable<String>(categoryId);
     map['received_at'] = Variable<DateTime>(receivedAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -1787,6 +2221,8 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
     return IncomesCompanion(
       id: Value(id),
       amountMinor: Value(amountMinor),
+      source: Value(source),
+      categoryId: Value(categoryId),
       receivedAt: Value(receivedAt),
       updatedAt: Value(updatedAt),
     );
@@ -1800,6 +2236,8 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
     return IncomeRow(
       id: serializer.fromJson<String>(json['id']),
       amountMinor: serializer.fromJson<int>(json['amountMinor']),
+      source: serializer.fromJson<String>(json['source']),
+      categoryId: serializer.fromJson<String>(json['categoryId']),
       receivedAt: serializer.fromJson<DateTime>(json['receivedAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -1810,6 +2248,8 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'amountMinor': serializer.toJson<int>(amountMinor),
+      'source': serializer.toJson<String>(source),
+      'categoryId': serializer.toJson<String>(categoryId),
       'receivedAt': serializer.toJson<DateTime>(receivedAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -1818,11 +2258,15 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
   IncomeRow copyWith({
     String? id,
     int? amountMinor,
+    String? source,
+    String? categoryId,
     DateTime? receivedAt,
     DateTime? updatedAt,
   }) => IncomeRow(
     id: id ?? this.id,
     amountMinor: amountMinor ?? this.amountMinor,
+    source: source ?? this.source,
+    categoryId: categoryId ?? this.categoryId,
     receivedAt: receivedAt ?? this.receivedAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -1832,6 +2276,10 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
       amountMinor: data.amountMinor.present
           ? data.amountMinor.value
           : this.amountMinor,
+      source: data.source.present ? data.source.value : this.source,
+      categoryId: data.categoryId.present
+          ? data.categoryId.value
+          : this.categoryId,
       receivedAt: data.receivedAt.present
           ? data.receivedAt.value
           : this.receivedAt,
@@ -1844,6 +2292,8 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
     return (StringBuffer('IncomeRow(')
           ..write('id: $id, ')
           ..write('amountMinor: $amountMinor, ')
+          ..write('source: $source, ')
+          ..write('categoryId: $categoryId, ')
           ..write('receivedAt: $receivedAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -1851,13 +2301,16 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
   }
 
   @override
-  int get hashCode => Object.hash(id, amountMinor, receivedAt, updatedAt);
+  int get hashCode =>
+      Object.hash(id, amountMinor, source, categoryId, receivedAt, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is IncomeRow &&
           other.id == this.id &&
           other.amountMinor == this.amountMinor &&
+          other.source == this.source &&
+          other.categoryId == this.categoryId &&
           other.receivedAt == this.receivedAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -1865,12 +2318,16 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
 class IncomesCompanion extends UpdateCompanion<IncomeRow> {
   final Value<String> id;
   final Value<int> amountMinor;
+  final Value<String> source;
+  final Value<String> categoryId;
   final Value<DateTime> receivedAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const IncomesCompanion({
     this.id = const Value.absent(),
     this.amountMinor = const Value.absent(),
+    this.source = const Value.absent(),
+    this.categoryId = const Value.absent(),
     this.receivedAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1878,6 +2335,8 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
   IncomesCompanion.insert({
     required String id,
     required int amountMinor,
+    this.source = const Value.absent(),
+    this.categoryId = const Value.absent(),
     required DateTime receivedAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -1888,6 +2347,8 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
   static Insertable<IncomeRow> custom({
     Expression<String>? id,
     Expression<int>? amountMinor,
+    Expression<String>? source,
+    Expression<String>? categoryId,
     Expression<DateTime>? receivedAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -1895,6 +2356,8 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (amountMinor != null) 'amount_minor': amountMinor,
+      if (source != null) 'source': source,
+      if (categoryId != null) 'category_id': categoryId,
       if (receivedAt != null) 'received_at': receivedAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1904,6 +2367,8 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
   IncomesCompanion copyWith({
     Value<String>? id,
     Value<int>? amountMinor,
+    Value<String>? source,
+    Value<String>? categoryId,
     Value<DateTime>? receivedAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -1911,6 +2376,8 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
     return IncomesCompanion(
       id: id ?? this.id,
       amountMinor: amountMinor ?? this.amountMinor,
+      source: source ?? this.source,
+      categoryId: categoryId ?? this.categoryId,
       receivedAt: receivedAt ?? this.receivedAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -1925,6 +2392,12 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
     }
     if (amountMinor.present) {
       map['amount_minor'] = Variable<int>(amountMinor.value);
+    }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (categoryId.present) {
+      map['category_id'] = Variable<String>(categoryId.value);
     }
     if (receivedAt.present) {
       map['received_at'] = Variable<DateTime>(receivedAt.value);
@@ -1943,7 +2416,379 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
     return (StringBuffer('IncomesCompanion(')
           ..write('id: $id, ')
           ..write('amountMinor: $amountMinor, ')
+          ..write('source: $source, ')
+          ..write('categoryId: $categoryId, ')
           ..write('receivedAt: $receivedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PlansTable extends Plans with TableInfo<$PlansTable, PlanRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PlansTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _categoryIdMeta = const VerificationMeta(
+    'categoryId',
+  );
+  @override
+  late final GeneratedColumn<String> categoryId = GeneratedColumn<String>(
+    'category_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES categories (id)',
+    ),
+  );
+  static const VerificationMeta _payloadJsonMeta = const VerificationMeta(
+    'payloadJson',
+  );
+  @override
+  late final GeneratedColumn<String> payloadJson = GeneratedColumn<String>(
+    'payload_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    kind,
+    categoryId,
+    payloadJson,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'plans';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PlanRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('category_id')) {
+      context.handle(
+        _categoryIdMeta,
+        categoryId.isAcceptableOrUnknown(data['category_id']!, _categoryIdMeta),
+      );
+    }
+    if (data.containsKey('payload_json')) {
+      context.handle(
+        _payloadJsonMeta,
+        payloadJson.isAcceptableOrUnknown(
+          data['payload_json']!,
+          _payloadJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_payloadJsonMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PlanRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PlanRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      categoryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category_id'],
+      ),
+      payloadJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload_json'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PlansTable createAlias(String alias) {
+    return $PlansTable(attachedDatabase, alias);
+  }
+}
+
+class PlanRow extends DataClass implements Insertable<PlanRow> {
+  final String id;
+  final String kind;
+  final String? categoryId;
+  final String payloadJson;
+  final DateTime updatedAt;
+  const PlanRow({
+    required this.id,
+    required this.kind,
+    this.categoryId,
+    required this.payloadJson,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['kind'] = Variable<String>(kind);
+    if (!nullToAbsent || categoryId != null) {
+      map['category_id'] = Variable<String>(categoryId);
+    }
+    map['payload_json'] = Variable<String>(payloadJson);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  PlansCompanion toCompanion(bool nullToAbsent) {
+    return PlansCompanion(
+      id: Value(id),
+      kind: Value(kind),
+      categoryId: categoryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(categoryId),
+      payloadJson: Value(payloadJson),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory PlanRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PlanRow(
+      id: serializer.fromJson<String>(json['id']),
+      kind: serializer.fromJson<String>(json['kind']),
+      categoryId: serializer.fromJson<String?>(json['categoryId']),
+      payloadJson: serializer.fromJson<String>(json['payloadJson']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'kind': serializer.toJson<String>(kind),
+      'categoryId': serializer.toJson<String?>(categoryId),
+      'payloadJson': serializer.toJson<String>(payloadJson),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  PlanRow copyWith({
+    String? id,
+    String? kind,
+    Value<String?> categoryId = const Value.absent(),
+    String? payloadJson,
+    DateTime? updatedAt,
+  }) => PlanRow(
+    id: id ?? this.id,
+    kind: kind ?? this.kind,
+    categoryId: categoryId.present ? categoryId.value : this.categoryId,
+    payloadJson: payloadJson ?? this.payloadJson,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  PlanRow copyWithCompanion(PlansCompanion data) {
+    return PlanRow(
+      id: data.id.present ? data.id.value : this.id,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      categoryId: data.categoryId.present
+          ? data.categoryId.value
+          : this.categoryId,
+      payloadJson: data.payloadJson.present
+          ? data.payloadJson.value
+          : this.payloadJson,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlanRow(')
+          ..write('id: $id, ')
+          ..write('kind: $kind, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('payloadJson: $payloadJson, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, kind, categoryId, payloadJson, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PlanRow &&
+          other.id == this.id &&
+          other.kind == this.kind &&
+          other.categoryId == this.categoryId &&
+          other.payloadJson == this.payloadJson &&
+          other.updatedAt == this.updatedAt);
+}
+
+class PlansCompanion extends UpdateCompanion<PlanRow> {
+  final Value<String> id;
+  final Value<String> kind;
+  final Value<String?> categoryId;
+  final Value<String> payloadJson;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const PlansCompanion({
+    this.id = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.categoryId = const Value.absent(),
+    this.payloadJson = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PlansCompanion.insert({
+    required String id,
+    required String kind,
+    this.categoryId = const Value.absent(),
+    required String payloadJson,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       kind = Value(kind),
+       payloadJson = Value(payloadJson),
+       updatedAt = Value(updatedAt);
+  static Insertable<PlanRow> custom({
+    Expression<String>? id,
+    Expression<String>? kind,
+    Expression<String>? categoryId,
+    Expression<String>? payloadJson,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (kind != null) 'kind': kind,
+      if (categoryId != null) 'category_id': categoryId,
+      if (payloadJson != null) 'payload_json': payloadJson,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PlansCompanion copyWith({
+    Value<String>? id,
+    Value<String>? kind,
+    Value<String?>? categoryId,
+    Value<String>? payloadJson,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return PlansCompanion(
+      id: id ?? this.id,
+      kind: kind ?? this.kind,
+      categoryId: categoryId ?? this.categoryId,
+      payloadJson: payloadJson ?? this.payloadJson,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (categoryId.present) {
+      map['category_id'] = Variable<String>(categoryId.value);
+    }
+    if (payloadJson.present) {
+      map['payload_json'] = Variable<String>(payloadJson.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlansCompanion(')
+          ..write('id: $id, ')
+          ..write('kind: $kind, ')
+          ..write('categoryId: $categoryId, ')
+          ..write('payloadJson: $payloadJson, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -6262,7 +7107,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $CategoriesTable categories = $CategoriesTable(this);
   late final $InvoicesTable invoices = $InvoicesTable(this);
+  late final $InvoiceOriginalImagesTable invoiceOriginalImages =
+      $InvoiceOriginalImagesTable(this);
   late final $IncomesTable incomes = $IncomesTable(this);
+  late final $PlansTable plans = $PlansTable(this);
   late final $InvoiceLinesTable invoiceLines = $InvoiceLinesTable(this);
   late final $FieldEvidencesTable fieldEvidences = $FieldEvidencesTable(this);
   late final $MerchantRulesTable merchantRules = $MerchantRulesTable(this);
@@ -6284,7 +7132,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     categories,
     invoices,
+    invoiceOriginalImages,
     incomes,
+    plans,
     invoiceLines,
     fieldEvidences,
     merchantRules,
@@ -6303,6 +7153,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('invoices', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'invoices',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('invoice_original_images', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -6363,6 +7220,7 @@ typedef $$CategoriesTableCreateCompanionBuilder =
       required String iconName,
       required int colorValue,
       Value<bool> isSystem,
+      Value<String> kind,
       Value<int> rowid,
     });
 typedef $$CategoriesTableUpdateCompanionBuilder =
@@ -6372,6 +7230,7 @@ typedef $$CategoriesTableUpdateCompanionBuilder =
       Value<String> iconName,
       Value<int> colorValue,
       Value<bool> isSystem,
+      Value<String> kind,
       Value<int> rowid,
     });
 
@@ -6392,6 +7251,44 @@ final class $$CategoriesTableReferences
     ).filter((f) => f.categoryId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_invoicesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$IncomesTable, List<IncomeRow>> _incomesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.incomes,
+    aliasName: 'categories__id__incomes__category_id',
+  );
+
+  $$IncomesTableProcessedTableManager get incomesRefs {
+    final manager = $$IncomesTableTableManager(
+      $_db,
+      $_db.incomes,
+    ).filter((f) => f.categoryId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_incomesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$PlansTable, List<PlanRow>> _plansRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.plans,
+    aliasName: 'categories__id__plans__category_id',
+  );
+
+  $$PlansTableProcessedTableManager get plansRefs {
+    final manager = $$PlansTableTableManager(
+      $_db,
+      $_db.plans,
+    ).filter((f) => f.categoryId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_plansRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -6487,6 +7384,11 @@ class $$CategoriesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
   Expression<bool> invoicesRefs(
     Expression<bool> Function($$InvoicesTableFilterComposer f) f,
   ) {
@@ -6503,6 +7405,56 @@ class $$CategoriesTableFilterComposer
           }) => $$InvoicesTableFilterComposer(
             $db: $db,
             $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> incomesRefs(
+    Expression<bool> Function($$IncomesTableFilterComposer f) f,
+  ) {
+    final $$IncomesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.incomes,
+      getReferencedColumn: (t) => t.categoryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$IncomesTableFilterComposer(
+            $db: $db,
+            $table: $db.incomes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> plansRefs(
+    Expression<bool> Function($$PlansTableFilterComposer f) f,
+  ) {
+    final $$PlansTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.plans,
+      getReferencedColumn: (t) => t.categoryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PlansTableFilterComposer(
+            $db: $db,
+            $table: $db.plans,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -6621,6 +7573,11 @@ class $$CategoriesTableOrderingComposer
     column: $table.isSystem,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$CategoriesTableAnnotationComposer
@@ -6649,6 +7606,9 @@ class $$CategoriesTableAnnotationComposer
   GeneratedColumn<bool> get isSystem =>
       $composableBuilder(column: $table.isSystem, builder: (column) => column);
 
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
   Expression<T> invoicesRefs<T extends Object>(
     Expression<T> Function($$InvoicesTableAnnotationComposer a) f,
   ) {
@@ -6665,6 +7625,56 @@ class $$CategoriesTableAnnotationComposer
           }) => $$InvoicesTableAnnotationComposer(
             $db: $db,
             $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> incomesRefs<T extends Object>(
+    Expression<T> Function($$IncomesTableAnnotationComposer a) f,
+  ) {
+    final $$IncomesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.incomes,
+      getReferencedColumn: (t) => t.categoryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$IncomesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.incomes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> plansRefs<T extends Object>(
+    Expression<T> Function($$PlansTableAnnotationComposer a) f,
+  ) {
+    final $$PlansTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.plans,
+      getReferencedColumn: (t) => t.categoryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PlansTableAnnotationComposer(
+            $db: $db,
+            $table: $db.plans,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -6765,6 +7775,8 @@ class $$CategoriesTableTableManager
           CategoryRow,
           PrefetchHooks Function({
             bool invoicesRefs,
+            bool incomesRefs,
+            bool plansRefs,
             bool invoiceLinesRefs,
             bool merchantRulesRefs,
             bool budgetsRefs,
@@ -6788,6 +7800,7 @@ class $$CategoriesTableTableManager
                 Value<String> iconName = const Value.absent(),
                 Value<int> colorValue = const Value.absent(),
                 Value<bool> isSystem = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CategoriesCompanion(
                 id: id,
@@ -6795,6 +7808,7 @@ class $$CategoriesTableTableManager
                 iconName: iconName,
                 colorValue: colorValue,
                 isSystem: isSystem,
+                kind: kind,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6804,6 +7818,7 @@ class $$CategoriesTableTableManager
                 required String iconName,
                 required int colorValue,
                 Value<bool> isSystem = const Value.absent(),
+                Value<String> kind = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CategoriesCompanion.insert(
                 id: id,
@@ -6811,6 +7826,7 @@ class $$CategoriesTableTableManager
                 iconName: iconName,
                 colorValue: colorValue,
                 isSystem: isSystem,
+                kind: kind,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -6824,6 +7840,8 @@ class $$CategoriesTableTableManager
           prefetchHooksCallback:
               ({
                 invoicesRefs = false,
+                incomesRefs = false,
+                plansRefs = false,
                 invoiceLinesRefs = false,
                 merchantRulesRefs = false,
                 budgetsRefs = false,
@@ -6832,6 +7850,8 @@ class $$CategoriesTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (invoicesRefs) db.invoices,
+                    if (incomesRefs) db.incomes,
+                    if (plansRefs) db.plans,
                     if (invoiceLinesRefs) db.invoiceLines,
                     if (merchantRulesRefs) db.merchantRules,
                     if (budgetsRefs) db.budgets,
@@ -6854,6 +7874,48 @@ class $$CategoriesTableTableManager
                                 table,
                                 p0,
                               ).invoicesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.categoryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (incomesRefs)
+                        await $_getPrefetchedData<
+                          CategoryRow,
+                          $CategoriesTable,
+                          IncomeRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CategoriesTableReferences
+                              ._incomesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CategoriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).incomesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.categoryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (plansRefs)
+                        await $_getPrefetchedData<
+                          CategoryRow,
+                          $CategoriesTable,
+                          PlanRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CategoriesTableReferences
+                              ._plansRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CategoriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).plansRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.categoryId == item.id,
@@ -6945,6 +8007,8 @@ typedef $$CategoriesTableProcessedTableManager =
       CategoryRow,
       PrefetchHooks Function({
         bool invoicesRefs,
+        bool incomesRefs,
+        bool plansRefs,
         bool invoiceLinesRefs,
         bool merchantRulesRefs,
         bool budgetsRefs,
@@ -7023,6 +8087,31 @@ final class $$InvoicesTableReferences
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $InvoiceOriginalImagesTable,
+    List<InvoiceOriginalImageRow>
+  >
+  _invoiceOriginalImagesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.invoiceOriginalImages,
+        aliasName: 'invoices__id__invoice_original_images__invoice_id',
+      );
+
+  $$InvoiceOriginalImagesTableProcessedTableManager
+  get invoiceOriginalImagesRefs {
+    final manager = $$InvoiceOriginalImagesTableTableManager(
+      $_db,
+      $_db.invoiceOriginalImages,
+    ).filter((f) => f.invoiceId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _invoiceOriginalImagesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
     );
   }
 
@@ -7247,6 +8336,32 @@ class $$InvoicesTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> invoiceOriginalImagesRefs(
+    Expression<bool> Function($$InvoiceOriginalImagesTableFilterComposer f) f,
+  ) {
+    final $$InvoiceOriginalImagesTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.invoiceOriginalImages,
+          getReferencedColumn: (t) => t.invoiceId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$InvoiceOriginalImagesTableFilterComposer(
+                $db: $db,
+                $table: $db.invoiceOriginalImages,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
   }
 
   Expression<bool> invoiceLinesRefs(
@@ -7611,6 +8726,32 @@ class $$InvoicesTableAnnotationComposer
     return composer;
   }
 
+  Expression<T> invoiceOriginalImagesRefs<T extends Object>(
+    Expression<T> Function($$InvoiceOriginalImagesTableAnnotationComposer a) f,
+  ) {
+    final $$InvoiceOriginalImagesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.invoiceOriginalImages,
+          getReferencedColumn: (t) => t.invoiceId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$InvoiceOriginalImagesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.invoiceOriginalImages,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> invoiceLinesRefs<T extends Object>(
     Expression<T> Function($$InvoiceLinesTableAnnotationComposer a) f,
   ) {
@@ -7728,6 +8869,7 @@ class $$InvoicesTableTableManager
           InvoiceRow,
           PrefetchHooks Function({
             bool categoryId,
+            bool invoiceOriginalImagesRefs,
             bool invoiceLinesRefs,
             bool fieldEvidencesRefs,
             bool extractionAttemptsRefs,
@@ -7860,6 +9002,7 @@ class $$InvoicesTableTableManager
           prefetchHooksCallback:
               ({
                 categoryId = false,
+                invoiceOriginalImagesRefs = false,
                 invoiceLinesRefs = false,
                 fieldEvidencesRefs = false,
                 extractionAttemptsRefs = false,
@@ -7868,6 +9011,7 @@ class $$InvoicesTableTableManager
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (invoiceOriginalImagesRefs) db.invoiceOriginalImages,
                     if (invoiceLinesRefs) db.invoiceLines,
                     if (fieldEvidencesRefs) db.fieldEvidences,
                     if (extractionAttemptsRefs) db.extractionAttempts,
@@ -7907,6 +9051,27 @@ class $$InvoicesTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (invoiceOriginalImagesRefs)
+                        await $_getPrefetchedData<
+                          InvoiceRow,
+                          $InvoicesTable,
+                          InvoiceOriginalImageRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$InvoicesTableReferences
+                              ._invoiceOriginalImagesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$InvoicesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).invoiceOriginalImagesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.invoiceId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (invoiceLinesRefs)
                         await $_getPrefetchedData<
                           InvoiceRow,
@@ -8013,16 +9178,341 @@ typedef $$InvoicesTableProcessedTableManager =
       InvoiceRow,
       PrefetchHooks Function({
         bool categoryId,
+        bool invoiceOriginalImagesRefs,
         bool invoiceLinesRefs,
         bool fieldEvidencesRefs,
         bool extractionAttemptsRefs,
         bool invoiceConflictsRefs,
       })
     >;
+typedef $$InvoiceOriginalImagesTableCreateCompanionBuilder =
+    InvoiceOriginalImagesCompanion Function({
+      required String invoiceId,
+      required String fileName,
+      required Uint8List imageBytes,
+      required DateTime savedAt,
+      Value<int> rowid,
+    });
+typedef $$InvoiceOriginalImagesTableUpdateCompanionBuilder =
+    InvoiceOriginalImagesCompanion Function({
+      Value<String> invoiceId,
+      Value<String> fileName,
+      Value<Uint8List> imageBytes,
+      Value<DateTime> savedAt,
+      Value<int> rowid,
+    });
+
+final class $$InvoiceOriginalImagesTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $InvoiceOriginalImagesTable,
+          InvoiceOriginalImageRow
+        > {
+  $$InvoiceOriginalImagesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $InvoicesTable _invoiceIdTable(_$AppDatabase db) => db.invoices
+      .createAlias('invoice_original_images__invoice_id__invoices__id');
+
+  $$InvoicesTableProcessedTableManager get invoiceId {
+    final $_column = $_itemColumn<String>('invoice_id')!;
+
+    final manager = $$InvoicesTableTableManager(
+      $_db,
+      $_db.invoices,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_invoiceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$InvoiceOriginalImagesTableFilterComposer
+    extends Composer<_$AppDatabase, $InvoiceOriginalImagesTable> {
+  $$InvoiceOriginalImagesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get fileName => $composableBuilder(
+    column: $table.fileName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get imageBytes => $composableBuilder(
+    column: $table.imageBytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get savedAt => $composableBuilder(
+    column: $table.savedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$InvoicesTableFilterComposer get invoiceId {
+    final $$InvoicesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceId,
+      referencedTable: $db.invoices,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoicesTableFilterComposer(
+            $db: $db,
+            $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$InvoiceOriginalImagesTableOrderingComposer
+    extends Composer<_$AppDatabase, $InvoiceOriginalImagesTable> {
+  $$InvoiceOriginalImagesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get fileName => $composableBuilder(
+    column: $table.fileName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get imageBytes => $composableBuilder(
+    column: $table.imageBytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get savedAt => $composableBuilder(
+    column: $table.savedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$InvoicesTableOrderingComposer get invoiceId {
+    final $$InvoicesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceId,
+      referencedTable: $db.invoices,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoicesTableOrderingComposer(
+            $db: $db,
+            $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$InvoiceOriginalImagesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $InvoiceOriginalImagesTable> {
+  $$InvoiceOriginalImagesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get fileName =>
+      $composableBuilder(column: $table.fileName, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get imageBytes => $composableBuilder(
+    column: $table.imageBytes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get savedAt =>
+      $composableBuilder(column: $table.savedAt, builder: (column) => column);
+
+  $$InvoicesTableAnnotationComposer get invoiceId {
+    final $$InvoicesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceId,
+      referencedTable: $db.invoices,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$InvoicesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.invoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$InvoiceOriginalImagesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $InvoiceOriginalImagesTable,
+          InvoiceOriginalImageRow,
+          $$InvoiceOriginalImagesTableFilterComposer,
+          $$InvoiceOriginalImagesTableOrderingComposer,
+          $$InvoiceOriginalImagesTableAnnotationComposer,
+          $$InvoiceOriginalImagesTableCreateCompanionBuilder,
+          $$InvoiceOriginalImagesTableUpdateCompanionBuilder,
+          (InvoiceOriginalImageRow, $$InvoiceOriginalImagesTableReferences),
+          InvoiceOriginalImageRow,
+          PrefetchHooks Function({bool invoiceId})
+        > {
+  $$InvoiceOriginalImagesTableTableManager(
+    _$AppDatabase db,
+    $InvoiceOriginalImagesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$InvoiceOriginalImagesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$InvoiceOriginalImagesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$InvoiceOriginalImagesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> invoiceId = const Value.absent(),
+                Value<String> fileName = const Value.absent(),
+                Value<Uint8List> imageBytes = const Value.absent(),
+                Value<DateTime> savedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => InvoiceOriginalImagesCompanion(
+                invoiceId: invoiceId,
+                fileName: fileName,
+                imageBytes: imageBytes,
+                savedAt: savedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String invoiceId,
+                required String fileName,
+                required Uint8List imageBytes,
+                required DateTime savedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => InvoiceOriginalImagesCompanion.insert(
+                invoiceId: invoiceId,
+                fileName: fileName,
+                imageBytes: imageBytes,
+                savedAt: savedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$InvoiceOriginalImagesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({invoiceId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (invoiceId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.invoiceId,
+                                referencedTable:
+                                    $$InvoiceOriginalImagesTableReferences
+                                        ._invoiceIdTable(db),
+                                referencedColumn:
+                                    $$InvoiceOriginalImagesTableReferences
+                                        ._invoiceIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$InvoiceOriginalImagesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $InvoiceOriginalImagesTable,
+      InvoiceOriginalImageRow,
+      $$InvoiceOriginalImagesTableFilterComposer,
+      $$InvoiceOriginalImagesTableOrderingComposer,
+      $$InvoiceOriginalImagesTableAnnotationComposer,
+      $$InvoiceOriginalImagesTableCreateCompanionBuilder,
+      $$InvoiceOriginalImagesTableUpdateCompanionBuilder,
+      (InvoiceOriginalImageRow, $$InvoiceOriginalImagesTableReferences),
+      InvoiceOriginalImageRow,
+      PrefetchHooks Function({bool invoiceId})
+    >;
 typedef $$IncomesTableCreateCompanionBuilder =
     IncomesCompanion Function({
       required String id,
       required int amountMinor,
+      Value<String> source,
+      Value<String> categoryId,
       required DateTime receivedAt,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -8031,10 +9521,34 @@ typedef $$IncomesTableUpdateCompanionBuilder =
     IncomesCompanion Function({
       Value<String> id,
       Value<int> amountMinor,
+      Value<String> source,
+      Value<String> categoryId,
       Value<DateTime> receivedAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
+
+final class $$IncomesTableReferences
+    extends BaseReferences<_$AppDatabase, $IncomesTable, IncomeRow> {
+  $$IncomesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $CategoriesTable _categoryIdTable(_$AppDatabase db) =>
+      db.categories.createAlias('incomes__category_id__categories__id');
+
+  $$CategoriesTableProcessedTableManager get categoryId {
+    final $_column = $_itemColumn<String>('category_id')!;
+
+    final manager = $$CategoriesTableTableManager(
+      $_db,
+      $_db.categories,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_categoryIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
 
 class $$IncomesTableFilterComposer
     extends Composer<_$AppDatabase, $IncomesTable> {
@@ -8055,6 +9569,11 @@ class $$IncomesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get receivedAt => $composableBuilder(
     column: $table.receivedAt,
     builder: (column) => ColumnFilters(column),
@@ -8064,6 +9583,29 @@ class $$IncomesTableFilterComposer
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$CategoriesTableFilterComposer get categoryId {
+    final $$CategoriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryId,
+      referencedTable: $db.categories,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CategoriesTableFilterComposer(
+            $db: $db,
+            $table: $db.categories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$IncomesTableOrderingComposer
@@ -8085,6 +9627,11 @@ class $$IncomesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get receivedAt => $composableBuilder(
     column: $table.receivedAt,
     builder: (column) => ColumnOrderings(column),
@@ -8094,6 +9641,29 @@ class $$IncomesTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$CategoriesTableOrderingComposer get categoryId {
+    final $$CategoriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryId,
+      referencedTable: $db.categories,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CategoriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.categories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$IncomesTableAnnotationComposer
@@ -8113,6 +9683,9 @@ class $$IncomesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
   GeneratedColumn<DateTime> get receivedAt => $composableBuilder(
     column: $table.receivedAt,
     builder: (column) => column,
@@ -8120,6 +9693,29 @@ class $$IncomesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$CategoriesTableAnnotationComposer get categoryId {
+    final $$CategoriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryId,
+      referencedTable: $db.categories,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CategoriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.categories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$IncomesTableTableManager
@@ -8133,9 +9729,9 @@ class $$IncomesTableTableManager
           $$IncomesTableAnnotationComposer,
           $$IncomesTableCreateCompanionBuilder,
           $$IncomesTableUpdateCompanionBuilder,
-          (IncomeRow, BaseReferences<_$AppDatabase, $IncomesTable, IncomeRow>),
+          (IncomeRow, $$IncomesTableReferences),
           IncomeRow,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool categoryId})
         > {
   $$IncomesTableTableManager(_$AppDatabase db, $IncomesTable table)
     : super(
@@ -8152,12 +9748,16 @@ class $$IncomesTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<int> amountMinor = const Value.absent(),
+                Value<String> source = const Value.absent(),
+                Value<String> categoryId = const Value.absent(),
                 Value<DateTime> receivedAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => IncomesCompanion(
                 id: id,
                 amountMinor: amountMinor,
+                source: source,
+                categoryId: categoryId,
                 receivedAt: receivedAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -8166,20 +9766,69 @@ class $$IncomesTableTableManager
               ({
                 required String id,
                 required int amountMinor,
+                Value<String> source = const Value.absent(),
+                Value<String> categoryId = const Value.absent(),
                 required DateTime receivedAt,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => IncomesCompanion.insert(
                 id: id,
                 amountMinor: amountMinor,
+                source: source,
+                categoryId: categoryId,
                 receivedAt: receivedAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$IncomesTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({categoryId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (categoryId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.categoryId,
+                                referencedTable: $$IncomesTableReferences
+                                    ._categoryIdTable(db),
+                                referencedColumn: $$IncomesTableReferences
+                                    ._categoryIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -8194,9 +9843,325 @@ typedef $$IncomesTableProcessedTableManager =
       $$IncomesTableAnnotationComposer,
       $$IncomesTableCreateCompanionBuilder,
       $$IncomesTableUpdateCompanionBuilder,
-      (IncomeRow, BaseReferences<_$AppDatabase, $IncomesTable, IncomeRow>),
+      (IncomeRow, $$IncomesTableReferences),
       IncomeRow,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool categoryId})
+    >;
+typedef $$PlansTableCreateCompanionBuilder =
+    PlansCompanion Function({
+      required String id,
+      required String kind,
+      Value<String?> categoryId,
+      required String payloadJson,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$PlansTableUpdateCompanionBuilder =
+    PlansCompanion Function({
+      Value<String> id,
+      Value<String> kind,
+      Value<String?> categoryId,
+      Value<String> payloadJson,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+final class $$PlansTableReferences
+    extends BaseReferences<_$AppDatabase, $PlansTable, PlanRow> {
+  $$PlansTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $CategoriesTable _categoryIdTable(_$AppDatabase db) =>
+      db.categories.createAlias('plans__category_id__categories__id');
+
+  $$CategoriesTableProcessedTableManager? get categoryId {
+    final $_column = $_itemColumn<String>('category_id');
+    if ($_column == null) return null;
+    final manager = $$CategoriesTableTableManager(
+      $_db,
+      $_db.categories,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_categoryIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$PlansTableFilterComposer extends Composer<_$AppDatabase, $PlansTable> {
+  $$PlansTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payloadJson => $composableBuilder(
+    column: $table.payloadJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$CategoriesTableFilterComposer get categoryId {
+    final $$CategoriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryId,
+      referencedTable: $db.categories,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CategoriesTableFilterComposer(
+            $db: $db,
+            $table: $db.categories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PlansTableOrderingComposer
+    extends Composer<_$AppDatabase, $PlansTable> {
+  $$PlansTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payloadJson => $composableBuilder(
+    column: $table.payloadJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$CategoriesTableOrderingComposer get categoryId {
+    final $$CategoriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryId,
+      referencedTable: $db.categories,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CategoriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.categories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PlansTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PlansTable> {
+  $$PlansTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get payloadJson => $composableBuilder(
+    column: $table.payloadJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$CategoriesTableAnnotationComposer get categoryId {
+    final $$CategoriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryId,
+      referencedTable: $db.categories,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CategoriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.categories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PlansTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PlansTable,
+          PlanRow,
+          $$PlansTableFilterComposer,
+          $$PlansTableOrderingComposer,
+          $$PlansTableAnnotationComposer,
+          $$PlansTableCreateCompanionBuilder,
+          $$PlansTableUpdateCompanionBuilder,
+          (PlanRow, $$PlansTableReferences),
+          PlanRow,
+          PrefetchHooks Function({bool categoryId})
+        > {
+  $$PlansTableTableManager(_$AppDatabase db, $PlansTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PlansTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PlansTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PlansTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String?> categoryId = const Value.absent(),
+                Value<String> payloadJson = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PlansCompanion(
+                id: id,
+                kind: kind,
+                categoryId: categoryId,
+                payloadJson: payloadJson,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String kind,
+                Value<String?> categoryId = const Value.absent(),
+                required String payloadJson,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => PlansCompanion.insert(
+                id: id,
+                kind: kind,
+                categoryId: categoryId,
+                payloadJson: payloadJson,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) =>
+                    (e.readTable(table), $$PlansTableReferences(db, table, e)),
+              )
+              .toList(),
+          prefetchHooksCallback: ({categoryId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (categoryId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.categoryId,
+                                referencedTable: $$PlansTableReferences
+                                    ._categoryIdTable(db),
+                                referencedColumn: $$PlansTableReferences
+                                    ._categoryIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$PlansTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PlansTable,
+      PlanRow,
+      $$PlansTableFilterComposer,
+      $$PlansTableOrderingComposer,
+      $$PlansTableAnnotationComposer,
+      $$PlansTableCreateCompanionBuilder,
+      $$PlansTableUpdateCompanionBuilder,
+      (PlanRow, $$PlansTableReferences),
+      PlanRow,
+      PrefetchHooks Function({bool categoryId})
     >;
 typedef $$InvoiceLinesTableCreateCompanionBuilder =
     InvoiceLinesCompanion Function({
@@ -11238,8 +13203,12 @@ class $AppDatabaseManager {
       $$CategoriesTableTableManager(_db, _db.categories);
   $$InvoicesTableTableManager get invoices =>
       $$InvoicesTableTableManager(_db, _db.invoices);
+  $$InvoiceOriginalImagesTableTableManager get invoiceOriginalImages =>
+      $$InvoiceOriginalImagesTableTableManager(_db, _db.invoiceOriginalImages);
   $$IncomesTableTableManager get incomes =>
       $$IncomesTableTableManager(_db, _db.incomes);
+  $$PlansTableTableManager get plans =>
+      $$PlansTableTableManager(_db, _db.plans);
   $$InvoiceLinesTableTableManager get invoiceLines =>
       $$InvoiceLinesTableTableManager(_db, _db.invoiceLines);
   $$FieldEvidencesTableTableManager get fieldEvidences =>

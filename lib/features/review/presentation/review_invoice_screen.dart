@@ -53,6 +53,9 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       widget.invoice.discountMinor == 0 &&
       widget.invoice.subtotalMinor == widget.invoice.totalMinor;
 
+  bool get _isManualSource =>
+      widget.invoice.sourceType == InvoiceSourceType.manual;
+
   @override
   void initState() {
     super.initState();
@@ -125,7 +128,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            _isManualExpense
+            _isManualSource
                 ? widget.invoice.status == InvoiceStatus.confirmed
                       ? 'Sửa khoản chi'
                       : 'Thêm khoản chi'
@@ -145,7 +148,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (!_isManualExpense)
+                    if (!_isManualSource)
                       _ReviewNotice(source: widget.invoice.sourceType),
                     if (_validationMessages.isNotEmpty) ...[
                       const SizedBox(height: 12),
@@ -156,18 +159,6 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                       ),
                     ],
                     if (_isManualExpense) ...[
-                      TextFormField(
-                        controller: _sellerController,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Nội dung chi (tùy chọn)',
-                          hintText: 'Ví dụ: ăn sáng, gửi xe',
-                          prefixIcon: Icon(Icons.payments_outlined),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      _buildDateField(),
-                      const SizedBox(height: 20),
                       _MoneyField(
                         controller: _totalController,
                         label: 'Số tiền *',
@@ -196,17 +187,33 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                           _recomputeDirty();
                         },
                       ),
+                      const SizedBox(height: 20),
+                      TextFormField(
+                        controller: _sellerController,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          labelText: 'Nội dung chi (tùy chọn)',
+                          hintText: 'Ví dụ: ăn sáng, gửi xe',
+                          prefixIcon: Icon(Icons.payments_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _buildDateField(),
                     ] else ...[
                       const SizedBox(height: 20),
                       Text(
-                        'Thông tin hóa đơn',
+                        _isManualSource
+                            ? 'Thông tin khoản chi'
+                            : 'Thông tin hóa đơn',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _sellerController,
                         decoration: InputDecoration(
-                          labelText: 'Tên người bán *',
+                          labelText: _isManualSource
+                              ? 'Nơi chi *'
+                              : 'Tên người bán *',
                           helperText: lowConfidence.contains('sellerName')
                               ? 'Độ tin cậy thấp — vui lòng kiểm tra'
                               : null,
@@ -215,7 +222,9 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                         textInputAction: TextInputAction.next,
                         validator: (value) =>
                             value == null || value.trim().isEmpty
-                            ? 'Hãy nhập tên người bán.'
+                            ? _isManualSource
+                                  ? 'Hãy nhập nơi chi.'
+                                  : 'Hãy nhập tên người bán.'
                             : null,
                       ),
                       const SizedBox(height: 10),
@@ -299,13 +308,16 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                       const SizedBox(height: 10),
                       TextFormField(
                         controller: _notesController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Ghi chú',
-                          hintText: 'Thông tin cần nhớ về hóa đơn này',
+                          hintText: _isManualSource
+                              ? 'Thông tin cần nhớ về khoản chi này'
+                              : 'Thông tin cần nhớ về hóa đơn này',
                           prefixIcon: Icon(Icons.notes_outlined),
                           alignLabelWithHint: true,
-                          helperText:
-                              'Ghi chú riêng, hiển thị trong chi tiết hóa đơn.',
+                          helperText: _isManualSource
+                              ? 'Ghi chú riêng, hiển thị trong chi tiết khoản chi.'
+                              : 'Ghi chú riêng, hiển thị trong chi tiết hóa đơn.',
                         ),
                         minLines: 1,
                         maxLines: 3,
@@ -322,35 +334,43 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
         ),
         bottomNavigationBar: SafeArea(
           minimum: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _saving ? null : () => context.pop(),
-                  child: Text(_isManualExpense ? 'Hủy' : 'Để sau'),
-                ),
+          child: Center(
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: AppBreakpoints.readingWidth,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: FilledButton.icon(
-                  key: const Key('confirm-invoice-button'),
-                  onPressed: _saving ? null : _confirm,
-                  icon: _saving
-                      ? const ButtonSpinner()
-                      : const Icon(Icons.check),
-                  label: Text(
-                    _saving
-                        ? 'Đang lưu'
-                        : _isManualExpense
-                        ? widget.invoice.status == InvoiceStatus.confirmed
-                              ? 'Cập nhật khoản chi'
-                              : 'Lưu khoản chi'
-                        : 'Xác nhận và lưu',
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _saving ? null : () => context.pop(),
+                      child: Text(_isManualSource ? 'Hủy' : 'Để sau'),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      key: const Key('confirm-invoice-button'),
+                      onPressed: _saving ? null : _confirm,
+                      icon: _saving
+                          ? const ButtonSpinner()
+                          : const Icon(Icons.check),
+                      label: Text(
+                        _saving
+                            ? 'Đang lưu'
+                            : _isManualSource
+                            ? widget.invoice.status == InvoiceStatus.confirmed
+                                  ? 'Cập nhật khoản chi'
+                                  : 'Lưu khoản chi'
+                            : 'Xác nhận và lưu',
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -488,7 +508,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       context,
       title: 'Bỏ các thay đổi?',
       message:
-          'Bạn đã sửa hóa đơn này nhưng chưa lưu. Thoát bây giờ sẽ mất các '
+          'Bạn đã sửa ${_isManualSource ? 'khoản chi' : 'hóa đơn'} này nhưng chưa lưu. Thoát bây giờ sẽ mất các '
           'thay đổi đó.',
       confirmLabel: 'Bỏ thay đổi',
       cancelLabel: 'Tiếp tục sửa',
@@ -543,7 +563,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
         .toList(growable: false);
     final updated = widget.invoice.copyWith(
       sellerName: sellerName,
-      issuedAt: _isManualExpense
+      issuedAt: _isManualSource
           ? (_issuedAt ?? widget.invoice.createdAt)
           : _issuedAt,
       subtotalMinor: subtotal,
@@ -609,23 +629,23 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
   }
 
   Widget _buildDateField() {
-    final isManualExpense = _isManualExpense;
+    final isManualSource = _isManualSource;
     final date =
-        _issuedAt ?? (isManualExpense ? widget.invoice.createdAt : null);
+        _issuedAt ?? (isManualSource ? widget.invoice.createdAt : null);
     return Semantics(
       button: true,
       label: date == null
-          ? isManualExpense
+          ? isManualSource
                 ? 'Chọn ngày chi'
                 : 'Chọn ngày lập hóa đơn'
-          : '${isManualExpense ? 'Ngày chi' : 'Ngày lập'} ${DateFormat('dd/MM/yyyy').format(date)}',
+          : '${isManualSource ? 'Ngày chi' : 'Ngày lập'} ${DateFormat('dd/MM/yyyy').format(date)}',
       child: ListTile(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
         ),
         leading: const Icon(Icons.calendar_today_outlined),
-        title: Text(isManualExpense ? 'Ngày chi' : 'Ngày lập hóa đơn'),
+        title: Text(isManualSource ? 'Ngày chi' : 'Ngày lập hóa đơn'),
         subtitle: Text(
           date == null
               ? 'Chưa xác định'

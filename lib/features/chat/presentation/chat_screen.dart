@@ -7,9 +7,9 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../core/config/feature_flags.dart';
 import '../../../core/providers/app_providers.dart';
 import '../domain/chat_models.dart';
+import '../domain/chat_privacy_policy.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 
@@ -45,12 +45,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final api = ref.watch(chatApiClientProvider);
-    final cloudHistoryEnabled = ref
-        .watch(chatHistoryStoreProvider)
-        .canSyncCloud;
-    final flags =
-        ref.watch(featureFlagsProvider).value ?? FeatureFlags.defaults;
     return Scaffold(
       appBar: AppBar(
         title: const Column(
@@ -58,7 +52,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           children: [
             Text('Trợ lý chi tiêu'),
             Text(
-              'Hỏi về hóa đơn và ngân sách',
+              'Chi tiêu, hóa đơn và ngân sách của bạn',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
             ),
           ],
@@ -74,30 +68,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            if (!api.isConfigured || !flags.onlineAi)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: AppCallout(
-                  icon: Icons.offline_bolt_outlined,
-                  message:
-                      'Chế độ local: câu hỏi về dữ liệu đã lưu vẫn hoạt động. '
-                      'Gemini và dữ liệu bên ngoài đang tắt hoặc chưa cấu hình.',
-                ),
-              ),
-            if (cloudHistoryEnabled)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: AppCallout(
-                  icon: Icons.cloud_done_outlined,
-                  message:
-                      'Tin nhắn mới được lưu riêng tư trên cloud; lịch sử local cũ không được tải lên.',
-                ),
-              ),
             if (_connectionNote != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                // warning, không phải danger: mất kết nối làm giảm chức năng
-                // chứ không hỏng — chế độ local vẫn trả lời được.
                 child: AppCallout(
                   icon: Icons.cloud_off_outlined,
                   tone: CalloutTone.warning,
@@ -302,6 +275,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _send(String value) async {
     final question = value.trim();
     if (question.isEmpty || _sending) return;
+    final inScope = ChatPrivacyPolicy.isPersonalFinanceQuestion(question);
     final userMessage = ChatMessage(
       id: _uuid.v4(),
       role: ChatMessageRole.user,
@@ -315,31 +289,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _connectionNote = null;
     });
     _scrollToEnd();
-    _enqueueMessagePersistence(userMessage);
+    if (inScope) _enqueueMessagePersistence(userMessage);
 
     try {
-      final local = await ref.read(localChatAssistantProvider).answer(question);
-      var reply = local;
-      final api = ref.read(chatApiClientProvider);
-      final flags =
-          ref.read(featureFlagsProvider).value ?? FeatureFlags.defaults;
-      if (flags.onlineAi && api.isConfigured && local.facts.isEmpty) {
-        try {
-          reply = await api.ask(
-            question: question,
-            history: _messages,
-            facts: local.facts,
-            allowExternalData: flags.externalRates,
-          );
-        } on Object catch (_) {
-          if (mounted) {
-            setState(() {
-              _connectionNote =
-                  'Gemini tạm thời không kết nối được; đang hiển thị kết quả local.';
-            });
-          }
-        }
-      }
+      final reply = inScope
+          ? await ref.read(localChatAssistantProvider).answer(question)
+          : const ChatReply(text: ChatPrivacyPolicy.outOfScopeMessage);
       final assistantMessage = ChatMessage(
         id: _uuid.v4(),
         role: ChatMessageRole.assistant,
@@ -353,7 +308,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _messages = updated;
         _sending = false;
       });
-      _enqueueMessagePersistence(assistantMessage);
+      if (inScope) _enqueueMessagePersistence(assistantMessage);
       _scrollToEnd();
     } on Object catch (error) {
       if (!mounted) return;
@@ -448,7 +403,7 @@ class _MessageBubble extends StatelessWidget {
       child: Align(
         alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
+          constraints: const BoxConstraints(maxWidth: 400),
           child: Card(
             color: color,
             margin: const EdgeInsets.only(bottom: 10),

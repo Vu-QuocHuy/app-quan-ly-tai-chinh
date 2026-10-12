@@ -27,18 +27,21 @@ class ChatApiClient {
     if (!isConfigured) {
       throw const NetworkException('Chatbot backend chưa được cấu hình.');
     }
+    if (!ChatPrivacyPolicy.isPersonalFinanceQuestion(question)) {
+      throw const NetworkException(ChatPrivacyPolicy.outOfScopeMessage);
+    }
+    final safeFacts = ChatPrivacyPolicy.factsForExternal(facts);
+    if (safeFacts.isEmpty) {
+      throw const NetworkException(
+        'Chưa có đủ dữ liệu tài chính cá nhân để trả lời câu hỏi này.',
+      );
+    }
     final body = {
       'action': 'chat',
       'requestId': _uuid.v4(),
       'locale': 'vi-VN',
       'question': ChatPrivacyPolicy.redactPersonalData(question.trim()),
-      'facts': ChatPrivacyPolicy.factsForExternal(
-        facts,
-      ).map((fact) => fact.toJson()).toList(growable: false),
-      'history': ChatPrivacyPolicy.historyForExternal(history)
-          .map((message) => {'role': message.role.name, 'text': message.text})
-          .toList(growable: false),
-      'allowExternalData': allowExternalData,
+      'facts': safeFacts.map((fact) => fact.toJson()).toList(growable: false),
     };
     final data = await _supabaseFunctions!.invoke(
       body,

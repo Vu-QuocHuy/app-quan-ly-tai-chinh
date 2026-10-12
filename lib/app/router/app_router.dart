@@ -14,9 +14,11 @@ import '../../features/invoices/presentation/invoice_detail_screen.dart';
 import '../../features/invoices/presentation/invoice_attachments_screen.dart';
 import '../../features/invoices/presentation/invoice_list_screen.dart';
 import '../../features/groups/presentation/group_screen.dart';
+import '../../features/groups/presentation/group_fund_screen.dart';
 import '../../features/ingestion/presentation/import_job_history_screen.dart';
 import '../../features/payments/presentation/qr_payment_screen.dart';
 import '../../features/payments/presentation/qr_payment_history_screen.dart';
+import '../../features/planning/presentation/plan_screen.dart';
 import '../../features/review/presentation/review_invoice_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/settings/presentation/cloud_profile_settings_screen.dart';
@@ -141,6 +143,15 @@ final appRouter = GoRouter(
                   builder: (context, state) => GroupDetailScreen(
                     groupId: state.pathParameters['groupId']!,
                   ),
+                  routes: [
+                    GoRoute(
+                      path: 'fund',
+                      parentNavigatorKey: _rootKey,
+                      builder: (context, state) => GroupFundScreen(
+                        groupId: state.pathParameters['groupId']!,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -199,6 +210,11 @@ final appRouter = GoRouter(
       path: '/categories',
       parentNavigatorKey: _rootKey,
       builder: (context, state) => const CategoryManagementScreen(),
+    ),
+    GoRoute(
+      path: '/plans',
+      parentNavigatorKey: _rootKey,
+      builder: (context, state) => const PlanScreen(),
     ),
     GoRoute(
       path: '/review',

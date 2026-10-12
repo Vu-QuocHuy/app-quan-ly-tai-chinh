@@ -9,6 +9,9 @@ import '../../features/export/data/backup_catalog_store.dart';
 import '../../features/groups/data/group_service.dart';
 import '../../features/groups/domain/group_models.dart';
 import '../../features/income/data/income_repository.dart';
+import '../../features/planning/data/plan_repository.dart';
+import '../../features/planning/application/recurring_income_processor.dart';
+import '../../features/planning/domain/plan_models.dart';
 import '../../features/sharing/data/shared_bill_service.dart';
 import '../../features/sharing/domain/shared_bill_models.dart';
 import '../../features/ingestion/application/import_coordinator.dart';
@@ -107,6 +110,21 @@ final incomeRepositoryProvider = Provider<IncomeRepository>((ref) {
 
 final incomesProvider = StreamProvider<List<IncomeEntry>>((ref) {
   return ref.watch(incomeRepositoryProvider).watchAll();
+});
+
+final planRepositoryProvider = Provider<PlanRepository>((ref) {
+  return PlanRepository(ref.watch(databaseProvider));
+});
+
+final recurringIncomeProcessorProvider = Provider<RecurringIncomeProcessor>(
+  (ref) => RecurringIncomeProcessor(
+    plans: ref.watch(planRepositoryProvider),
+    incomes: ref.watch(incomeRepositoryProvider),
+  ),
+);
+
+final plansProvider = StreamProvider<List<PlanItem>>((ref) {
+  return ref.watch(planRepositoryProvider).watchAll();
 });
 
 final invoiceAttachmentStoreProvider =
@@ -300,12 +318,14 @@ final referenceSyncPullCoordinatorsProvider =
           'budget',
           'merchant_rule',
           'income',
+          'plan',
         ])
           SyncPullCoordinator(
             repository: repository,
             cursors: cursors,
             gateway: gateway,
             incomeRepository: ref.watch(incomeRepositoryProvider),
+            planRepository: ref.watch(planRepositoryProvider),
             aggregateType: aggregateType,
           ),
       ];
@@ -366,6 +386,10 @@ final invoiceDetailProvider = FutureProvider.autoDispose
 
 final categoriesProvider = StreamProvider<List<CategoryEntity>>((ref) {
   return ref.watch(invoiceRepositoryProvider).watchCategories();
+});
+
+final incomeCategoriesProvider = StreamProvider<List<CategoryEntity>>((ref) {
+  return ref.watch(invoiceRepositoryProvider).watchIncomeCategories();
 });
 
 final merchantRulesProvider = StreamProvider<List<MerchantRuleEntity>>((ref) {

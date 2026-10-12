@@ -47,11 +47,39 @@ class Invoices extends Table {
   ];
 }
 
+@DataClassName('InvoiceOriginalImageRow')
+class InvoiceOriginalImages extends Table {
+  TextColumn get invoiceId =>
+      text().references(Invoices, #id, onDelete: KeyAction.cascade)();
+  TextColumn get fileName => text()();
+  BlobColumn get imageBytes => blob()();
+  DateTimeColumn get savedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {invoiceId};
+}
+
 @DataClassName('IncomeRow')
 class Incomes extends Table {
   TextColumn get id => text()();
   IntColumn get amountMinor => integer()();
+  TextColumn get source => text().withDefault(const Constant('unclassified'))();
+  TextColumn get categoryId => text()
+      .withDefault(const Constant('income_uncategorized'))
+      .references(Categories, #id)();
   DateTimeColumn get receivedAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+@DataClassName('PlanRow')
+class Plans extends Table {
+  TextColumn get id => text()();
+  TextColumn get kind => text()();
+  TextColumn get categoryId => text().nullable().references(Categories, #id)();
+  TextColumn get payloadJson => text()();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -102,6 +130,7 @@ class Categories extends Table {
   TextColumn get iconName => text()();
   IntColumn get colorValue => integer()();
   BoolColumn get isSystem => boolean().withDefault(const Constant(true))();
+  TextColumn get kind => text().withDefault(const Constant('expense'))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -215,7 +244,9 @@ class ImportJobs extends Table {
 @DriftDatabase(
   tables: [
     Invoices,
+    InvoiceOriginalImages,
     Incomes,
+    Plans,
     InvoiceLines,
     FieldEvidences,
     Categories,
@@ -241,8 +272,26 @@ class AppDatabase extends _$AppDatabase {
             ),
       );
 
+  Future<void> saveInvoiceOriginalImage({
+    required String invoiceId,
+    required String fileName,
+    required Uint8List imageBytes,
+  }) async {
+    if (imageBytes.isEmpty || imageBytes.length > AppConstants.maxImportBytes) {
+      throw const FormatException('Ảnh phải có kích thước từ 1 đến 15 MB.');
+    }
+    await into(invoiceOriginalImages).insertOnConflictUpdate(
+      InvoiceOriginalImagesCompanion.insert(
+        invoiceId: invoiceId,
+        fileName: fileName,
+        imageBytes: imageBytes,
+        savedAt: DateTime.now(),
+      ),
+    );
+  }
+
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -253,7 +302,87 @@ class AppDatabase extends _$AppDatabase {
       });
     },
     onUpgrade: (migrator, from, to) async {
-      if (from < 8) await migrator.createTable(incomes);
+      if (from < 8) {
+        await migrator.createTable(incomes);
+      } else if (from < 11) {
+        final incomeColumns = (await customSelect(
+          'PRAGMA table_info(incomes)',
+        ).get()).map((row) => row.read<String>('name')).toSet();
+        if (!incomeColumns.contains('source')) {
+          await migrator.addColumn(incomes, incomes.source);
+        }
+      }
+      if (from < 12) {
+        final categoryColumns = (await customSelect(
+          'PRAGMA table_info(categories)',
+        ).get()).map((row) => row.read<String>('name')).toSet();
+        if (!categoryColumns.contains('kind')) {
+          await migrator.addColumn(categories, categories.kind);
+        }
+        final incomeColumns = (await customSelect(
+          'PRAGMA table_info(incomes)',
+        ).get()).map((row) => row.read<String>('name')).toSet();
+        if (!incomeColumns.contains('category_id')) {
+          await migrator.addColumn(incomes, incomes.categoryId);
+        }
+        await into(
+          categories,
+        ).insertOnConflictUpdate(_unclassifiedIncomeCategory);
+      }
+      if (from < 9) await migrator.createTable(plans);
+      if (from < 13) {
+        await customStatement(
+          '''
+          UPDATE incomes
+          SET category_id = ?
+          WHERE NOT EXISTS (
+            SELECT 1 FROM categories
+            WHERE categories.id = incomes.category_id
+          )
+          ''',
+          ['income_uncategorized'],
+        );
+        await migrator.alterTable(TableMigration(incomes));
+        if (from >= 9) {
+          await migrator.alterTable(
+            TableMigration(plans, newColumns: [plans.categoryId]),
+          );
+        }
+
+        final categoryIds = (await select(
+          categories,
+        ).get()).map((category) => category.id).toSet();
+        for (final plan in await select(plans).get()) {
+          Map<String, dynamic>? payload;
+          try {
+            final decoded = jsonDecode(plan.payloadJson);
+            if (decoded is Map) payload = Map<String, dynamic>.from(decoded);
+          } on FormatException {
+            // Keep malformed legacy payloads unchanged; the FK column stays null.
+          }
+          final rawCategoryId = payload?['categoryId'];
+          final categoryId =
+              rawCategoryId is String && categoryIds.contains(rawCategoryId)
+              ? rawCategoryId
+              : plan.kind == 'income'
+              ? 'income_uncategorized'
+              : null;
+          final updatePayload =
+              payload != null &&
+              (payload.containsKey('categoryId') || categoryId != null) &&
+              rawCategoryId != categoryId;
+          if (updatePayload) payload['categoryId'] = categoryId;
+          await (update(plans)..where((row) => row.id.equals(plan.id))).write(
+            PlansCompanion(
+              categoryId: Value(categoryId),
+              payloadJson: updatePayload
+                  ? Value(jsonEncode(payload))
+                  : const Value.absent(),
+            ),
+          );
+        }
+      }
+      if (from < 10) await migrator.createTable(invoiceOriginalImages);
       if (from < 2) {
         await migrator.addColumn(invoices, invoices.cloudId);
         await migrator.addColumn(invoices, invoices.searchText);
@@ -453,5 +582,14 @@ class AppDatabase extends _$AppDatabase {
       iconName: 'category',
       colorValue: 0xFF64748B,
     ),
+    _unclassifiedIncomeCategory,
   ];
+
+  static final _unclassifiedIncomeCategory = CategoriesCompanion.insert(
+    id: 'income_uncategorized',
+    name: 'Chưa phân loại',
+    iconName: 'category',
+    colorValue: 0xFF64748B,
+    kind: const Value('income'),
+  );
 }

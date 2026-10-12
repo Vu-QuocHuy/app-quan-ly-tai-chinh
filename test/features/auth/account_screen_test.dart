@@ -37,6 +37,15 @@ void main() {
     expect(find.text('Làm chủ chi tiêu,\ntừng ngày một.'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Mật khẩu'), findsOneWidget);
+    expect(find.byType(AppBar), findsNothing);
+    expect(
+      tester.getSize(find.byType(SegmentedButton<bool>)).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester.getSize(find.widgetWithText(TextButton, 'Quên mật khẩu?')).height,
+      greaterThanOrEqualTo(48),
+    );
     expect(find.text('Tiếp tục với Google'), findsNothing);
     expect(find.byIcon(Icons.login), findsNothing);
     expect(find.text('Liên kết Google'), findsNothing);
@@ -100,6 +109,42 @@ void main() {
     expect(find.byIcon(Icons.login), findsNothing);
     expect(find.text('Liên kết Google'), findsNothing);
     expect(find.textContaining('đồng bộ'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('switching auth mode clears validation errors', (tester) async {
+    await tester.pumpWidget(_app(client));
+    await tester.pump();
+
+    final submitButton = find.text('Đăng nhập').last;
+    await tester.ensureVisible(submitButton);
+    await tester.tap(submitButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Hãy nhập email.'), findsOneWidget);
+    expect(find.text('Hãy nhập mật khẩu.'), findsOneWidget);
+
+    await tester.enterText(
+      find.byType(TextFormField).first,
+      'test@example.com',
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Đăng ký'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hãy nhập email.'), findsNothing);
+    expect(find.text('Hãy nhập mật khẩu.'), findsNothing);
+    expect(
+      tester
+          .widget<TextFormField>(find.byType(TextFormField).first)
+          .controller!
+          .text,
+      'test@example.com',
+    );
+
+    await tester.binding.setSurfaceSize(const Size(812, 375));
+    await tester.pumpAndSettle();
+    expect(find.text('Hãy nhập lại mật khẩu.'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

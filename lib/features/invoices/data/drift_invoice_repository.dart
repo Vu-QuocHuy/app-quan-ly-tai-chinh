@@ -79,8 +79,16 @@ class DriftInvoiceRepository implements InvoiceRepository {
   }
 
   @override
-  Stream<List<CategoryEntity>> watchCategories() {
+  Stream<List<CategoryEntity>> watchCategories() =>
+      _watchCategories(CategoryKind.expense);
+
+  @override
+  Stream<List<CategoryEntity>> watchIncomeCategories() =>
+      _watchCategories(CategoryKind.income);
+
+  Stream<List<CategoryEntity>> _watchCategories(CategoryKind kind) {
     final query = _db.select(_db.categories)
+      ..where((row) => row.kind.equals(kind.name))
       ..orderBy([(row) => OrderingTerm.asc(row.name)]);
     return query.watch().map(
       (rows) => rows
@@ -91,6 +99,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
               iconName: row.iconName,
               colorValue: row.colorValue,
               isSystem: row.isSystem,
+              kind: CategoryKind.fromValue(row.kind),
             ),
           )
           .toList(growable: false),
@@ -329,6 +338,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
             iconName: Value(category.iconName),
             colorValue: Value(category.colorValue),
             isSystem: Value(category.isSystem),
+            kind: Value(category.kind.name),
           ),
         );
   }
@@ -340,6 +350,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
         _db.categories,
       )..where((row) => row.id.equals(id))).getSingleOrNull();
       if (existing == null || existing.isSystem) return;
+      await _reassignCategoryReferences(id, DateTime.now());
       await (_db.delete(
         _db.budgets,
       )..where((row) => row.categoryId.equals(id))).go();
@@ -522,6 +533,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
       await _db.delete(_db.invoiceConflicts).go();
       await _db.delete(_db.invoices).go();
       await _db.delete(_db.incomes).go();
+      await _db.delete(_db.plans).go();
       await _db.delete(_db.budgets).go();
       await _db.delete(_db.merchantRules).go();
       await (_db.delete(
@@ -549,6 +561,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
               iconName: Value(category.iconName),
               colorValue: Value(category.colorValue),
               isSystem: Value(category.isSystem),
+              kind: Value(category.kind.name),
             ),
           );
       await _enqueueSync(
@@ -562,6 +575,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
           'iconName': category.iconName,
           'colorValue': category.colorValue,
           'isSystem': category.isSystem,
+          'kind': category.kind.name,
         }),
         now: now,
       );
@@ -579,18 +593,22 @@ class DriftInvoiceRepository implements InvoiceRepository {
         throw StateError('Không thể xóa danh mục mặc định.');
       }
 
-      await (_db.update(_db.invoices)
-            ..where((row) => row.categoryId.equals(id)))
-          .write(const InvoicesCompanion(categoryId: Value('other')));
-      await (_db.update(_db.invoiceLines)
-            ..where((row) => row.categoryId.equals(id)))
-          .write(const InvoiceLinesCompanion(categoryId: Value('other')));
-      await (_db.delete(
-        _db.budgets,
-      )..where((row) => row.categoryId.equals(id))).go();
-      await (_db.delete(
-        _db.merchantRules,
-      )..where((row) => row.categoryId.equals(id))).go();
+      final now = DateTime.now();
+      await _reassignCategoryReferences(id, now, enqueueSync: true);
+      if (CategoryKind.fromValue(category.kind) != CategoryKind.income) {
+        await (_db.update(_db.invoices)
+              ..where((row) => row.categoryId.equals(id)))
+            .write(const InvoicesCompanion(categoryId: Value('other')));
+        await (_db.update(_db.invoiceLines)
+              ..where((row) => row.categoryId.equals(id)))
+            .write(const InvoiceLinesCompanion(categoryId: Value('other')));
+        await (_db.delete(
+          _db.budgets,
+        )..where((row) => row.categoryId.equals(id))).go();
+        await (_db.delete(
+          _db.merchantRules,
+        )..where((row) => row.categoryId.equals(id))).go();
+      }
       await (_db.delete(
         _db.categories,
       )..where((row) => row.id.equals(id))).go();
@@ -603,6 +621,85 @@ class DriftInvoiceRepository implements InvoiceRepository {
         now: DateTime.now(),
       );
     });
+  }
+
+  Future<void> _reassignCategoryReferences(
+    String categoryId,
+    DateTime now, {
+    bool enqueueSync = false,
+  }) async {
+    final incomes = await (_db.select(
+      _db.incomes,
+    )..where((row) => row.categoryId.equals(categoryId))).get();
+    for (final income in incomes) {
+      final payload = {
+        'id': income.id,
+        'amountMinor': income.amountMinor,
+        'source': income.source,
+        'categoryId': unclassifiedIncomeCategoryId,
+        'receivedAt': income.receivedAt.toUtc().toIso8601String(),
+        'updatedAt': now.toUtc().toIso8601String(),
+      };
+      await (_db.update(
+        _db.incomes,
+      )..where((row) => row.id.equals(income.id))).write(
+        IncomesCompanion(
+          categoryId: const Value(unclassifiedIncomeCategoryId),
+          updatedAt: Value(now),
+        ),
+      );
+      if (enqueueSync) {
+        await _enqueueSync(
+          aggregateType: 'income',
+          aggregateId: income.id,
+          operation: 'upsert',
+          revision: 1,
+          payload: jsonEncode(payload),
+          now: now,
+        );
+      }
+    }
+
+    final plans = await (_db.select(
+      _db.plans,
+    )..where((row) => row.categoryId.equals(categoryId))).get();
+    for (final plan in plans) {
+      Map<String, dynamic>? payload;
+      try {
+        final decoded = jsonDecode(plan.payloadJson);
+        if (decoded is Map) payload = Map<String, dynamic>.from(decoded);
+      } on FormatException {
+        // The category column can still be detached if legacy JSON is damaged.
+      }
+      final replacementCategoryId = plan.kind == 'income'
+          ? unclassifiedIncomeCategoryId
+          : null;
+      if (payload != null) {
+        payload['categoryId'] = replacementCategoryId;
+        payload['updatedAt'] = now.toUtc().toIso8601String();
+      }
+      await (_db.update(
+        _db.plans,
+      )..where((row) => row.id.equals(plan.id))).write(
+        PlansCompanion(
+          categoryId: Value(replacementCategoryId),
+          payloadJson: payload == null
+              ? const Value.absent()
+              : Value(jsonEncode(payload)),
+          updatedAt: Value(now),
+        ),
+      );
+      if (enqueueSync && payload != null) {
+        await _enqueueSync(
+          aggregateType: 'plan',
+          aggregateId: plan.id,
+          operation: 'upsert',
+          revision: 1,
+          payload: jsonEncode(payload),
+          now: now,
+        );
+      }
+    }
   }
 
   @override

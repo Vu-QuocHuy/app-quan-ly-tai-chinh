@@ -38,7 +38,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         slivers: [
           SliverAppBar(
             pinned: true,
-            title: const Text('Nhóm chi tiêu'),
+            title: const Text('Nhóm và quỹ chung'),
             actions: [
               IconButton(
                 tooltip: 'Mở trợ lý chi tiêu',
@@ -54,7 +54,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
               child: _buildActions(context, service),
             ),
           ),
@@ -76,9 +76,9 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                   hasScrollBody: false,
                   child: AppEmptyState(
                     icon: Icons.groups_outlined,
-                    title: 'Chưa có nhóm chi tiêu',
+                    title: 'Chưa có nhóm hoặc quỹ chung',
                     message:
-                        'Tạo nhóm cho chuyến đi, bữa ăn hoặc mua sắm chung.',
+                        'Tạo nhóm gia đình, mời mọi người cùng ghi thu chi vào quỹ.',
                   ),
                 ),
               ],
@@ -160,9 +160,9 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
 
   Future<void> _createGroup() async {
     final name = await _askText(
-      title: 'Tạo nhóm chi tiêu',
+      title: 'Tạo nhóm hoặc quỹ chung',
       label: 'Tên nhóm',
-      hint: 'Ví dụ: Team đi ăn tối',
+      hint: 'Ví dụ: Quỹ gia đình',
       confirmLabel: 'Tạo nhóm',
     );
     if (name == null) return;
@@ -328,7 +328,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   );
                 }
                 return ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
                   children: [
                     _GroupDetails(
                       details: groupDetails,
@@ -618,6 +618,15 @@ class _GroupDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.account_balance_wallet_outlined),
+            title: const Text('Quỹ chung'),
+            subtitle: const Text('Nhiều thành viên cùng ghi thu và chi'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/groups/${details.group.id}/fund'),
+          ),
+        ),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),

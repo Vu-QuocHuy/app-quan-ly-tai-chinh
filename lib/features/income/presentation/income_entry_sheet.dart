@@ -18,8 +18,16 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
   late final TextEditingController _amount = TextEditingController(
     text: widget.entry?.amountMinor.toString() ?? '',
   );
+  String? _categoryId;
   bool _saving = false;
   String? _error;
+  String? _categoryError;
+
+  @override
+  void initState() {
+    super.initState();
+    _categoryId = widget.entry?.categoryId;
+  }
 
   @override
   void dispose() {
@@ -33,6 +41,15 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
       setState(() => _error = 'Nhập số tiền lớn hơn 0.');
       return;
     }
+    final categories =
+        ref.read(incomeCategoriesProvider).valueOrNull ?? const [];
+    final categoryId = categories.any((category) => category.id == _categoryId)
+        ? _categoryId
+        : categories.firstOrNull?.id;
+    if (categoryId == null) {
+      setState(() => _categoryError = 'Hãy tạo hoặc chọn danh mục thu.');
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -40,7 +57,12 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
     try {
       await ref
           .read(incomeRepositoryProvider)
-          .save(value, existing: widget.entry);
+          .save(
+            value,
+            source: widget.entry?.source ?? IncomeSource.manual,
+            categoryId: categoryId,
+            existing: widget.entry,
+          );
       if (mounted) Navigator.pop(context, true);
     } on Object {
       if (mounted) {
@@ -89,6 +111,11 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final categories =
+        ref.watch(incomeCategoriesProvider).valueOrNull ?? const [];
+    final categoryId = categories.any((category) => category.id == _categoryId)
+        ? _categoryId
+        : categories.firstOrNull?.id;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -119,6 +146,29 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
                 errorText: _error,
                 prefixIcon: const Icon(Icons.add_circle_outline),
               ),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              key: ValueKey('income-category-${categoryId ?? 'loading'}'),
+              initialValue: categoryId,
+              decoration: InputDecoration(
+                labelText: 'Danh mục thu',
+                errorText: _categoryError,
+                prefixIcon: const Icon(Icons.category_outlined),
+              ),
+              items: [
+                for (final category in categories)
+                  DropdownMenuItem(
+                    value: category.id,
+                    child: Text(category.name),
+                  ),
+              ],
+              onChanged: _saving || categories.isEmpty
+                  ? null
+                  : (id) => setState(() {
+                      _categoryId = id;
+                      _categoryError = null;
+                    }),
             ),
             const SizedBox(height: 20),
             FilledButton(

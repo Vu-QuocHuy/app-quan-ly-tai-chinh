@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../../app/theme/finance_colors.dart';
+import '../../../core/utils/string_normalizer.dart';
 import '../../income/data/income_repository.dart';
 import '../../income/presentation/income_entry_sheet.dart';
 import '../../../core/utils/money_formatter.dart';
@@ -73,6 +74,11 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final activeFilterCount = [
+      _status != null,
+      _categoryId != null,
+      _month != null,
+    ].where((active) => active).length;
     final filter = InvoiceFilter(
       query: _query,
       monthKey: _month == null ? null : MonthUtils.key(_month!),
@@ -85,10 +91,14 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
       ),
     );
     final incomes = ref.watch(incomesProvider);
+    final incomeCategories =
+        ref.watch(incomeCategoriesProvider).value ?? const [];
     final invoiceResults = _kind == _TransactionKind.income
         ? const AsyncValue<List<InvoiceEntity>>.data([])
         : invoices;
-    final categories = ref.watch(categoriesProvider).value ?? const [];
+    final categories = _kind == _TransactionKind.income
+        ? incomeCategories
+        : ref.watch(categoriesProvider).value ?? const [];
     return Scaffold(
       body: CustomScrollView(
         slivers: [
@@ -106,20 +116,15 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
               child: _FilterHeader(
                 controller: _searchController,
                 query: _query,
-                categoryLabel: _categoryLabel(categories),
-                monthLabel: _month == null ? null : MonthUtils.label(_month!),
-                status: _status,
+                filterCount: activeFilterCount,
                 kind: _kind,
                 onKindChanged: _changeKind,
                 onQueryChanged: _onQueryChanged,
-                onStatusChanged: (value) =>
-                    _changeFilter(() => _status = value),
-                onCategoryTap: () => _selectCategory(categories),
-                onMonthTap: _selectMonth,
+                onFilterTap: () => _showFilters(categories),
                 onClear:
                     filter.hasActiveFilters || _kind != _TransactionKind.all
                     ? _clearFilters
@@ -185,14 +190,15 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                               date: invoice.issuedAt ?? invoice.createdAt,
                             ),
                         if (_kind != _TransactionKind.expense &&
-                            _query.trim().isEmpty &&
-                            _categoryId == null &&
                             _status == null)
                           for (final income
                               in incomes.valueOrNull ?? const <IncomeEntry>[])
-                            if (_month == null ||
-                                MonthUtils.key(income.receivedAt) ==
-                                    MonthUtils.key(_month!))
+                            if ((_categoryId == null ||
+                                    income.categoryId == _categoryId) &&
+                                (_month == null ||
+                                    MonthUtils.key(income.receivedAt) ==
+                                        MonthUtils.key(_month!)) &&
+                                _matchesIncome(income, incomeCategories))
                               (
                                 invoice: null,
                                 income: income,
@@ -262,12 +268,6 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
     );
   }
 
-  String? _categoryLabel(List<CategoryEntity> categories) {
-    final id = _categoryId;
-    if (id == null) return null;
-    return categories.where((item) => item.id == id).firstOrNull?.name ?? id;
-  }
-
   void _clearFilters() {
     setState(() {
       _searchController.clear();
@@ -298,60 +298,192 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   void _changeKind(_TransactionKind kind) {
     _changeFilter(() {
       _kind = kind;
-      if (kind == _TransactionKind.income) {
-        _searchController.clear();
-        _query = '';
-        _categoryId = null;
-        _status = null;
-      }
+      _categoryId = null;
+      _status = null;
     });
   }
 
-  Future<void> _selectCategory(List<CategoryEntity> categories) async {
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.only(bottom: 16),
-          children: [
-            const ListTile(
-              title: Text('Lọc theo danh mục'),
-              subtitle: Text('Chọn một danh mục để thu hẹp danh sách'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.all_inclusive),
-              title: const Text('Tất cả danh mục'),
-              selected: _categoryId == null,
-              onTap: () => Navigator.pop(sheetContext, ''),
-            ),
-            ...categories.map(
-              (category) => ListTile(
-                leading: Icon(Icons.category_outlined),
-                title: Text(category.name),
-                selected: category.id == _categoryId,
-                onTap: () => Navigator.pop(sheetContext, category.id),
-              ),
-            ),
-          ],
-        ),
-      ),
+  bool _matchesIncome(IncomeEntry income, List<CategoryEntity> categories) {
+    final query = StringNormalizer.merchant(_query);
+    if (query.isEmpty) return true;
+    final categoryName =
+        findCategory(categories, income.categoryId)?.name ?? 'Chưa phân loại';
+    final searchable = StringNormalizer.merchant(
+      [
+        categoryName,
+        income.source.label,
+        AppDateFormat.shortDate(income.receivedAt),
+        income.amountMinor.toString(),
+        MoneyFormatter.format(income.amountMinor),
+      ].join(' '),
     );
-    if (result == null) return;
-    _changeFilter(() => _categoryId = result.isEmpty ? null : result);
+    return searchable.contains(query);
   }
 
-  Future<void> _selectMonth() async {
-    final result = await showDatePicker(
-      context: context,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-      initialDate: _month ?? DateTime.now(),
-      helpText: 'Chọn tháng cần lọc',
-    );
-    if (result == null) return;
-    _changeFilter(() => _month = MonthUtils.normalize(result));
+  Future<void> _showFilters(List<CategoryEntity> categories) async {
+    final result =
+        await showModalBottomSheet<
+          ({InvoiceStatus? status, String? categoryId, DateTime? month})
+        >(
+          context: context,
+          isScrollControlled: true,
+          useSafeArea: true,
+          useRootNavigator: true,
+          showDragHandle: true,
+          builder: (sheetContext) {
+            var status = _status;
+            var categoryId = _categoryId;
+            var month = _month;
+            return StatefulBuilder(
+              builder: (context, setSheetState) => SafeArea(
+                top: false,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Bộ lọc giao dịch',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      if (_kind != _TransactionKind.income) ...[
+                        const SizedBox(height: 20),
+                        Text(
+                          'Trạng thái',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            ChoiceChip(
+                              label: const Text('Tất cả'),
+                              selected: status == null,
+                              onSelected: (_) =>
+                                  setSheetState(() => status = null),
+                            ),
+                            ChoiceChip(
+                              label: const Text('Cần kiểm tra'),
+                              selected: status == InvoiceStatus.needsReview,
+                              onSelected: (_) => setSheetState(
+                                () => status = InvoiceStatus.needsReview,
+                              ),
+                            ),
+                            ChoiceChip(
+                              label: const Text('Đã xác nhận'),
+                              selected: status == InvoiceStatus.confirmed,
+                              onSelected: (_) => setSheetState(
+                                () => status = InvoiceStatus.confirmed,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        key: const ValueKey('transaction-category-filter'),
+                        initialValue: categoryId ?? '',
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: _kind == _TransactionKind.income
+                              ? 'Danh mục thu'
+                              : 'Danh mục chi',
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: '',
+                            child: Text('Tất cả danh mục'),
+                          ),
+                          if (categoryId != null &&
+                              !categories.any((item) => item.id == categoryId))
+                            DropdownMenuItem(
+                              value: categoryId!,
+                              child: Text(categoryId!),
+                            ),
+                          ...categories.map(
+                            (category) => DropdownMenuItem(
+                              value: category.id,
+                              child: Text(category.name),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) => setSheetState(
+                          () => categoryId = value == null || value.isEmpty
+                              ? null
+                              : value,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.calendar_month_outlined),
+                        title: const Text('Tháng'),
+                        subtitle: Text(
+                          month == null
+                              ? 'Tất cả các tháng'
+                              : MonthUtils.label(month!),
+                        ),
+                        trailing: month == null
+                            ? const Icon(Icons.chevron_right)
+                            : IconButton(
+                                tooltip: 'Bỏ lọc tháng',
+                                onPressed: () =>
+                                    setSheetState(() => month = null),
+                                icon: const Icon(Icons.close),
+                              ),
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: sheetContext,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                            initialDate: month ?? DateTime.now(),
+                            helpText: 'Chọn tháng cần lọc',
+                          );
+                          if (picked != null) {
+                            setSheetState(
+                              () => month = MonthUtils.normalize(picked),
+                            );
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(sheetContext, (
+                              status: null,
+                              categoryId: null,
+                              month: null,
+                            )),
+                            child: const Text('Xóa lọc'),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(sheetContext, (
+                              status: status,
+                              categoryId: categoryId,
+                              month: month,
+                            )),
+                            child: const Text('Áp dụng'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+    if (result == null || !mounted) return;
+    _changeFilter(() {
+      _status = result.status;
+      _categoryId = result.categoryId;
+      _month = result.month;
+    });
   }
 }
 
@@ -361,29 +493,21 @@ class _FilterHeader extends StatelessWidget {
   const _FilterHeader({
     required this.controller,
     required this.query,
-    required this.categoryLabel,
-    required this.monthLabel,
-    required this.status,
+    required this.filterCount,
     required this.kind,
     required this.onKindChanged,
     required this.onQueryChanged,
-    required this.onStatusChanged,
-    required this.onCategoryTap,
-    required this.onMonthTap,
+    required this.onFilterTap,
     required this.onClear,
   });
 
   final TextEditingController controller;
   final String query;
-  final String? categoryLabel;
-  final String? monthLabel;
-  final InvoiceStatus? status;
+  final int filterCount;
   final _TransactionKind kind;
   final ValueChanged<_TransactionKind> onKindChanged;
   final ValueChanged<String> onQueryChanged;
-  final ValueChanged<InvoiceStatus?> onStatusChanged;
-  final VoidCallback onCategoryTap;
-  final VoidCallback onMonthTap;
+  final VoidCallback onFilterTap;
   final VoidCallback? onClear;
 
   @override
@@ -391,25 +515,8 @@ class _FilterHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (kind != _TransactionKind.income)
-          SearchBar(
-            controller: controller,
-            hintText: 'Tìm người bán, ký hiệu hoặc ghi chú',
-            leading: const Icon(Icons.search),
-            onChanged: onQueryChanged,
-            trailing: [
-              if (query.isNotEmpty)
-                IconButton(
-                  tooltip: 'Xóa nội dung tìm kiếm',
-                  onPressed: () {
-                    controller.clear();
-                    onQueryChanged('');
-                  },
-                  icon: const Icon(Icons.clear),
-                ),
-            ],
-          ),
-        const SizedBox(height: 10),
+        Text('Loại giao dịch', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
         SegmentedButton<_TransactionKind>(
           segments: const [
             ButtonSegment(value: _TransactionKind.all, label: Text('Tất cả')),
@@ -419,48 +526,54 @@ class _FilterHeader extends StatelessWidget {
           selected: {kind},
           onSelectionChanged: (value) => onKindChanged(value.first),
         ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        const SizedBox(height: 16),
+        Row(
           children: [
-            if (kind != _TransactionKind.income) ...[
-              ChoiceChip(
-                label: const Text('Mọi trạng thái'),
-                selected: status == null,
-                onSelected: (_) => onStatusChanged(null),
+            Expanded(
+              child: SearchBar(
+                constraints: const BoxConstraints(minHeight: 56),
+                controller: controller,
+                hintText: switch (kind) {
+                  _TransactionKind.income => 'Tìm danh mục, ngày hoặc số tiền',
+                  _TransactionKind.expense =>
+                    'Tìm người bán, ký hiệu hoặc ghi chú',
+                  _TransactionKind.all => 'Tìm giao dịch thu hoặc chi',
+                },
+                leading: const Icon(Icons.search),
+                onChanged: onQueryChanged,
+                trailing: [
+                  if (query.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Xóa nội dung tìm kiếm',
+                      onPressed: () {
+                        controller.clear();
+                        onQueryChanged('');
+                      },
+                      icon: const Icon(Icons.clear),
+                    ),
+                ],
               ),
-              ChoiceChip(
-                label: const Text('Cần kiểm tra'),
-                selected: status == InvoiceStatus.needsReview,
-                onSelected: (_) => onStatusChanged(InvoiceStatus.needsReview),
-              ),
-              ChoiceChip(
-                label: const Text('Đã xác nhận'),
-                selected: status == InvoiceStatus.confirmed,
-                onSelected: (_) => onStatusChanged(InvoiceStatus.confirmed),
-              ),
-              FilterChip(
-                avatar: const Icon(Icons.category_outlined, size: 18),
-                label: Text(categoryLabel ?? 'Danh mục'),
-                selected: categoryLabel != null,
-                onSelected: (_) => onCategoryTap(),
-              ),
-            ],
-            FilterChip(
-              avatar: const Icon(Icons.calendar_month_outlined, size: 18),
-              label: Text(monthLabel ?? 'Tháng'),
-              selected: monthLabel != null,
-              onSelected: (_) => onMonthTap(),
             ),
-            if (onClear != null)
-              TextButton.icon(
-                onPressed: onClear,
-                icon: const Icon(Icons.filter_alt_off_outlined),
-                label: const Text('Xóa lọc'),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              key: const ValueKey('transaction-filter-button'),
+              onPressed: onFilterTap,
+              icon: Badge(
+                isLabelVisible: filterCount > 0,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                textColor: Theme.of(context).colorScheme.onPrimary,
+                label: Text('$filterCount'),
+                child: const Icon(Icons.tune),
               ),
+              label: const Text('Lọc'),
+            ),
           ],
         ),
+        if (onClear != null)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(onPressed: onClear, child: const Text('Đặt lại')),
+          ),
       ],
     );
   }
@@ -474,14 +587,22 @@ class _IncomeRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final finance = Theme.of(context).extension<AppFinanceColors>()!;
+    final categories =
+        ref.watch(incomeCategoriesProvider).valueOrNull ?? const [];
+    final category = categories
+        .where((item) => item.id == entry.categoryId)
+        .firstOrNull;
+    final categoryName = category?.name ?? 'Chưa phân loại';
     return EntityListRow(
-      leading: CircleAvatar(
-        radius: 20,
-        backgroundColor: finance.income.container,
-        child: Icon(Icons.add, color: finance.income.onContainer),
-      ),
-      title: 'Khoản thu',
-      subtitle: AppDateFormat.shortDate(entry.receivedAt),
+      leading: category == null
+          ? CircleAvatar(
+              radius: 20,
+              backgroundColor: finance.income.container,
+              child: Icon(Icons.add, color: finance.income.onContainer),
+            )
+          : CategoryAvatar(category: category),
+      title: categoryName,
+      subtitle: 'Khoản thu · ${AppDateFormat.shortDate(entry.receivedAt)}',
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -490,7 +611,7 @@ class _IncomeRow extends ConsumerWidget {
         ],
       ),
       semanticLabel:
-          'Khoản thu, ${AppDateFormat.shortDate(entry.receivedAt)}, '
+          '$categoryName, khoản thu, ${AppDateFormat.shortDate(entry.receivedAt)}, '
           '${MoneyFormatter.format(entry.amountMinor)}',
       onTap: () => showModalBottomSheet<bool>(
         context: context,
@@ -537,6 +658,7 @@ class _InvoiceRow extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          const Text('−'),
           MoneyText(invoice.totalMinor),
           const SizedBox(width: 6),
           // Nguồn import xuống hạng thành glyph nhỏ ở đuôi — nhưng chữ của nó
@@ -557,7 +679,7 @@ class _InvoiceRow extends StatelessWidget {
       // Một câu duy nhất cho TalkBack, thay vì 4 mảnh rời.
       semanticLabel:
           '$seller, $categoryName, ${AppDateFormat.shortDate(date)}, '
-          '${MoneyFormatter.format(invoice.totalMinor)}, '
+          'chi ${MoneyFormatter.format(invoice.totalMinor)}, '
           'nguồn ${_sourceLabel(invoice.sourceType)}'
           '${needsReview ? ', cần kiểm tra' : ''}',
     );

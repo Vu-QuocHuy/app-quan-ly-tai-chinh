@@ -188,6 +188,19 @@ class InvoiceConflictEntity {
   final DateTime detectedAt;
 }
 
+enum CategoryKind {
+  expense,
+  income;
+
+  static CategoryKind fromValue(Object? value) {
+    if (value == null || value == 'expense') return CategoryKind.expense;
+    if (value == 'income') return CategoryKind.income;
+    throw const FormatException('Loại danh mục không hợp lệ.');
+  }
+}
+
+const unclassifiedIncomeCategoryId = 'income_uncategorized';
+
 @immutable
 class CategoryEntity {
   const CategoryEntity({
@@ -196,6 +209,7 @@ class CategoryEntity {
     required this.iconName,
     required this.colorValue,
     this.isSystem = true,
+    this.kind = CategoryKind.expense,
   });
 
   final String id;
@@ -203,6 +217,7 @@ class CategoryEntity {
   final String iconName;
   final int colorValue;
   final bool isSystem;
+  final CategoryKind kind;
 }
 
 @immutable

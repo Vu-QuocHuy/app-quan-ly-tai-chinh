@@ -29,7 +29,7 @@ class SyncConflictsScreen extends ConsumerWidget {
                       'bản muốn giữ tại đây.',
                 )
               : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
                   itemCount: items.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) => _ConflictCard(
