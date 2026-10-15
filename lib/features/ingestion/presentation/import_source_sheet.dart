@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum ImportSource { income, camera, gallery, qrPayment, manual }
+enum ImportSource { income, camera, gallery, qrPayment, manual, history }
 
 class ImportSourceSheet extends StatelessWidget {
   const ImportSourceSheet({super.key});
@@ -9,52 +9,61 @@ class ImportSourceSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Thêm giao dịch', style: theme.textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            Text(
-              'Ghi khoản thu hoặc thêm khoản chi.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Giao dịch', style: theme.textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(
+                'Ghi khoản thu, khoản chi hoặc xem lại lịch sử.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            _SourceTile(
-              icon: Icons.add_circle_outline,
-              title: 'Thêm khoản thu',
-              subtitle: 'Chỉ nhập số tiền',
-              onTap: () => Navigator.pop(context, ImportSource.income),
-            ),
-            _SourceTile(
-              icon: Icons.edit_note,
-              title: 'Thêm khoản chi',
-              subtitle: 'Không cần hóa đơn; nhập số tiền và danh mục',
-              onTap: () => Navigator.pop(context, ImportSource.manual),
-            ),
-            _SourceTile(
-              icon: Icons.photo_camera_outlined,
-              title: 'Chụp hóa đơn',
-              subtitle: 'OCR trên thiết bị, sau đó kiểm tra dữ liệu',
-              onTap: () => Navigator.pop(context, ImportSource.camera),
-            ),
-            _SourceTile(
-              icon: Icons.photo_library_outlined,
-              title: 'Chọn ảnh',
-              subtitle: 'Dùng ảnh hóa đơn đã có trong máy',
-              onTap: () => Navigator.pop(context, ImportSource.gallery),
-            ),
-            _SourceTile(
-              icon: Icons.qr_code_scanner,
-              title: 'Quét QR thanh toán',
-              subtitle: 'Đọc thông tin người nhận, rồi mở app ngân hàng',
-              onTap: () => Navigator.pop(context, ImportSource.qrPayment),
-            ),
-          ],
+              const SizedBox(height: 20),
+              _SourceTile(
+                icon: Icons.edit_note,
+                title: 'Thêm khoản chi',
+                subtitle: 'Không cần hóa đơn; nhập số tiền và danh mục',
+                onTap: () => Navigator.pop(context, ImportSource.manual),
+              ),
+              _SourceTile(
+                icon: Icons.add_circle_outline,
+                title: 'Thêm khoản thu',
+                subtitle: 'Chỉ nhập số tiền',
+                onTap: () => Navigator.pop(context, ImportSource.income),
+              ),
+              _SourceTile(
+                icon: Icons.photo_camera_outlined,
+                title: 'Chụp hóa đơn',
+                subtitle: 'OCR trên thiết bị, sau đó kiểm tra dữ liệu',
+                onTap: () => Navigator.pop(context, ImportSource.camera),
+              ),
+              _SourceTile(
+                icon: Icons.photo_library_outlined,
+                title: 'Chọn ảnh',
+                subtitle: 'Dùng ảnh hóa đơn đã có trong máy',
+                onTap: () => Navigator.pop(context, ImportSource.gallery),
+              ),
+              _SourceTile(
+                icon: Icons.qr_code_scanner,
+                title: 'Quét QR thanh toán',
+                subtitle: 'Đọc thông tin người nhận, rồi mở app ngân hàng',
+                onTap: () => Navigator.pop(context, ImportSource.qrPayment),
+              ),
+              const Divider(),
+              _SourceTile(
+                icon: Icons.receipt_long_outlined,
+                title: 'Lịch sử giao dịch',
+                subtitle: 'Tìm kiếm và lọc các khoản thu chi đã ghi',
+                onTap: () => Navigator.pop(context, ImportSource.history),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -76,16 +85,32 @@ class _SourceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      child: ListTile(
-        minTileHeight: 64,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        child: Semantics(
+          button: true,
+          child: ListTile(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            minTileHeight: 64,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            leading: CircleAvatar(
+              radius: 20,
+              backgroundColor: scheme.primaryContainer,
+              foregroundColor: scheme.onPrimaryContainer,
+              child: Icon(icon, size: 21),
+            ),
+            title: Text(title),
+            subtitle: Text(subtitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: onTap,
+          ),
+        ),
       ),
     );
   }

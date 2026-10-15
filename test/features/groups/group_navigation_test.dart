@@ -25,7 +25,12 @@ void main() {
     final groupDetails = GroupDetails(
       group: group,
       members: const [
-        GroupMember(userId: 'user-1', displayName: 'Huy', role: 'owner'),
+        GroupMember(
+          userId: 'user-1',
+          displayName: 'Huy',
+          role: 'owner',
+          phone: '0912345678',
+        ),
       ],
       expenses: const [],
       auditEvents: const [],
@@ -72,6 +77,7 @@ void main() {
 
     expect(find.byIcon(Icons.arrow_back), findsOneWidget);
     expect(find.text('Mã mời: DALAT123'), findsOneWidget);
+    expect(find.text('Chủ nhóm · 0912345678'), findsOneWidget);
     expect(find.text('Nhóm của tôi'), findsNothing);
 
     await tester.tap(find.byIcon(Icons.arrow_back));

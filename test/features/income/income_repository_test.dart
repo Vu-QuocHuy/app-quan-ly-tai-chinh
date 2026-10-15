@@ -13,6 +13,11 @@ void main() {
       addTearDown(database.close);
       final repository = IncomeRepository(database);
 
+      await database.customStatement('''
+        INSERT INTO categories (id, name, icon_name, color_value, kind)
+        VALUES ('income_salary', 'Lương', 'payments', 4280640491, 'income')
+      ''');
+
       await repository.save(
         125000,
         source: IncomeSource.fixed,

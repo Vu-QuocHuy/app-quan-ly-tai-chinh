@@ -14,6 +14,7 @@ import '../../insights/data/anomaly_feedback_store.dart';
 import '../../invoices/data/drift_invoice_repository.dart';
 import '../../notifications/data/budget_alert_preferences.dart';
 import '../domain/auth_validators.dart';
+import 'personal_profile_card.dart';
 import '../../notifications/data/budget_notification_service.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
@@ -538,6 +539,11 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           icon: Icons.cloud_done_outlined,
           title: 'Đã kết nối Supabase',
           message: user.email ?? 'Tài khoản ${user.id}',
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        PersonalProfileCard(
+          key: ValueKey(user.id),
+          client: ref.read(supabaseClientProvider)!,
         ),
         const SizedBox(height: AppSpacing.lg),
         _buildIdentitySection(context),

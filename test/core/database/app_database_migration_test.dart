@@ -211,10 +211,10 @@ void main() {
         ) VALUES ('legacy-income', 125000, 'fixed', 1791504000000, 1791504000000)
       ''');
         await database.customStatement(
-          "DELETE FROM categories WHERE id = 'income_uncategorized'",
+          'ALTER TABLE incomes DROP COLUMN category_id',
         );
         await database.customStatement(
-          'ALTER TABLE incomes DROP COLUMN category_id',
+          "DELETE FROM categories WHERE id = 'income_uncategorized'",
         );
         await database.customStatement(
           'ALTER TABLE categories DROP COLUMN kind',

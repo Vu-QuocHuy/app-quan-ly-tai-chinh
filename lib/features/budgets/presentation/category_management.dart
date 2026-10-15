@@ -77,7 +77,6 @@ class _CategoryManagementScreenState
             child: switch (categoryState) {
               AsyncData(value: final items) => _CategoryList(
                 categories: items,
-                kind: _kind,
                 onEdit: (category) => _editCategory(
                   context,
                   ref,
@@ -206,36 +205,19 @@ class _CategoryManagementScreenState
 class _CategoryList extends StatelessWidget {
   const _CategoryList({
     required this.categories,
-    required this.kind,
     required this.onEdit,
     required this.onDelete,
   });
 
   final List<CategoryEntity> categories;
-  final CategoryKind kind;
   final ValueChanged<CategoryEntity> onEdit;
   final ValueChanged<CategoryEntity> onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
       children: [
-        Text(
-          kind == CategoryKind.income
-              ? 'Danh mục thu nhập'
-              : 'Danh mục chi tiêu',
-          style: textTheme.titleLarge,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          kind == CategoryKind.income
-              ? 'Tạo các nhóm thu như lương, thưởng hoặc khoản thu khác.'
-              : 'Tùy chỉnh danh mục tại đây. Hạn mức có thể đặt khi thêm mới hoặc sửa trong trang Ngân sách.',
-          style: textTheme.bodyMedium,
-        ),
-        const SizedBox(height: 16),
         if (categories.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 32),

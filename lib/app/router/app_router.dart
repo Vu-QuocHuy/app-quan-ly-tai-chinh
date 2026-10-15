@@ -94,53 +94,6 @@ final appRouter = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/invoices',
-              pageBuilder: (context, state) => _tabPage(
-                context,
-                InvoiceListScreen(
-                  initialMonthKey: state.uri.queryParameters['month'],
-                ),
-              ),
-              routes: [
-                GoRoute(
-                  path: 'day/:date',
-                  parentNavigatorKey: _rootKey,
-                  builder: (context, state) {
-                    final date = DateTime.tryParse(
-                      state.pathParameters['date'] ?? '',
-                    );
-                    if (date == null) {
-                      return Scaffold(
-                        appBar: AppBar(title: const Text('Lịch sử chi tiêu')),
-                        body: Center(child: Text('Ngày không hợp lệ.')),
-                      );
-                    }
-                    return DailyExpenseHistoryScreen(date: date);
-                  },
-                ),
-                GoRoute(
-                  path: ':id',
-                  parentNavigatorKey: _rootKey,
-                  builder: (context, state) => InvoiceDetailScreen(
-                    invoiceId: state.pathParameters['id']!,
-                  ),
-                  routes: [
-                    GoRoute(
-                      path: 'attachments',
-                      parentNavigatorKey: _rootKey,
-                      builder: (context, state) => InvoiceAttachmentsScreen(
-                        invoiceId: state.pathParameters['id']!,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
               path: '/budgets',
               pageBuilder: (context, state) =>
                   _tabPage(context, const BudgetScreen()),
@@ -203,6 +156,46 @@ final appRouter = GoRouter(
                       const CloudProfileSettingsScreen(),
                 ),
               ],
+            ),
+          ],
+        ),
+      ],
+    ),
+    GoRoute(
+      path: '/invoices',
+      parentNavigatorKey: _rootKey,
+      builder: (context, state) => InvoiceListScreen(
+        initialMonthKey: state.uri.queryParameters['month'],
+        initialCategoryId: state.uri.queryParameters['category'],
+        initialReview: state.uri.queryParameters['review'] == '1',
+      ),
+      routes: [
+        GoRoute(
+          path: 'day/:date',
+          parentNavigatorKey: _rootKey,
+          builder: (context, state) {
+            final date = DateTime.tryParse(state.pathParameters['date'] ?? '');
+            if (date == null) {
+              return Scaffold(
+                appBar: AppBar(title: const Text('Lịch sử chi tiêu')),
+                body: const Center(child: Text('Ngày không hợp lệ.')),
+              );
+            }
+            return DailyExpenseHistoryScreen(date: date);
+          },
+        ),
+        GoRoute(
+          path: ':id',
+          parentNavigatorKey: _rootKey,
+          builder: (context, state) =>
+              InvoiceDetailScreen(invoiceId: state.pathParameters['id']!),
+          routes: [
+            GoRoute(
+              path: 'attachments',
+              parentNavigatorKey: _rootKey,
+              builder: (context, state) => InvoiceAttachmentsScreen(
+                invoiceId: state.pathParameters['id']!,
+              ),
             ),
           ],
         ),

@@ -105,10 +105,10 @@ class SettingsScreen extends ConsumerWidget {
                       ),
                     ),
                     ListTile(
-                      leading: const Icon(Icons.tune_outlined),
-                      title: const Text('Cài đặt đồng bộ'),
+                      leading: const Icon(Icons.cloud_download_outlined),
+                      title: const Text('Khôi phục tùy chỉnh'),
                       subtitle: const Text(
-                        'Giao diện, cảnh báo ngân sách và app ngân hàng QR.',
+                        'Lấy giao diện và cảnh báo từ tài khoản khi đổi thiết bị.',
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/settings/cloud'),
@@ -151,7 +151,7 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 _Section(
-                  title: 'Tự động hóa & công cụ',
+                  title: 'Tự động hóa',
                   children: [
                     ExpansionTile(
                       leading: const Icon(Icons.auto_fix_high_outlined),
@@ -182,15 +182,6 @@ class SettingsScreen extends ConsumerWidget {
                           ),
                         ),
                       ],
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.chat_bubble_outline),
-                      title: const Text('Trợ lý chi tiêu'),
-                      subtitle: const Text(
-                        'Hỏi về chi tiêu và hóa đơn của bạn.',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => context.push('/chat'),
                     ),
                   ],
                 ),

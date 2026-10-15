@@ -153,11 +153,6 @@ class _AppShellState extends ConsumerState<AppShell>
       label: 'Tổng quan',
     ),
     NavigationDestination(
-      icon: Icon(Icons.receipt_long_outlined),
-      selectedIcon: Icon(Icons.receipt_long),
-      label: 'Giao dịch',
-    ),
-    NavigationDestination(
       icon: Icon(Icons.savings_outlined),
       selectedIcon: Icon(Icons.savings),
       label: 'Ngân sách',
@@ -199,154 +194,271 @@ class _AppShellState extends ConsumerState<AppShell>
     final useRail = AppBreakpoints.useRail(width);
     final content = widget.navigationShell;
     final scheme = Theme.of(context).colorScheme;
-    final showInvoiceAction = widget.navigationShell.currentIndex <= 1;
     final invoiceAction = _isImporting ? _cancelImport : _showImportSources;
-    final invoiceActionTooltip = _isImporting && _importFileName != null
-        ? 'Đang xử lý $_importFileName · Nhấn để hủy'
-        : 'Thêm giao dịch';
+    final invoiceActionTooltip = _isImporting
+        ? _importFileName == null
+              ? 'Hủy nhập giao dịch'
+              : 'Đang xử lý $_importFileName · Nhấn để hủy'
+        : 'Giao dịch';
     final invoiceActionIcon = _isImporting
         ? const Icon(Icons.stop_circle_outlined)
-        : const Icon(Icons.note_add_outlined);
+        : const Icon(Icons.add_rounded);
     final invoiceActionLabel = _isImporting
         ? 'Hủy $_importIndex/$_importTotal'
-        : 'Thêm giao dịch';
+        : 'Giao dịch';
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            if (pendingQrPayment.valueOrNull != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.gutter,
-                  AppSpacing.sm,
-                  AppSpacing.gutter,
-                  0,
-                ),
-                child: Material(
-                  color: scheme.tertiaryContainer,
-                  shape: AppShapes.card,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                if (pendingQrPayment.valueOrNull != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.gutter,
+                      AppSpacing.sm,
+                      AppSpacing.gutter,
+                      0,
+                    ),
+                    child: Material(
+                      color: scheme.tertiaryContainer,
+                      shape: AppShapes.card,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Icon(
-                              Icons.pending_actions_outlined,
-                              color: scheme.onTertiaryContainer,
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.pending_actions_outlined,
+                                  color: scheme.onTertiaryContainer,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Có khoản thanh toán QR đang chờ xác nhận. Chưa ghi vào chi tiêu.',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: scheme.onTertiaryContainer,
+                                        ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'Có khoản thanh toán QR đang chờ xác nhận. Chưa ghi vào chi tiêu.',
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(
-                                      color: scheme.onTertiaryContainer,
-                                    ),
+                            Align(
+                              alignment: AlignmentDirectional.centerEnd,
+                              child: TextButton(
+                                onPressed: () => context.push('/qr-payment'),
+                                child: const Text('Tiếp tục'),
                               ),
                             ),
                           ],
                         ),
-                        Align(
-                          alignment: AlignmentDirectional.centerEnd,
-                          child: TextButton(
-                            onPressed: () => context.push('/qr-payment'),
-                            child: const Text('Tiếp tục'),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      if (useRail)
+                        NavigationRail(
+                          backgroundColor: scheme.surfaceContainerLow,
+                          groupAlignment: -0.85,
+                          minWidth: 84,
+                          selectedIndex: widget.navigationShell.currentIndex,
+                          onDestinationSelected: _goBranch,
+                          labelType: NavigationRailLabelType.all,
+                          leading: Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.xl,
+                            ),
+                            child: Tooltip(
+                              message: 'Quản lý Tài chính',
+                              child: DecoratedBox(
+                                decoration: ShapeDecoration(
+                                  color: scheme.primary,
+                                  shape: AppShapes.control,
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(AppSpacing.md),
+                                  child: Icon(
+                                    Icons.account_balance_wallet_outlined,
+                                    color: scheme.onPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          destinations: _destinations
+                              .map(
+                                (item) => NavigationRailDestination(
+                                  icon: item.icon,
+                                  selectedIcon: item.selectedIcon,
+                                  label: Text(item.label),
+                                ),
+                              )
+                              .toList(growable: false),
+                        ),
+                      if (useRail)
+                        VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: scheme.outlineVariant,
+                        ),
+                      // Dashboard dùng thêm chiều ngang cho biểu đồ; các trang đọc
+                      // và chỉnh sửa vẫn giữ bề rộng dễ quét.
+                      Expanded(
+                        child: useRail
+                            ? ReadingPane(
+                                maxWidth:
+                                    widget.navigationShell.currentIndex == 0
+                                    ? AppBreakpoints.twoColumnWidth
+                                    : AppBreakpoints.readingWidth,
+                                child: content,
+                              )
+                            : content,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            Expanded(
+              ],
+            ),
+          ),
+          Positioned(
+            right: AppSpacing.gutter,
+            bottom: useRail ? 96 : AppSpacing.lg,
+            child: FloatingActionButton(
+              heroTag: 'shell-chat',
+              tooltip: 'Mở trợ lý chi tiêu',
+              onPressed: () => context.push('/chat'),
+              child: const Icon(Icons.chat_bubble_outline),
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: useRail
+          ? null
+          : BottomAppBar(
+              shape: const CircularNotchedRectangle(),
+              notchMargin: 8,
+              height: 80,
+              padding: EdgeInsets.zero,
+              color: scheme.surfaceContainerLow,
               child: Row(
                 children: [
-                  if (useRail)
-                    NavigationRail(
-                      backgroundColor: scheme.surfaceContainerLow,
-                      groupAlignment: -0.85,
-                      minWidth: 84,
-                      selectedIndex: widget.navigationShell.currentIndex,
-                      onDestinationSelected: _goBranch,
-                      labelType: NavigationRailLabelType.all,
-                      leading: Padding(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-                        child: Tooltip(
-                          message: 'Quản lý Tài chính',
-                          child: DecoratedBox(
-                            decoration: ShapeDecoration(
-                              color: scheme.primary,
-                              shape: AppShapes.control,
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(AppSpacing.md),
-                              child: Icon(
-                                Icons.account_balance_wallet_outlined,
-                                color: scheme.onPrimary,
-                              ),
+                  _bottomDestination(context, 0),
+                  _bottomDestination(context, 1),
+                  Semantics(
+                    excludeSemantics: true,
+                    button: true,
+                    label: invoiceActionTooltip,
+                    onTap: invoiceAction,
+                    child: InkWell(
+                      excludeFromSemantics: true,
+                      onTap: invoiceAction,
+                      child: SizedBox(
+                        width: 72,
+                        height: 80,
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              _isImporting ? 'Hủy nhập' : 'Giao dịch',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(color: scheme.onSurfaceVariant),
                             ),
                           ),
                         ),
                       ),
-                      destinations: _destinations
-                          .map(
-                            (item) => NavigationRailDestination(
-                              icon: item.icon,
-                              selectedIcon: item.selectedIcon,
-                              label: Text(item.label),
-                            ),
-                          )
-                          .toList(growable: false),
                     ),
-                  if (useRail)
-                    VerticalDivider(
-                      width: 1,
-                      thickness: 1,
-                      color: scheme.outlineVariant,
-                    ),
-                  // Dashboard dùng thêm chiều ngang cho biểu đồ; các trang đọc
-                  // và chỉnh sửa vẫn giữ bề rộng dễ quét.
-                  Expanded(
-                    child: useRail
-                        ? ReadingPane(
-                            maxWidth: widget.navigationShell.currentIndex == 0
-                                ? AppBreakpoints.twoColumnWidth
-                                : AppBreakpoints.readingWidth,
-                            child: content,
-                          )
-                        : content,
                   ),
+                  _bottomDestination(context, 2),
+                  _bottomDestination(context, 3),
                 ],
               ),
             ),
-          ],
+      floatingActionButtonLocation: useRail
+          ? FloatingActionButtonLocation.endFloat
+          : FloatingActionButtonLocation.centerDocked,
+      floatingActionButton: useRail
+          ? FloatingActionButton.extended(
+              onPressed: invoiceAction,
+              tooltip: invoiceActionTooltip,
+              icon: invoiceActionIcon,
+              label: Text(invoiceActionLabel),
+            )
+          : FloatingActionButton(
+              onPressed: invoiceAction,
+              tooltip: invoiceActionTooltip,
+              child: invoiceActionIcon,
+            ),
+    );
+  }
+
+  Widget _bottomDestination(BuildContext context, int index) {
+    final destination = _destinations[index];
+    final selected = widget.navigationShell.currentIndex == index;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Expanded(
+      child: Semantics(
+        excludeSemantics: true,
+        button: true,
+        selected: selected,
+        label: destination.label,
+        onTap: () => _goBranch(index),
+        child: InkWell(
+          excludeFromSemantics: true,
+          onTap: () => _goBranch(index),
+          child: SizedBox.expand(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                DecoratedBox(
+                  decoration: ShapeDecoration(
+                    color: selected ? scheme.primary : Colors.transparent,
+                    shape: AppShapes.pill,
+                  ),
+                  child: SizedBox(
+                    width: 56,
+                    height: 32,
+                    child: IconTheme(
+                      data: IconThemeData(
+                        size: 24,
+                        color: selected
+                            ? scheme.onPrimary
+                            : scheme.onSurfaceVariant,
+                      ),
+                      child: selected
+                          ? (destination.selectedIcon ?? destination.icon)
+                          : destination.icon,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  destination.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected
+                        ? scheme.onSurface
+                        : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
-      bottomNavigationBar: useRail
-          ? null
-          : NavigationBar(
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              selectedIndex: widget.navigationShell.currentIndex,
-              onDestinationSelected: _goBranch,
-              destinations: _destinations,
-            ),
-      floatingActionButton: showInvoiceAction
-          ? useRail
-                ? FloatingActionButton.extended(
-                    onPressed: invoiceAction,
-                    tooltip: invoiceActionTooltip,
-                    icon: invoiceActionIcon,
-                    label: Text(invoiceActionLabel),
-                  )
-                : FloatingActionButton(
-                    onPressed: invoiceAction,
-                    tooltip: invoiceActionTooltip,
-                    child: invoiceActionIcon,
-                  )
-          : null,
     );
   }
 
@@ -382,6 +494,8 @@ class _AppShellState extends ConsumerState<AppShell>
       case ImportSource.manual:
         final draft = ref.read(importCoordinatorProvider).createManualDraft();
         if (mounted) context.push('/review', extra: draft);
+      case ImportSource.history:
+        if (mounted) context.push('/invoices');
     }
   }
 

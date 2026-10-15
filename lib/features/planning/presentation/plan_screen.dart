@@ -4,8 +4,11 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
+import '../../../app/theme/app_tokens.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/errors/error_presenter.dart';
+import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/money_text.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../notifications/data/budget_notification_service.dart';
 import '../domain/plan_models.dart';
@@ -16,170 +19,175 @@ class PlanScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final plans = ref.watch(plansProvider);
+    final expenseCategories =
+        ref.watch(categoriesProvider).value ?? const <CategoryEntity>[];
     final incomeCategories =
         ref.watch(incomeCategoriesProvider).value ?? const <CategoryEntity>[];
-    return Scaffold(
-      appBar: AppBar(title: const Text('Kế hoạch tiền bạc')),
-      body: plans.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Text('Không thể tải kế hoạch: ${friendlyMessage(error)}'),
-        ),
-        data: (items) {
-          final bills = items.whereType<RecurringBill>().toList()
-            ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
-          final incomes = items.whereType<RecurringIncome>().toList()
-            ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
-          final goals = items.whereType<SavingsGoal>().toList()
-            ..sort((a, b) => a.targetDate.compareTo(b.targetDate));
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-            children: [
-              _heading(
-                context,
-                'Khoản thu cố định',
-                'Tự ghi vào sổ theo ngày nhận hàng tháng',
-              ),
-              const SizedBox(height: 12),
-              if (incomes.isEmpty)
-                const _Hint('Thêm lương hoặc khoản thu đều đặn để app tự ghi.'),
-              for (final income in incomes)
-                Card(
-                  child: ListTile(
-                    leading: const CircleAvatar(
-                      child: Icon(Icons.payments_outlined),
-                    ),
-                    title: Text(income.title),
-                    subtitle: Text(
-                      '${_incomeCategoryName(income.categoryId, incomeCategories)} · Nhận ${_dateLabel(income.nextDueDate)}',
-                    ),
-                    trailing: Text(MoneyFormatter.format(income.amountMinor)),
-                    onTap: () =>
-                        _incomeActions(context, ref, income, incomeCategories),
-                  ),
-                ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: incomeCategories.isEmpty
-                    ? null
-                    : () =>
-                          _editRecurringIncome(context, ref, incomeCategories),
-                icon: const Icon(Icons.add),
-                label: const Text('Thêm khoản thu cố định'),
-              ),
-              const SizedBox(height: 30),
-              _heading(
-                context,
-                'Khoản định kỳ',
-                'Nhắc bạn ghi chi khi đến hạn',
-              ),
-              const SizedBox(height: 12),
-              if (bills.isEmpty)
-                const _Hint(
-                  'Thêm tiền nhà, điện, nước hoặc khoản đóng đều đặn.',
-                ),
-              for (final bill in bills)
-                Card(
-                  child: ListTile(
-                    leading: const CircleAvatar(
-                      child: Icon(Icons.event_repeat),
-                    ),
-                    title: Text(bill.title),
-                    subtitle: Text(
-                      '${_frequencyLabel(bill.frequency)} · Đến hạn ${_dateLabel(bill.nextDueDate)}'
-                      '${_isOverdue(bill.nextDueDate) ? ' · Quá hạn' : ''}',
-                    ),
-                    trailing: Text(MoneyFormatter.format(bill.amountMinor)),
-                    onTap: () => _billActions(context, ref, bill),
-                  ),
-                ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () => _editBill(context, ref),
-                icon: const Icon(Icons.add),
-                label: const Text('Thêm khoản định kỳ'),
-              ),
-              const SizedBox(height: 30),
-              _heading(
-                context,
-                'Mục tiêu tiết kiệm',
-                'Theo dõi số tiền đã để dành',
-              ),
-              const SizedBox(height: 12),
-              if (goals.isEmpty)
-                const _Hint(
-                  'Tạo một mục tiêu để thấy tiến độ và số tiền cần dành mỗi tháng.',
-                ),
-              for (final goal in goals)
-                Card(
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => _goalActions(context, ref, goal),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  goal.name,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                              ),
-                              Text(
-                                '${(goal.progress * 100).clamp(0, 100).round()}%',
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          LinearProgressIndicator(
-                            value: goal.progress.clamp(0, 1).toDouble(),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            '${MoneyFormatter.format(goal.savedMinor)} / ${MoneyFormatter.format(goal.targetMinor)}',
-                          ),
-                          Text(
-                            goal.remainingMinor == 0
-                                ? 'Đã đạt mục tiêu'
-                                : 'Cần dành ${MoneyFormatter.format(goal.monthlyNeeded(DateTime.now()))}/tháng · Hạn ${_dateLabel(goal.targetDate)}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () => _editGoal(context, ref),
-                icon: const Icon(Icons.add),
-                label: const Text('Thêm mục tiêu'),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Tiền để dành chỉ theo dõi tiến độ, không tự tính vào thu hoặc chi.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Kế hoạch tiền bạc'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Chi cố định'),
+              Tab(text: 'Thu cố định'),
+              Tab(text: 'Tiết kiệm'),
             ],
-          );
-        },
+          ),
+        ),
+        body: plans.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => Center(
+            child: Text('Không thể tải kế hoạch: ${friendlyMessage(error)}'),
+          ),
+          data: (items) {
+            final bills = items.whereType<RecurringBill>().toList()
+              ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
+            final incomes = items.whereType<RecurringIncome>().toList()
+              ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
+            final goals = items.whereType<SavingsGoal>().toList()
+              ..sort((a, b) => a.targetDate.compareTo(b.targetDate));
+            return TabBarView(
+              children: [
+                ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.gutter,
+                    AppSpacing.xl,
+                    AppSpacing.gutter,
+                    AppSpacing.xxl,
+                  ),
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () =>
+                          _editBill(context, ref, expenseCategories),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Thêm khoản chi cố định'),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    for (final bill in bills)
+                      _RecurringPlanCard(
+                        title: bill.title,
+                        amountMinor: bill.amountMinor,
+                        detail:
+                            '${_categoryName(bill.categoryId ?? '', expenseCategories)} · ${_frequencyLabel(bill.frequency)}',
+                        due:
+                            '${_isOverdue(bill.nextDueDate) ? 'Quá hạn' : 'Đến hạn'} ${_dateLabel(bill.nextDueDate)}',
+                        overdue: _isOverdue(bill.nextDueDate),
+                        onTap: () =>
+                            _billActions(context, ref, bill, expenseCategories),
+                      ),
+                  ],
+                ),
+                ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.gutter,
+                    AppSpacing.xl,
+                    AppSpacing.gutter,
+                    AppSpacing.xxl,
+                  ),
+                  children: [
+                    FilledButton.icon(
+                      onPressed: incomeCategories.isEmpty
+                          ? null
+                          : () => _editRecurringIncome(
+                              context,
+                              ref,
+                              incomeCategories,
+                            ),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Thêm khoản thu cố định'),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    if (incomeCategories.isEmpty)
+                      const _Hint(
+                        'Chưa tải được danh mục thu. Vui lòng thử lại sau.',
+                      ),
+                    for (final income in incomes)
+                      _RecurringPlanCard(
+                        title: income.title,
+                        amountMinor: income.amountMinor,
+                        detail: _categoryName(
+                          income.categoryId,
+                          incomeCategories,
+                        ),
+                        due: 'Nhận ${_dateLabel(income.nextDueDate)}',
+                        onTap: () => _incomeActions(
+                          context,
+                          ref,
+                          income,
+                          incomeCategories,
+                        ),
+                      ),
+                  ],
+                ),
+                ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.gutter,
+                    AppSpacing.xl,
+                    AppSpacing.gutter,
+                    AppSpacing.xxl,
+                  ),
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () => _editGoal(context, ref),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Thêm mục tiêu'),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    for (final goal in goals)
+                      Card(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => _goalActions(context, ref, goal),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        goal.name,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleMedium,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${(goal.progress * 100).clamp(0, 100).round()}%',
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                LinearProgressIndicator(
+                                  value: goal.progress.clamp(0, 1).toDouble(),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  '${MoneyFormatter.format(goal.savedMinor)} / ${MoneyFormatter.format(goal.targetMinor)}',
+                                ),
+                                Text(
+                                  goal.remainingMinor == 0
+                                      ? 'Đã đạt mục tiêu'
+                                      : 'Cần dành ${MoneyFormatter.format(goal.monthlyNeeded(DateTime.now()))}/tháng · Hạn ${_dateLabel(goal.targetDate)}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
-
-  Widget _heading(BuildContext context, String title, String subtitle) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
-          Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
-        ],
-      );
 
   Future<void> _editRecurringIncome(
     BuildContext context,
@@ -219,6 +227,7 @@ class PlanScreen extends ConsumerWidget {
                   maxLength: 120,
                   decoration: const InputDecoration(labelText: 'Tên khoản thu'),
                 ),
+                const SizedBox(height: AppSpacing.sm),
                 TextField(
                   controller: amount,
                   keyboardType: TextInputType.number,
@@ -227,6 +236,7 @@ class PlanScreen extends ConsumerWidget {
                     suffixText: '₫',
                   ),
                 ),
+                const SizedBox(height: AppSpacing.lg),
                 DropdownButtonFormField<String>(
                   key: const ValueKey('recurring-income-category'),
                   initialValue: categoryId,
@@ -243,6 +253,7 @@ class PlanScreen extends ConsumerWidget {
                     if (value != null) setState(() => categoryId = value);
                   },
                 ),
+                const SizedBox(height: AppSpacing.md),
                 TextButton.icon(
                   onPressed: () async {
                     final chosen = await showDatePicker(
@@ -256,11 +267,9 @@ class PlanScreen extends ConsumerWidget {
                     if (chosen != null) setState(() => due = chosen);
                   },
                   icon: const Icon(Icons.calendar_today_outlined),
-                  label: Text('Nhận lần đầu: ${_dateLabel(due)}'),
-                ),
-                Text(
-                  'Từ ngày này, app tự ghi khoản thu mỗi tháng.',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  label: Text(
+                    '${income == null ? 'Nhận từ' : 'Nhận tiếp'} ${_dateLabel(due)}',
+                  ),
                 ),
                 if (error != null)
                   Text(
@@ -311,19 +320,20 @@ class PlanScreen extends ConsumerWidget {
         ),
       ),
     );
-    title.dispose();
-    amount.dispose();
+    // Dialog fields can remain mounted during the closing transition.
     if (result != null && context.mounted) await _save(context, ref, result);
   }
 
   Future<void> _editBill(
     BuildContext context,
-    WidgetRef ref, [
+    WidgetRef ref,
+    List<CategoryEntity> categories, [
     RecurringBill? bill,
   ]) async {
     final title = TextEditingController(text: bill?.title);
     final amount = TextEditingController(text: bill?.amountMinor.toString());
     var frequency = bill?.frequency ?? BillFrequency.monthly;
+    var categoryId = bill?.categoryId;
     var due = bill?.nextDueDate ?? DateTime.now();
     String? error;
     final result = await showDialog<RecurringBill>(
@@ -331,7 +341,7 @@ class PlanScreen extends ConsumerWidget {
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: Text(
-            bill == null ? 'Thêm khoản định kỳ' : 'Sửa khoản định kỳ',
+            bill == null ? 'Thêm khoản chi cố định' : 'Sửa khoản chi cố định',
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -342,6 +352,7 @@ class PlanScreen extends ConsumerWidget {
                   maxLength: 120,
                   decoration: const InputDecoration(labelText: 'Tên khoản'),
                 ),
+                const SizedBox(height: AppSpacing.sm),
                 TextField(
                   controller: amount,
                   keyboardType: TextInputType.number,
@@ -350,6 +361,7 @@ class PlanScreen extends ConsumerWidget {
                     suffixText: '₫',
                   ),
                 ),
+                const SizedBox(height: AppSpacing.lg),
                 DropdownButtonFormField<BillFrequency>(
                   initialValue: frequency,
                   decoration: const InputDecoration(labelText: 'Lặp lại'),
@@ -365,6 +377,37 @@ class PlanScreen extends ConsumerWidget {
                     if (value != null) setState(() => frequency = value);
                   },
                 ),
+                const SizedBox(height: AppSpacing.lg),
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('recurring-bill-category'),
+                  initialValue: categoryId ?? '',
+                  decoration: const InputDecoration(
+                    labelText: 'Danh mục ngân sách',
+                  ),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('Chưa phân loại'),
+                    ),
+                    if (categoryId != null &&
+                        !categories.any((item) => item.id == categoryId))
+                      DropdownMenuItem(
+                        value: categoryId,
+                        child: const Text('Danh mục hiện không có sẵn'),
+                      ),
+                    for (final category in categories)
+                      DropdownMenuItem(
+                        value: category.id,
+                        child: Text(category.name),
+                      ),
+                  ],
+                  onChanged: (value) => setState(
+                    () => categoryId = value == null || value.isEmpty
+                        ? null
+                        : value,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
                 TextButton.icon(
                   onPressed: () async {
                     final chosen = await showDatePicker(
@@ -414,7 +457,7 @@ class PlanScreen extends ConsumerWidget {
                         ? bill.anchorDate
                         : due,
                     nextDueDate: due,
-                    categoryId: bill?.categoryId,
+                    categoryId: categoryId,
                     updatedAt: DateTime.now(),
                   ),
                 );
@@ -425,8 +468,6 @@ class PlanScreen extends ConsumerWidget {
         ),
       ),
     );
-    title.dispose();
-    amount.dispose();
     if (result != null && context.mounted) await _save(context, ref, result);
   }
 
@@ -459,6 +500,7 @@ class PlanScreen extends ConsumerWidget {
                   maxLength: 120,
                   decoration: const InputDecoration(labelText: 'Tên mục tiêu'),
                 ),
+                const SizedBox(height: AppSpacing.sm),
                 TextField(
                   controller: target,
                   keyboardType: TextInputType.number,
@@ -467,6 +509,7 @@ class PlanScreen extends ConsumerWidget {
                     suffixText: '₫',
                   ),
                 ),
+                const SizedBox(height: AppSpacing.md),
                 TextButton.icon(
                   onPressed: () async {
                     final chosen = await showDatePicker(
@@ -478,7 +521,7 @@ class PlanScreen extends ConsumerWidget {
                     if (chosen != null) setState(() => date = chosen);
                   },
                   icon: const Icon(Icons.calendar_today_outlined),
-                  label: Text('Hoàn thành: ${_dateLabel(date)}'),
+                  label: Text('Hạn ${_dateLabel(date)}'),
                 ),
                 if (error != null)
                   Text(
@@ -527,8 +570,6 @@ class PlanScreen extends ConsumerWidget {
         ),
       ),
     );
-    name.dispose();
-    target.dispose();
     if (result != null && context.mounted) await _save(context, ref, result);
   }
 
@@ -574,6 +615,7 @@ class PlanScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     RecurringBill bill,
+    List<CategoryEntity> categories,
   ) async {
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -609,7 +651,7 @@ class PlanScreen extends ConsumerWidget {
       ),
     );
     if (!context.mounted) return;
-    if (action == 'edit') return _editBill(context, ref, bill);
+    if (action == 'edit') return _editBill(context, ref, categories, bill);
     if (action == 'delete') return _delete(context, ref, bill);
     if (action != 'skip' && action != 'paid') return;
     try {
@@ -745,7 +787,6 @@ class PlanScreen extends ConsumerWidget {
         ),
       ),
     );
-    controller.dispose();
     if (amount == null) return;
     try {
       final current = await ref.read(planRepositoryProvider).findById(goal.id);
@@ -818,6 +859,62 @@ class _Hint extends StatelessWidget {
   );
 }
 
+class _RecurringPlanCard extends StatelessWidget {
+  const _RecurringPlanCard({
+    required this.title,
+    required this.amountMinor,
+    required this.detail,
+    required this.due,
+    required this.onTap,
+    this.overdue = false,
+  });
+
+  final String title;
+  final int amountMinor;
+  final String detail;
+  final String due;
+  final VoidCallback onTap;
+  final bool overdue;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppCard(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
+              const SizedBox(width: AppSpacing.sm),
+              const Icon(Icons.chevron_right, size: AppIconSizes.md),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          MoneyText(amountMinor, emphasis: MoneyEmphasis.title),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            detail,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            due,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: overdue
+                  ? theme.colorScheme.error
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 String _frequencyLabel(BillFrequency frequency) => switch (frequency) {
   BillFrequency.weekly => 'Hàng tuần',
   BillFrequency.monthly => 'Hàng tháng',
@@ -832,6 +929,6 @@ bool _isOverdue(DateTime date) =>
       DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
     );
 
-String _incomeCategoryName(String id, List<CategoryEntity> categories) =>
+String _categoryName(String id, List<CategoryEntity> categories) =>
     categories.where((category) => category.id == id).firstOrNull?.name ??
     'Chưa phân loại';

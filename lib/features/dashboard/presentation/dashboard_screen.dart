@@ -11,6 +11,7 @@ import '../../../app/theme/category_palette.dart';
 import '../../../app/theme/finance_colors.dart';
 import '../../../shared/widgets/category_avatar.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_callout.dart';
 import '../../../shared/widgets/app_empty_state.dart';
 import '../../../shared/widgets/app_error_state.dart';
 import '../../../shared/widgets/app_skeleton.dart';
@@ -19,6 +20,7 @@ import '../../../shared/widgets/money_text.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/month_selector.dart';
 import '../../invoices/domain/invoice_models.dart';
+import '../../invoices/domain/invoice_filters.dart';
 import '../../income/data/income_repository.dart';
 import '../../income/presentation/income_entry_sheet.dart';
 import '../../planning/domain/plan_models.dart';
@@ -59,6 +61,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final incomeCategories =
         ref.watch(incomeCategoriesProvider).value ?? const [];
     final selectedMonth = ref.watch(selectedMonthProvider);
+    final hasPendingReview =
+        ref
+            .watch(
+              filteredInvoiceSummariesProvider(
+                const InvoiceListQuery(
+                  filter: InvoiceFilter(status: InvoiceStatus.needsReview),
+                  limit: 1,
+                ),
+              ),
+            )
+            .valueOrNull
+            ?.isNotEmpty ??
+        false;
 
     void openIncomeEntry() {
       showModalBottomSheet<bool>(
@@ -77,14 +92,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             title: const Text('Tổng quan'),
             actions: [
               IconButton(
-                tooltip: 'Xem hóa đơn',
-                onPressed: () => context.go('/invoices'),
+                tooltip: 'Lịch sử giao dịch',
+                onPressed: () => context.push('/invoices'),
                 icon: const Icon(Icons.receipt_long_outlined),
-              ),
-              IconButton(
-                tooltip: 'Mở trợ lý chi tiêu',
-                onPressed: () => context.push('/chat'),
-                icon: const Icon(Icons.chat_bubble_outline),
               ),
             ],
           ),
@@ -135,6 +145,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           ),
                     ),
                   ),
+                  if (hasPendingReview) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    AppCallout(
+                      title: 'Có giao dịch cần kiểm tra',
+                      message:
+                          'Kiểm tra dữ liệu hóa đơn trước khi khoản chi xuất hiện trong ngân sách và báo cáo.',
+                      tone: CalloutTone.warning,
+                      icon: Icons.fact_check_outlined,
+                      actions: [
+                        TextButton(
+                          onPressed: () => context.push('/invoices?review=1'),
+                          child: const Text('Kiểm tra giao dịch'),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.lg),
                   _BudgetCard(
                     snapshot: snapshot,
@@ -146,13 +172,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     onViewBudgets: () => context.go('/budgets'),
                   ),
                   const SizedBox(height: AppSpacing.xl),
-                  const SectionHeader(title: 'Chi tiêu theo ngày'),
-                  const SizedBox(height: AppSpacing.md),
-                  _DailyChart(snapshot: snapshot, month: selectedMonth),
-                  const SizedBox(height: AppSpacing.xl),
                   const SectionHeader(
                     title: 'Lịch thu chi',
-                    subtitle: 'Chạm vào một ngày để xem lịch sử chi tiêu',
+                    subtitle: 'Chênh lệch thu và chi từng ngày',
                   ),
                   const SizedBox(height: AppSpacing.md),
                   MonthlyTransactionCalendar(
@@ -164,11 +186,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xl),
+                  const SectionHeader(title: 'Chi tiêu theo ngày'),
+                  const SizedBox(height: AppSpacing.md),
+                  _DailyChart(snapshot: snapshot, month: selectedMonth),
+                  const SizedBox(height: AppSpacing.xl),
                   const SectionHeader(title: 'Cơ cấu chi tiêu'),
                   const SizedBox(height: AppSpacing.md),
                   _CategoryBreakdown(
                     snapshot: snapshot,
                     categories: categories,
+                    month: selectedMonth,
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   const SectionHeader(title: 'Cơ cấu thu nhập'),
@@ -938,10 +965,15 @@ class _CategoryBreakdownSkeleton extends StatelessWidget {
 }
 
 class _CategoryBreakdown extends StatefulWidget {
-  const _CategoryBreakdown({required this.snapshot, required this.categories});
+  const _CategoryBreakdown({
+    required this.snapshot,
+    required this.categories,
+    required this.month,
+  });
 
   final DashboardSnapshot snapshot;
   final List<CategoryEntity> categories;
+  final DateTime month;
 
   @override
   State<_CategoryBreakdown> createState() => _CategoryBreakdownState();
@@ -1284,6 +1316,25 @@ class _CategoryBreakdownState extends State<_CategoryBreakdown> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         compositionCard,
+        if (selectedEntry != null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => context.push(
+                Uri(
+                  path: '/invoices',
+                  queryParameters: {
+                    'month': MonthUtils.key(widget.month),
+                    'category': selectedEntry.key,
+                  },
+                ).toString(),
+              ),
+              icon: const Icon(Icons.arrow_forward),
+              label: Text('Xem giao dịch ${selectedLabel ?? 'danh mục'}'),
+            ),
+          ),
+        ],
         const SizedBox(height: AppSpacing.xl),
         _CategoryDropdown(
           key: const ValueKey('expense-categories-dropdown'),

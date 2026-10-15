@@ -41,6 +41,7 @@ abstract interface class InvoiceRepository {
   Future<void> resolveInvoiceConflictKeepLocal(String id);
   Future<void> resolveInvoiceConflictUseRemote(String id);
   Future<void> saveInvoices(Iterable<InvoiceEntity> invoices);
+  Future<int> assignCategoryToInvoices(Iterable<String> ids, String categoryId);
   Future<void> deleteInvoice(String id);
   Future<void> deleteAllUserData();
   Future<void> saveCategory(CategoryEntity category);

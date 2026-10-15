@@ -51,13 +51,13 @@ class BudgetScreen extends ConsumerWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Card(
-                child: ListTile(
-                  leading: const Icon(Icons.event_repeat),
-                  title: const Text('Kế hoạch tiền bạc'),
-                  subtitle: const Text('Khoản định kỳ và mục tiêu tiết kiệm'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/plans'),
+              child: AppCard(
+                padding: EdgeInsets.zero,
+                onTap: () => context.push('/plans'),
+                child: const ListTile(
+                  leading: Icon(Icons.event_repeat),
+                  title: Text('Khoản chi cố định'),
+                  trailing: Icon(Icons.chevron_right),
                 ),
               ),
             ),
@@ -364,7 +364,7 @@ class _BudgetSummary extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SectionHeader(
-                  title: 'Tổng quan tháng',
+                  title: 'Đã chi tháng này',
                   subtitle: '${data.invoiceCount} giao dịch đã ghi nhận',
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -383,28 +383,6 @@ class _BudgetSummary extends StatelessWidget {
                     color: isOver ? scheme.error : scheme.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _BudgetMetric(
-                        label: 'Đã chi',
-                        value: MoneyFormatter.format(data.totalMinor),
-                        icon: Icons.trending_down,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: _BudgetMetric(
-                        label: 'Hạn mức',
-                        value: hasBudget
-                            ? MoneyFormatter.format(data.budgetLimitMinor)
-                            : 'Chưa đặt',
-                        icon: Icons.savings_outlined,
-                      ),
-                    ),
-                  ],
-                ),
                 if (hasBudget) ...[
                   const SizedBox(height: AppSpacing.lg),
                   BudgetMeter(
@@ -416,47 +394,6 @@ class _BudgetSummary extends StatelessWidget {
               ],
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-class _BudgetMetric extends StatelessWidget {
-  const _BudgetMetric({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: ShapeDecoration(
-        color: scheme.surfaceContainerLow,
-        shape: AppShapes.control,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: AppIconSizes.sm, color: scheme.primary),
-            const SizedBox(height: AppSpacing.xs),
-            Text(label, style: Theme.of(context).textTheme.labelMedium),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-          ],
         ),
       ),
     );

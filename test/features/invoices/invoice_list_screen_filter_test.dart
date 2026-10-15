@@ -52,7 +52,7 @@ void main() {
     expect(find.text('Bộ lọc giao dịch'), findsOneWidget);
     expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Cần kiểm tra'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Cần kiểm tra').last);
     await tester.tap(find.text('Áp dụng'));
     await tester.pumpAndSettle();
     expect(find.text('1'), findsOneWidget);

@@ -496,6 +496,45 @@ class DriftInvoiceRepository implements InvoiceRepository {
   }
 
   @override
+  Future<int> assignCategoryToInvoices(
+    Iterable<String> ids,
+    String categoryId,
+  ) => _db.transaction(() async {
+    final category =
+        await (_db.select(_db.categories)..where(
+              (row) =>
+                  row.id.equals(categoryId) &
+                  row.kind.equals(CategoryKind.expense.name),
+            ))
+            .getSingleOrNull();
+    if (category == null) {
+      throw const FormatException('Danh mục chi không còn tồn tại.');
+    }
+
+    final now = DateTime.now();
+    var changed = 0;
+    for (final id in ids.toSet()) {
+      final row =
+          await (_db.select(_db.invoices)..where(
+                (invoice) => invoice.id.equals(id) & invoice.deletedAt.isNull(),
+              ))
+              .getSingleOrNull();
+      if (row == null ||
+          row.categoryId == categoryId ||
+          (row.status != InvoiceStatus.confirmed.name &&
+              row.status != InvoiceStatus.needsReview.name)) {
+        continue;
+      }
+      final invoice = await _hydrate(row);
+      await _saveInvoice(
+        invoice.copyWith(categoryId: categoryId, updatedAt: now),
+      );
+      changed++;
+    }
+    return changed;
+  });
+
+  @override
   Future<void> deleteInvoice(String id) async {
     await _db.transaction(() async {
       final existing = await (_db.select(

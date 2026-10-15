@@ -156,7 +156,7 @@ void main() {
       orderedEquals(['25%', '21%', '18%', '14%', '11%', '11%']),
     );
     expect(find.text('TỔNG CHI'), findsOneWidget);
-    expect(find.text('Còn lại (2 danh mục)'), findsNothing);
+    expect(find.text('Còn lại (2 danh mục)'), findsOneWidget);
     expect(chartCardBounds.height, greaterThan(chartBounds.height));
     expect(chartCardBounds.top, lessThan(chartBounds.top));
     expect(chartCardBounds.bottom, greaterThan(chartBounds.bottom));
@@ -185,6 +185,13 @@ void main() {
       find.byKey(const ValueKey('income-composition-amount-income_salary')),
     );
     expect((fixedLabel.center.dy - fixedAmount.center.dy).abs(), lessThan(1));
+    await tester.scrollUntilVisible(
+      find.text('Chi tiêu theo danh mục'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Chi tiêu theo danh mục'));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Danh mục 7'),
       400,
@@ -270,11 +277,18 @@ void main() {
     expect(chart.data.gridData.horizontalInterval, closeTo(125000 / 3, 0.001));
 
     await tester.scrollUntilVisible(
+      find.text('Cơ cấu chi tiêu'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Cơ cấu chi tiêu'), findsOneWidget);
+    await tester.scrollUntilVisible(
       find.text('Chi tiêu theo danh mục'),
       400,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('Chi tiêu theo danh mục'), findsOneWidget);
+    await tester.tap(find.text('Chi tiêu theo danh mục'));
+    await tester.pumpAndSettle();
     expect(find.text('Chưa có khoản chi theo danh mục.'), findsOneWidget);
   });
 
@@ -382,7 +396,8 @@ void main() {
     final legendAmount = tester.getRect(
       find.byKey(const ValueKey('composition-legend-amount-category-1')),
     );
-    expect(legendAmount.left - legendLabel.right, lessThan(32));
+    expect(legendAmount.left, greaterThan(legendLabel.right));
+    expect(legendAmount.right, lessThan(chartCardBounds.right));
     expect(chart.data.sections.single.title, '100%');
     expect(
       chart.data.sections.single.titleStyle?.color,
@@ -401,6 +416,15 @@ void main() {
     expect(chartCardBounds.top + 36, lessThan(chartBounds.top));
     expect(chartCardBounds.bottom - 36, greaterThan(chartBounds.bottom));
 
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('composition-legend-category-1')),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 140));
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey('composition-legend-category-1')),
     );

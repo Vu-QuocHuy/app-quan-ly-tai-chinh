@@ -86,29 +86,14 @@ class MonthlyTransactionCalendar extends StatelessWidget {
                 final date = DateTime(month.year, month.month, day);
                 return _CalendarDay(
                   date: date,
-                  income: incomeByDay[day] ?? 0,
-                  expense: snapshot.dailyTotals[day] ?? 0,
-                  incomeColor: finance.income.color,
-                  expenseColor: finance.expense.color,
+                  net:
+                      (incomeByDay[day] ?? 0) -
+                      (snapshot.dailyTotals[day] ?? 0),
+                  positiveColor: finance.income.color,
+                  negativeColor: Theme.of(context).colorScheme.error,
                   onTap: () => onSelectDay(date),
                 );
               },
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                _CalendarLegend(
-                  color: finance.income.color,
-                  icon: Icons.arrow_upward_rounded,
-                  label: 'Thu',
-                ),
-                const SizedBox(width: AppSpacing.lg),
-                _CalendarLegend(
-                  color: finance.expense.color,
-                  icon: Icons.arrow_downward_rounded,
-                  label: 'Chi',
-                ),
-              ],
             ),
           ],
         ),
@@ -120,18 +105,16 @@ class MonthlyTransactionCalendar extends StatelessWidget {
 class _CalendarDay extends StatelessWidget {
   const _CalendarDay({
     required this.date,
-    required this.income,
-    required this.expense,
-    required this.incomeColor,
-    required this.expenseColor,
+    required this.net,
+    required this.positiveColor,
+    required this.negativeColor,
     required this.onTap,
   });
 
   final DateTime date;
-  final int income;
-  final int expense;
-  final Color incomeColor;
-  final Color expenseColor;
+  final int net;
+  final Color positiveColor;
+  final Color negativeColor;
   final VoidCallback onTap;
 
   @override
@@ -146,9 +129,14 @@ class _CalendarDay extends StatelessWidget {
             : theme.colorScheme.outlineVariant,
       ),
     );
-    final label =
-        'Ngày ${date.day}, thu ${MoneyFormatter.format(income)}, '
-        'chi ${MoneyFormatter.format(expense)}';
+    final color = net > 0
+        ? positiveColor
+        : net < 0
+        ? negativeColor
+        : theme.colorScheme.onSurfaceVariant;
+    final label = net == 0
+        ? 'Ngày ${date.day}, thu chi cân bằng'
+        : 'Ngày ${date.day}, ${net > 0 ? 'dư' : 'thiếu'} ${MoneyFormatter.format(net.abs())}';
 
     return Semantics(
       button: true,
@@ -172,8 +160,25 @@ class _CalendarDay extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                _DayAmount(amount: income, color: incomeColor, arrow: '↑'),
-                _DayAmount(amount: expense, color: expenseColor, arrow: '↓'),
+                const Spacer(),
+                SizedBox(
+                  width: double.infinity,
+                  height: 18,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      net == 0
+                          ? '—'
+                          : '${net > 0 ? '+' : '−'}${_calendarAmount(net.abs())}',
+                      maxLines: 1,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const Spacer(),
               ],
             ),
           ),
@@ -181,65 +186,17 @@ class _CalendarDay extends StatelessWidget {
       ),
     );
   }
-}
 
-class _DayAmount extends StatelessWidget {
-  const _DayAmount({
-    required this.amount,
-    required this.color,
-    required this.arrow,
-  });
-
-  final int amount;
-  final Color color;
-  final String arrow;
-
-  @override
-  Widget build(BuildContext context) {
-    final value = amount == 0 ? '—' : _shortAmount(amount);
-    return SizedBox(
-      width: double.infinity,
-      height: 12,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Text(
-          '$arrow$value',
-          maxLines: 1,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: color,
-            fontSize: 9,
-            height: 1,
-          ),
-        ),
-      ),
-    );
+  String _calendarAmount(int amount) {
+    if (amount >= 1000000) {
+      return MoneyFormatter.compact(
+        amount,
+      ).replaceAll(' tr ₫', 'tr').replaceAll(' tỷ ₫', 'tỷ');
+    }
+    if (amount < 1000) return '$amount';
+    final tenths = amount ~/ 100;
+    final whole = tenths ~/ 10;
+    final decimal = tenths % 10;
+    return '${decimal == 0 ? whole : '$whole,$decimal'}K';
   }
-
-  String _shortAmount(int value) =>
-      (value >= 1000000
-              ? MoneyFormatter.compact(value)
-              : MoneyFormatter.format(value))
-          .replaceAll(RegExp(r'\s*₫'), '');
-}
-
-class _CalendarLegend extends StatelessWidget {
-  const _CalendarLegend({
-    required this.color,
-    required this.icon,
-    required this.label,
-  });
-
-  final Color color;
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Icon(icon, color: color, size: AppIconSizes.sm),
-      const SizedBox(width: AppSpacing.xs),
-      Text(label, style: Theme.of(context).textTheme.labelMedium),
-    ],
-  );
 }

@@ -111,7 +111,7 @@ class ExpenseGroupService {
     final memberRows = _asRows(
       await _client
           .from('expense_group_members')
-          .select('user_id, display_name, role')
+          .select('user_id, display_name, phone, role')
           .eq('group_id', group.id)
           .order('joined_at'),
     );
@@ -236,6 +236,7 @@ class ExpenseGroupService {
               120,
             ),
             role: _requiredString(row['role'], 'group_member.role', 16),
+            phone: row['phone'] as String?,
           ),
       ],
       expenses: [

@@ -41,11 +41,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
             title: const Text('Nhóm và quỹ chung'),
             actions: [
               IconButton(
-                tooltip: 'Mở trợ lý chi tiêu',
-                onPressed: () => context.push('/chat'),
-                icon: const Icon(Icons.chat_bubble_outline),
-              ),
-              IconButton(
                 tooltip: 'Làm mới nhóm',
                 onPressed: _refresh,
                 icon: const Icon(Icons.refresh),
@@ -622,7 +617,6 @@ class _GroupDetails extends StatelessWidget {
           child: ListTile(
             leading: const Icon(Icons.account_balance_wallet_outlined),
             title: const Text('Quỹ chung'),
-            subtitle: const Text('Nhiều thành viên cùng ghi thu và chi'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/groups/${details.group.id}/fund'),
           ),
@@ -1144,7 +1138,12 @@ class _MemberTile extends StatelessWidget {
             ? '${member.displayName} (Bạn)'
             : member.displayName,
       ),
-      subtitle: Text(member.role == 'owner' ? 'Chủ nhóm' : 'Thành viên'),
+      subtitle: Text(
+        [
+          member.role == 'owner' ? 'Chủ nhóm' : 'Thành viên',
+          if (member.phone?.isNotEmpty == true) member.phone!,
+        ].join(' · '),
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
