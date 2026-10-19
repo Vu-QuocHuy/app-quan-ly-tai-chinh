@@ -1,11 +1,18 @@
 import '../../invoices/domain/invoice_filters.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../invoices/domain/invoice_repository.dart';
+import '../../income/data/income_repository.dart';
 
 class LocalChatTools {
-  const LocalChatTools(this._repository);
+  const LocalChatTools(this._repository, this._incomes);
 
   final InvoiceRepository _repository;
+  final IncomeRepository _incomes;
+
+  Future<List<IncomeEntry>> incomeEntries() => _incomes.watchAll().first;
+
+  Future<List<CategoryEntity>> incomeCategories() =>
+      _repository.watchIncomeCategories().first;
 
   Future<DashboardSnapshot> monthSummary(String monthKey) {
     return _repository.watchDashboard(monthKey).first;

@@ -485,24 +485,19 @@ class _AppShellState extends ConsumerState<AppShell>
           isScrollControlled: true,
           builder: (context) => const IncomeEntrySheet(),
         );
-      case ImportSource.camera:
-        await _pickImage(ImageSource.camera);
-      case ImportSource.gallery:
-        await _pickImage(ImageSource.gallery);
-      case ImportSource.qrPayment:
-        if (mounted) context.push('/qr-payment');
+      case ImportSource.scan:
+        if (mounted) {
+          context.push(
+            '/qr-payment',
+            extra: (XFile image) => _importImageFile(image),
+          );
+        }
       case ImportSource.manual:
         final draft = ref.read(importCoordinatorProvider).createManualDraft();
         if (mounted) context.push('/review', extra: draft);
       case ImportSource.history:
         if (mounted) context.push('/invoices');
     }
-  }
-
-  Future<void> _pickImage(ImageSource source) async {
-    final image = await ImagePicker().pickImage(source: source);
-    if (image == null) return;
-    await _importImageFile(image);
   }
 
   Future<void> _importImageFile(XFile image) async {

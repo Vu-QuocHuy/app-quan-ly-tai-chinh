@@ -4,10 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/config/feature_flags.dart';
 import '../../../core/providers/app_providers.dart';
-import '../../../core/utils/month_utils.dart';
-import '../../export/application/invoice_export_service.dart';
 import '../../export/application/invoice_restore_service.dart';
-import '../../export/data/backup_catalog_store.dart';
 import '../../export/data/supabase_backup_provider.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../../shared/errors/error_presenter.dart';
@@ -21,10 +18,8 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final categoriesAsync = ref.watch(categoriesProvider);
-    final rulesAsync = ref.watch(merchantRulesProvider);
     final syncHealth = ref.watch(syncHealthProvider);
     final budgetAlerts = ref.watch(budgetAlertsEnabledProvider);
-    final backupRecords = ref.watch(backupRecordsProvider);
     final authUser = ref.watch(authUserProvider);
     final conflictsAsync = ref.watch(invoiceConflictsProvider);
     final conflictCount = conflictsAsync.valueOrNull?.length ?? 0;
@@ -149,42 +144,6 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                _Section(
-                  title: 'Tự động hóa',
-                  children: [
-                    ExpansionTile(
-                      leading: const Icon(Icons.auto_fix_high_outlined),
-                      title: const Text('Quy tắc phân loại'),
-                      subtitle: rulesAsync.when(
-                        data: (rules) => Text(
-                          rules.isEmpty
-                              ? 'Tự ghi nhớ danh mục theo cửa hàng'
-                              : '${rules.length} quy tắc đã ghi nhớ',
-                        ),
-                        loading: () => const Text('Đang tải quy tắc…'),
-                        error: (_, _) => const Text('Không tải được quy tắc'),
-                      ),
-                      children: [
-                        rulesAsync.when(
-                          data: (rules) => _MerchantRuleManagement(
-                            rules: rules,
-                            categories: categories,
-                            onDelete: (rule) =>
-                                _confirmDeleteRule(context, ref, rule),
-                          ),
-                          loading: () => const _LoadingTile(),
-                          error: (error, _) => _ErrorTile(
-                            error: error,
-                            label: 'Không tải được quy tắc phân loại',
-                            onRetry: () =>
-                                ref.invalidate(merchantRulesProvider),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
                 if (conflictCount > 0) ...[
                   const SizedBox(height: 12),
                   _Section(
@@ -211,32 +170,12 @@ class SettingsScreen extends ConsumerWidget {
                   children: [
                     ExpansionTile(
                       leading: const Icon(Icons.backup_outlined),
-                      title: const Text('Sao lưu & khôi phục'),
+                      title: const Text('Khôi phục dữ liệu'),
                       subtitle: const Text(
-                        'Xuất, nhập hoặc quản lý bản sao lưu cloud.',
+                        'Khôi phục từ tệp hoặc backup cloud.',
                       ),
                       children: [
-                        backupRecords.when(
-                          data: (records) =>
-                              _BackupStatusTile(records: records),
-                          loading: () => const _LoadingTile(),
-                          error: (error, _) => _ErrorTile(
-                            error: error,
-                            label: 'Không đọc được lịch sử backup',
-                            onRetry: () =>
-                                ref.invalidate(backupRecordsProvider),
-                          ),
-                        ),
-                        _ExportManagement(
-                          onExportJson: () => _export(context, ref, json: true),
-                          onExportCsv: () => _export(context, ref, json: false),
-                          onExportEncrypted: () =>
-                              _exportEncrypted(context, ref),
-                          onBackupCloud:
-                              supabaseConfigured &&
-                                  authUser.asData?.value != null
-                              ? () => _backupCloud(context, ref)
-                              : null,
+                        _BackupManagement(
                           onManageCloud:
                               supabaseConfigured &&
                                   authUser.asData?.value != null
@@ -246,7 +185,6 @@ class SettingsScreen extends ConsumerWidget {
                                   categories.map((item) => item.id),
                                 )
                               : null,
-                          onExportPdf: () => _exportPdf(context, ref),
                           onRestoreJson: () => _restore(
                             context,
                             ref,
@@ -300,40 +238,6 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _confirmDeleteRule(
-    BuildContext context,
-    WidgetRef ref,
-    MerchantRuleEntity rule,
-  ) async {
-    final confirmed = await showConfirmDialog(
-      context,
-      title: 'Xóa quy tắc phân loại?',
-      message:
-          'Lần sau hóa đơn từ “${rule.normalizedMerchant}” sẽ không được tự '
-          'động gán danh mục.',
-      confirmLabel: 'Xóa quy tắc',
-      destructive: true,
-    );
-    if (!confirmed || !context.mounted) return;
-
-    try {
-      await ref
-          .read(invoiceRepositoryProvider)
-          .deleteMerchantRule(rule.normalizedMerchant);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã xóa quy tắc phân loại.')),
-      );
-    } on Object catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Không thể xóa quy tắc: ${friendlyMessage(error)}'),
-        ),
-      );
-    }
-  }
-
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showConfirmDialog(
       context,
@@ -356,138 +260,6 @@ class SettingsScreen extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Không thể xóa dữ liệu: ${friendlyMessage(error)}'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _export(
-    BuildContext context,
-    WidgetRef ref, {
-    required bool json,
-  }) async {
-    try {
-      final invoices = await ref
-          .read(invoiceRepositoryProvider)
-          .watchInvoices()
-          .first;
-      final incomes = await ref.read(incomeRepositoryProvider).getAll();
-      final plans = await ref.read(planRepositoryProvider).getAll();
-      final uri = json
-          ? await const InvoiceExportService().exportJson(
-              invoices,
-              incomes: incomes,
-              plans: plans,
-            )
-          : await const InvoiceExportService().exportCsv(invoices);
-      if (uri == null) return;
-      await _recordBackup(
-        ref,
-        json ? BackupRecordType.json : BackupRecordType.csv,
-        uri,
-      );
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            json
-                ? 'Đã xuất ${invoices.length} khoản chi, ${incomes.length} khoản thu và ${plans.length} kế hoạch.'
-                : 'Đã xuất ${invoices.length} hóa đơn.',
-          ),
-        ),
-      );
-    } on Object catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Không thể xuất dữ liệu: ${friendlyMessage(error)}'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _exportEncrypted(BuildContext context, WidgetRef ref) async {
-    final password = await _showBackupPasswordDialog(
-      context,
-      confirmation: true,
-    );
-    if (password == null || !context.mounted) return;
-
-    try {
-      final invoices = await ref
-          .read(invoiceRepositoryProvider)
-          .watchInvoices()
-          .first;
-      final incomes = await ref.read(incomeRepositoryProvider).getAll();
-      final plans = await ref.read(planRepositoryProvider).getAll();
-      final uri = await const InvoiceExportService().exportEncryptedJson(
-        invoices,
-        password,
-        incomes: incomes,
-        plans: plans,
-      );
-      if (uri == null) return;
-      await _recordBackup(ref, BackupRecordType.encrypted, uri);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Đã xuất backup mã hóa ${invoices.length} khoản chi, ${incomes.length} khoản thu và ${plans.length} kế hoạch.',
-          ),
-        ),
-      );
-    } on Object catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Không thể xuất backup mã hóa: ${friendlyMessage(error)}',
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> _backupCloud(BuildContext context, WidgetRef ref) async {
-    final password = await _showBackupPasswordDialog(
-      context,
-      confirmation: true,
-    );
-    if (password == null || !context.mounted) return;
-    final client = ref.read(supabaseClientProvider);
-    if (client == null) return;
-
-    try {
-      final provider = SupabaseBackupProvider(client);
-      final invoices = await ref
-          .read(invoiceRepositoryProvider)
-          .watchInvoices()
-          .first;
-      final incomes = await ref.read(incomeRepositoryProvider).getAll();
-      final plans = await ref.read(planRepositoryProvider).getAll();
-      final uri = await InvoiceExportService(
-        provider: provider,
-      ).exportEncryptedJson(invoices, password, incomes: incomes, plans: plans);
-      if (uri == null || !context.mounted) return;
-      await _recordBackup(ref, BackupRecordType.encrypted, uri);
-      try {
-        await provider.prune();
-      } on Object {
-        // Retention is best-effort and must not invalidate a successful upload.
-      }
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Đã sao lưu mã hóa ${invoices.length} khoản chi, ${incomes.length} khoản thu và ${plans.length} kế hoạch lên Supabase.',
-          ),
-        ),
-      );
-    } on Object catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Không thể sao lưu cloud: ${friendlyMessage(error)}'),
         ),
       );
     }
@@ -571,56 +343,6 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ),
       );
-    }
-  }
-
-  Future<void> _exportPdf(BuildContext context, WidgetRef ref) async {
-    try {
-      final repository = ref.read(invoiceRepositoryProvider);
-      final monthKey = MonthUtils.key(ref.read(selectedMonthProvider));
-      final invoices = await repository.watchInvoices().first;
-      final dashboard = await repository.watchDashboard(monthKey).first;
-      final categories = await repository.watchCategories().first;
-      final uri = await const InvoiceExportService().exportPdf(
-        invoices: invoices,
-        dashboard: dashboard,
-        categories: categories,
-      );
-      if (uri == null) return;
-      await _recordBackup(ref, BackupRecordType.pdf, uri);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Đã tạo báo cáo PDF cho ${invoices.length} hóa đơn.'),
-        ),
-      );
-    } on Object catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Không thể tạo báo cáo PDF: ${friendlyMessage(error)}'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _recordBackup(
-    WidgetRef ref,
-    BackupRecordType type,
-    Uri uri,
-  ) async {
-    final fileName = uri.pathSegments.isEmpty
-        ? 'Tệp đã lưu'
-        : uri.pathSegments.last;
-    try {
-      final store = ref.read(backupCatalogStoreProvider);
-      await store.record(
-        BackupRecord(type: type, fileName: fileName, createdAt: DateTime.now()),
-      );
-      await store.prune();
-      ref.invalidate(backupRecordsProvider);
-    } on Object {
-      // Metadata history must never turn a successful export into an error.
     }
   }
 
@@ -867,7 +589,7 @@ Future<_CloudBackupSelection?> _showCloudBackupDialog(
             ? const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Text(
-                  'Tài khoản chưa có backup cloud. Hãy tạo một backup mã hóa trước.',
+                  'Tài khoản chưa có backup cloud.',
                   textAlign: TextAlign.center,
                 ),
               )
@@ -1043,19 +765,15 @@ Future<bool?> _showRestorePreview(
   );
 }
 
-Future<String?> _showBackupPasswordDialog(
-  BuildContext context, {
-  bool confirmation = false,
-}) async {
+Future<String?> _showBackupPasswordDialog(BuildContext context) async {
   final passwordController = TextEditingController();
-  final confirmationController = TextEditingController();
   final formKey = GlobalKey<FormState>();
   try {
     return await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.lock_outline),
-        title: Text(confirmation ? 'Tạo backup mã hóa' : 'Mở backup mã hóa'),
+        title: const Text('Mở backup mã hóa'),
         content: Form(
           key: formKey,
           child: Column(
@@ -1065,9 +783,7 @@ Future<String?> _showBackupPasswordDialog(
                 controller: passwordController,
                 autofocus: true,
                 obscureText: true,
-                textInputAction: confirmation
-                    ? TextInputAction.next
-                    : TextInputAction.done,
+                textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(
                   labelText: 'Mật khẩu backup',
                   hintText: 'Ít nhất 8 ký tự',
@@ -1080,24 +796,6 @@ Future<String?> _showBackupPasswordDialog(
                   return null;
                 },
               ),
-              if (confirmation) ...[
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: confirmationController,
-                  obscureText: true,
-                  textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(
-                    labelText: 'Nhập lại mật khẩu',
-                    prefixIcon: Icon(Icons.verified_user_outlined),
-                  ),
-                  validator: (value) {
-                    if (value != passwordController.text) {
-                      return 'Mật khẩu xác nhận không khớp';
-                    }
-                    return null;
-                  },
-                ),
-              ],
             ],
           ),
         ),
@@ -1112,15 +810,14 @@ Future<String?> _showBackupPasswordDialog(
                 Navigator.pop(dialogContext, passwordController.text);
               }
             },
-            icon: Icon(confirmation ? Icons.lock_outline : Icons.lock_open),
-            label: Text(confirmation ? 'Mã hóa và xuất' : 'Mở backup'),
+            icon: const Icon(Icons.lock_open),
+            label: const Text('Mở backup'),
           ),
         ],
       ),
     );
   } finally {
     passwordController.dispose();
-    confirmationController.dispose();
   }
 }
 
@@ -1147,79 +844,6 @@ class _RestoreStat extends StatelessWidget {
   }
 }
 
-class _MerchantRuleManagement extends StatelessWidget {
-  const _MerchantRuleManagement({
-    required this.rules,
-    required this.categories,
-    required this.onDelete,
-  });
-
-  final List<MerchantRuleEntity> rules;
-  final List<CategoryEntity> categories;
-  final ValueChanged<MerchantRuleEntity> onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    if (rules.isEmpty) {
-      return const ListTile(
-        leading: Icon(Icons.auto_fix_high_outlined),
-        title: Text('Chưa có quy tắc nào'),
-        subtitle: Text(
-          'Sau khi xác nhận hóa đơn, lựa chọn danh mục sẽ được ghi nhớ theo merchant.',
-        ),
-      );
-    }
-
-    return Column(
-      children: [
-        ...rules.map((rule) {
-          final category = _findCategory(categories, rule.categoryId);
-          return ListTile(
-            leading: const Icon(Icons.storefront_outlined),
-            title: Text(rule.normalizedMerchant),
-            subtitle: Text(
-              'Tự động gán: ${category?.name ?? 'Danh mục không còn tồn tại'}',
-            ),
-            trailing: IconButton(
-              tooltip: 'Xóa quy tắc',
-              onPressed: () => onDelete(rule),
-              icon: const Icon(Icons.delete_outline),
-            ),
-          );
-        }),
-      ],
-    );
-  }
-}
-
-class _BackupStatusTile extends StatelessWidget {
-  const _BackupStatusTile({required this.records});
-
-  final List<BackupRecord> records;
-
-  @override
-  Widget build(BuildContext context) {
-    final last = records.isEmpty ? null : records.first;
-    return ListTile(
-      leading: Icon(
-        last == null ? Icons.backup_outlined : Icons.verified_outlined,
-        color: last == null
-            ? Theme.of(context).colorScheme.onSurfaceVariant
-            : Theme.of(context).colorScheme.primary,
-      ),
-      title: Text(last == null ? 'Chưa có lịch sử backup' : 'Backup gần nhất'),
-      subtitle: Text(
-        last == null
-            ? 'Metadata xuất file được lưu local để theo dõi lần sao lưu gần nhất.'
-            : '${last.label}: ${last.fileName}\n${_backupDate(last.createdAt)}',
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing: records.isEmpty ? null : Text('${records.length}/20'),
-    );
-  }
-}
-
 String _backupDate(DateTime value) {
   final local = value.toLocal();
   final day = local.day.toString().padLeft(2, '0');
@@ -1229,67 +853,19 @@ String _backupDate(DateTime value) {
   return '$day/$month/${local.year} $hour:$minute';
 }
 
-class _ExportManagement extends StatelessWidget {
-  const _ExportManagement({
-    required this.onExportJson,
-    required this.onExportCsv,
-    required this.onExportEncrypted,
-    required this.onBackupCloud,
+class _BackupManagement extends StatelessWidget {
+  const _BackupManagement({
     required this.onManageCloud,
-    required this.onExportPdf,
     required this.onRestoreJson,
   });
 
-  final VoidCallback onExportJson;
-  final VoidCallback onExportCsv;
-  final VoidCallback onExportEncrypted;
-  final VoidCallback? onBackupCloud;
   final VoidCallback? onManageCloud;
-  final VoidCallback onExportPdf;
   final VoidCallback onRestoreJson;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        ListTile(
-          leading: const Icon(Icons.data_object_outlined),
-          title: const Text('Xuất JSON đầy đủ'),
-          subtitle: const Text(
-            'Bao gồm khoản thu, hóa đơn, dòng hàng và bằng chứng dữ liệu.',
-          ),
-          trailing: const Icon(Icons.download_outlined),
-          onTap: onExportJson,
-        ),
-        ListTile(
-          leading: const Icon(Icons.table_chart_outlined),
-          title: const Text('Xuất CSV khoản chi'),
-          subtitle: const Text(
-            'Danh sách hóa đơn để mở bằng Excel hoặc Google Sheets.',
-          ),
-          trailing: const Icon(Icons.download_outlined),
-          onTap: onExportCsv,
-        ),
-        ListTile(
-          leading: const Icon(Icons.enhanced_encryption_outlined),
-          title: const Text('Xuất backup mã hóa'),
-          subtitle: const Text(
-            'Mã hóa hóa đơn và khoản thu bằng mật khẩu trước khi lưu tệp .hdbak.',
-          ),
-          trailing: const Icon(Icons.download_outlined),
-          onTap: onExportEncrypted,
-        ),
-        ListTile(
-          leading: const Icon(Icons.cloud_upload_outlined),
-          title: const Text('Sao lưu backup mã hóa lên Supabase'),
-          subtitle: Text(
-            onBackupCloud == null
-                ? 'Đăng nhập Supabase để bật backup cloud riêng tư.'
-                : 'Chỉ tải lên tệp .hdbak đã mã hóa.',
-          ),
-          trailing: const Icon(Icons.cloud_upload_outlined),
-          onTap: onBackupCloud,
-        ),
         ListTile(
           leading: const Icon(Icons.cloud_queue_outlined),
           title: const Text('Quản lý backup Supabase'),
@@ -1300,15 +876,6 @@ class _ExportManagement extends StatelessWidget {
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: onManageCloud,
-        ),
-        ListTile(
-          leading: const Icon(Icons.picture_as_pdf_outlined),
-          title: const Text('Xuất báo cáo PDF'),
-          subtitle: const Text(
-            'Tổng quan tháng, danh mục và danh sách hóa đơn tham khảo.',
-          ),
-          trailing: const Icon(Icons.download_outlined),
-          onTap: onExportPdf,
         ),
         ListTile(
           leading: const Icon(Icons.restore_page_outlined),
@@ -1382,14 +949,4 @@ class _Section extends StatelessWidget {
       ],
     );
   }
-}
-
-CategoryEntity? _findCategory(
-  List<CategoryEntity> categories,
-  String categoryId,
-) {
-  for (final category in categories) {
-    if (category.id == categoryId) return category;
-  }
-  return null;
 }

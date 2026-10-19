@@ -34,6 +34,12 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="hoadoninsight" android:host="login-callback" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="hoadoninsight" android:host="payment-return" android:path="/qr-payment" />
+            </intent-filter>
         </activity>
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
@@ -54,6 +60,21 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+        <package android:name="com.mbmobile" />
+        <package android:name="com.vietinbank.ipay" />
+        <package android:name="com.vnpay.bidv" />
+        <package android:name="mobile.acb.com.vn" />
+        <package android:name="vn.com.ocb.awe" />
+        <package android:name="com.VCB" />
+        <package android:name="vn.com.techcombank.bb.app" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

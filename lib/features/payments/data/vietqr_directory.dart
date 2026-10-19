@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 @immutable
@@ -11,12 +12,14 @@ class VietQrBankApp {
     required this.name,
     required this.bankName,
     this.monthlyInstalls = 0,
+    this.supportsAutofill = false,
   });
 
   final String id;
   final String name;
   final String bankName;
   final int monthlyInstalls;
+  final bool supportsAutofill;
 
   Uri launchUri({
     required String? bankCode,
@@ -24,20 +27,26 @@ class VietQrBankApp {
     int? amountVnd,
     String? transferDescription,
     String? recipientName,
+    Uri? returnUri,
   }) {
     final normalizedBankCode = bankCode?.trim().toLowerCase();
     final canPrefillRecipient =
         normalizedBankCode != null &&
         RegExp(r'^[a-z0-9_-]{1,32}$').hasMatch(normalizedBankCode) &&
         RegExp(r'^[A-Za-z0-9]{1,34}$').hasMatch(accountNumber.trim());
+    if (!canPrefillRecipient || amountVnd == null || amountVnd <= 0) {
+      throw const FormatException('Thiếu thông tin chuyển khoản hợp lệ.');
+    }
     return Uri.https('dl.vietqr.io', '/pay', {
       'app': id,
-      if (canPrefillRecipient)
-        'ba': '${accountNumber.trim()}@$normalizedBankCode',
-      if (canPrefillRecipient && amountVnd != null && amountVnd > 0)
-        'am': '$amountVnd',
-      if (canPrefillRecipient && transferDescription?.trim().isNotEmpty == true)
-        'tn': transferDescription!.trim(),
+      'ba': '${accountNumber.trim()}@$normalizedBankCode',
+      'am': '$amountVnd',
+      'tn': transferDescription?.trim().isNotEmpty == true
+          ? transferDescription!.trim()
+          : 'Chuyen khoan',
+      'url':
+          (returnUri ?? Uri.parse('hoadoninsight://payment-return/qr-payment'))
+              .toString(),
       if (canPrefillRecipient && recipientName?.trim().isNotEmpty == true)
         'bn': recipientName!.trim(),
     });
@@ -63,8 +72,8 @@ class VietQrDirectory {
   VietQrDirectory({http.Client? client}) : _client = client ?? http.Client();
 
   static const _cacheTtl = Duration(hours: 24);
-  static const _androidAppsCacheKey = 'payments.qr.bank_apps.android.v1';
-  static const _iosAppsCacheKey = 'payments.qr.bank_apps.ios.v1';
+  static const _androidAppsCacheKey = 'payments.qr.bank_apps.android.v2';
+  static const _iosAppsCacheKey = 'payments.qr.bank_apps.ios.v2';
   static const _banksCacheKey = 'payments.qr.banks.v1';
   final http.Client _client;
 
@@ -80,6 +89,16 @@ class VietQrDirectory {
   );
 
   void dispose() => _client.close();
+
+  Future<List<VietQrBankApp>> loadAvailableBankApps() async {
+    final apps = await loadBankApps();
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return apps;
+    final installed = await const MethodChannel(
+      'hoadoninsight/bank_apps',
+    ).invokeListMethod<String>('installedBankAppIds');
+    final ids = installed?.toSet() ?? <String>{};
+    return apps.where((app) => ids.contains(app.id)).toList(growable: false);
+  }
 
   Future<List<VietQrBankApp>> loadBankApps() async {
     final cached = await _readCache(_appsCacheKey, _parseApps);
@@ -97,15 +116,7 @@ class VietQrDirectory {
       if (decoded is! Map || decoded['apps'] is! List) {
         throw const FormatException();
       }
-      final apps =
-          (decoded['apps'] as List)
-              .map(_parseApp)
-              .whereType<VietQrBankApp>()
-              .toList(growable: false)
-            ..sort(
-              (left, right) =>
-                  right.monthlyInstalls.compareTo(left.monthlyInstalls),
-            );
+      final apps = _parseApps(decoded);
       if (apps.isEmpty) throw const FormatException();
       await _writeCache(_appsCacheKey, response.body);
       return apps;
@@ -178,7 +189,14 @@ class VietQrDirectory {
     return (decoded['apps'] as List)
         .map(_parseApp)
         .whereType<VietQrBankApp>()
-        .toList(growable: false);
+        .toList(growable: false)
+      ..sort(
+        (left, right) => left.supportsAutofill == right.supportsAutofill
+            ? right.monthlyInstalls.compareTo(left.monthlyInstalls)
+            : left.supportsAutofill
+            ? -1
+            : 1,
+      );
   }
 
   static VietQrBankApp? _parseApp(Object? value) {
@@ -198,6 +216,7 @@ class VietQrDirectory {
       id: id,
       name: name.trim(),
       bankName: bankName.trim(),
+      supportsAutofill: value['autofill'] == 1,
       monthlyInstalls: installs is num && installs.isFinite
           ? installs.toInt().clamp(0, 1 << 31).toInt()
           : 0,
@@ -246,6 +265,36 @@ class VietQrDirectory {
       id: 'mb',
       name: 'MB Bank',
       bankName: 'Ngân hàng TMCP Quân đội',
+      supportsAutofill: true,
+    ),
+    VietQrBankApp(
+      id: 'icb',
+      name: 'VietinBank iPay',
+      bankName: 'Ngân hàng TMCP Công thương Việt Nam',
+      supportsAutofill: true,
+    ),
+    VietQrBankApp(
+      id: 'bidv',
+      name: 'BIDV SmartBanking',
+      bankName: 'Ngân hàng TMCP Đầu tư và Phát triển Việt Nam',
+      supportsAutofill: true,
+    ),
+    VietQrBankApp(
+      id: 'acb',
+      name: 'ACB ONE',
+      bankName: 'Ngân hàng TMCP Á Châu',
+      supportsAutofill: true,
+    ),
+    VietQrBankApp(
+      id: 'ocb',
+      name: 'OCB OMNI',
+      bankName: 'Ngân hàng TMCP Phương Đông',
+      supportsAutofill: true,
+    ),
+    VietQrBankApp(
+      id: 'tcb',
+      name: 'Techcombank Mobile',
+      bankName: 'Ngân hàng TMCP Kỹ thương Việt Nam',
     ),
   ];
 

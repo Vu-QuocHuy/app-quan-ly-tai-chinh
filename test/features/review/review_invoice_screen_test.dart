@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +53,47 @@ void main() {
     expect(find.text('Thuế suất'), findsNothing);
     expect(find.widgetWithText(TextFormField, 'Thuế'), findsOneWidget);
     expect(find.widgetWithText(TextFormField, 'Giảm giá'), findsOneWidget);
+  });
+
+  testWidgets('rejects fractional đồng in OCR review', (tester) async {
+    final now = DateTime(2026, 8, 20);
+    final invoice = InvoiceEntity(
+      id: 'ocr-decimal-draft',
+      sellerName: 'Cửa hàng',
+      currencyCode: 'VND',
+      subtotalMinor: 100000,
+      taxMinor: 0,
+      totalMinor: 100000,
+      sourceType: InvoiceSourceType.imageOcr,
+      status: InvoiceStatus.needsReview,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final repository = _RecordingInvoiceRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          invoiceRepositoryProvider.overrideWithValue(repository),
+          categoriesProvider.overrideWith((ref) => Stream.value(const [])),
+        ],
+        child: MaterialApp(home: ReviewInvoiceScreen(invoice: invoice)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final totalField = find.widgetWithText(TextFormField, 'Tổng thanh toán *');
+    expect(
+      tester.widget<TextField>(
+        find.descendant(of: totalField, matching: find.byType(TextField)),
+      ).keyboardType,
+      const TextInputType.numberWithOptions(decimal: false),
+    );
+    await tester.enterText(totalField, '12,5');
+    await tester.ensureVisible(find.byKey(const Key('confirm-invoice-button')));
+    await tester.tap(find.byKey(const Key('confirm-invoice-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Số tiền không hợp lệ.'), findsWidgets);
+    expect(repository.savedInvoice, isNull);
   });
 
   testWidgets('maps unavailable OCR categories to Khác before saving', (
@@ -353,6 +396,67 @@ void main() {
     expect(saved.status, InvoiceStatus.confirmed);
   });
 
+  testWidgets('creates and selects a custom expense category', (tester) async {
+    final now = DateTime(2026, 8, 20);
+    final invoice = InvoiceEntity(
+      id: 'custom-expense-draft',
+      sellerName: '',
+      currencyCode: 'VND',
+      subtotalMinor: 0,
+      taxMinor: 0,
+      totalMinor: 0,
+      sourceType: InvoiceSourceType.manual,
+      status: InvoiceStatus.needsReview,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final categories = <CategoryEntity>[
+      const CategoryEntity(
+        id: 'other',
+        name: 'Khác',
+        iconName: 'category',
+        colorValue: 0xFF64748B,
+      ),
+    ];
+    late final StreamController<List<CategoryEntity>> categoryStream;
+    categoryStream = StreamController<List<CategoryEntity>>.broadcast(
+      onListen: () => categoryStream.add(List.of(categories)),
+    );
+    addTearDown(categoryStream.close);
+    final repository = _RecordingInvoiceRepository()
+      ..onCategorySaved = (category) {
+        categories.add(category);
+        categoryStream.add(List.of(categories));
+      };
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          invoiceRepositoryProvider.overrideWithValue(repository),
+          categoriesProvider.overrideWith((ref) => categoryStream.stream),
+        ],
+        child: MaterialApp(home: ReviewInvoiceScreen(invoice: invoice)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Thêm loại khoản chi'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('category-name-field')),
+      'Cà phê',
+    );
+    await tester.tap(find.text('Lưu danh mục'));
+    await tester.pumpAndSettle();
+
+    final category = repository.savedCategory!;
+    expect(category.name, 'Cà phê');
+    expect(category.kind, CategoryKind.expense);
+    expect(
+      find.byKey(ValueKey('expense-category-${category.id}')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('keeps manual invoices with tax in the expense flow', (
     tester,
   ) async {
@@ -405,6 +509,14 @@ void main() {
 
 class _RecordingInvoiceRepository implements InvoiceRepository {
   InvoiceEntity? savedInvoice;
+  CategoryEntity? savedCategory;
+  void Function(CategoryEntity)? onCategorySaved;
+
+  @override
+  Future<void> saveCategory(CategoryEntity category) async {
+    savedCategory = category;
+    onCategorySaved?.call(category);
+  }
 
   @override
   Future<void> saveInvoice(InvoiceEntity invoice) async {

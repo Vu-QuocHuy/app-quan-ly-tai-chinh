@@ -9,8 +9,8 @@
 - Adapter ingestion thống nhất cho XML, PDF text và OCR.
 - Ảnh hóa đơn được gửi trực tiếp tới Gemini VLM qua Supabase; cần kết nối mạng.
 - Supabase Edge Function gọi Gemini Structured Output; secret chỉ ở backend.
-- Trợ lý chi tiêu có bộ tool local read-only, chỉ gọi tool phù hợp với câu hỏi; Gemini `/v1/chat` là tùy chọn và citation cho dữ liệu nguồn.
-- Câu trả lời từ dữ liệu local không gọi Gemini. Khi cần Gemini, client và Edge Function chỉ cho phép facts tổng hợp, loại bỏ invoice ID/merchant/kết quả tìm kiếm và ẩn thông tin định danh trong câu hỏi/lịch sử.
+- Trợ lý tài chính trả lời câu hỏi thu chi bằng dữ liệu trên thiết bị, có nguồn đối chiếu và hoạt động offline sau khi đã đăng nhập. Khung chat chỉ nhận văn bản; ảnh hóa đơn được xử lý trong luồng OCR riêng.
+- Màn hình chat không gọi Gemini. API chat ở backend vẫn được giữ để tương thích, nhưng không được ứng dụng hiện tại sử dụng.
 - Connector tỷ giá chỉ gọi provider allowlist ở backend, có timeout và hiển thị nguồn cập nhật.
 - Nhóm chi tiêu dùng Supabase RLS: tạo/tham gia bằng mã mời, chia đều/theo số tiền/theo phần trăm, OCR hóa đơn để gán từng dòng cho thành viên và ghi nhận tất toán.
 - Có thể chia sẻ hóa đơn cá nhân vào team hoặc cho tài khoản khác bằng snapshot tối thiểu; hóa đơn gốc không bị công khai. Chia sẻ trực tiếp có hộp thư chờ chấp nhận và hỗ trợ thu hồi.
@@ -129,9 +129,9 @@ flutter run --dart-define-from-file=config/supabase.local.json
 Mặc định lệnh trên chạy flavor `dev`. Với staging hoặc production, dùng thêm
 `--flavor staging`/`--flavor production` và đặt `APP_ENV` tương ứng.
 
-Sau khi backend đã cấu hình `GEMINI_API_KEY`, app có thể hỏi bằng tiếng Việt các câu hỏi ngoài phạm vi dữ liệu local. Các câu hỏi về tổng chi, danh mục, ngân sách, so sánh tháng, hóa đơn gần đây và khoản chi định kỳ được trả lời trực tiếp từ tool local; nếu Gemini được gọi, dữ liệu hóa đơn cấp dòng không được gửi đi.
+Sau khi backend đã cấu hình `GEMINI_API_KEY`, app có thể phân tích ảnh hóa đơn qua luồng OCR. Chat hiện trả lời bằng dữ liệu trên thiết bị: tổng thu, khoản thu theo danh mục/gần đây, tổng chi, ngân sách, so sánh tháng, hóa đơn gần đây và khoản chi định kỳ. Câu hỏi ngoài phạm vi được hỗ trợ sẽ nhận hướng dẫn hỏi lại.
 
-Các câu hỏi tỷ giá như “tỷ giá USD/VND hôm nay” sẽ dùng connector ExchangeRate-API ở backend và trả về citation; một số cặp tiền có fallback Frankfurter. Đây là dữ liệu tham khảo, cập nhật theo lịch của nhà cung cấp; không dùng làm chứng từ hoặc quyết định tài chính tự động.
+Connector tỷ giá và API chat vẫn có ở backend để tương thích, nhưng màn hình chat hiện không gọi các endpoint này.
 
 Function `ai-api` bật `verify_jwt = true`; chỉ phiên Supabase hợp lệ mới được gọi AI proxy.
 Khi đưa web lên production, có thể khóa origin bằng `AI_ALLOWED_ORIGINS`, ví dụ

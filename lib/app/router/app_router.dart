@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/budgets/presentation/budget_screen.dart';
@@ -56,11 +57,16 @@ final appRouter = GoRouter(
   navigatorKey: _rootKey,
   refreshListenable: authRouterRefresh,
   initialLocation: '/',
-  redirect: (context, state) => authRedirect(
-    location: state.matchedLocation,
-    isConfigured: SupabaseBootstrap.isConfigured,
-    isSignedIn: SupabaseBootstrap.clientOrNull?.auth.currentUser != null,
-  ),
+  redirect: (context, state) =>
+      state.uri.scheme == 'hoadoninsight' &&
+          state.uri.host == 'payment-return' &&
+          state.uri.path == '/qr-payment'
+      ? '/qr-payment'
+      : authRedirect(
+          location: state.matchedLocation,
+          isConfigured: SupabaseBootstrap.isConfigured,
+          isSignedIn: SupabaseBootstrap.clientOrNull?.auth.currentUser != null,
+        ),
   // go_router không có errorBuilder -> deep link không khớp cho ra trang lỗi
   // tiếng Anh mặc định, trong một app thuần Việt.
   errorBuilder: (context, state) => Scaffold(
@@ -209,7 +215,15 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/qr-payment',
       parentNavigatorKey: _rootKey,
-      builder: (context, state) => const QrPaymentScreen(),
+      builder: (context, state) {
+        final onPickOcrImage = state.extra;
+        return QrPaymentScreen(
+          showScanTabs: onPickOcrImage is Future<void> Function(XFile),
+          onOcrImageReady: onPickOcrImage is Future<void> Function(XFile)
+              ? onPickOcrImage
+              : null,
+        );
+      },
     ),
     GoRoute(
       path: '/qr-payment/history',

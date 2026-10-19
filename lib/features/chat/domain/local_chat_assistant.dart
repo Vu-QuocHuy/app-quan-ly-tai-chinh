@@ -1,5 +1,6 @@
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
+import '../../income/data/income_repository.dart';
 import '../../invoices/domain/invoice_filters.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../invoices/domain/invoice_repository.dart';
@@ -7,12 +8,13 @@ import 'chat_models.dart';
 import 'local_chat_tools.dart';
 
 class LocalChatAssistant {
-  const LocalChatAssistant(this._repository);
+  const LocalChatAssistant(this._repository, this._incomes);
 
   final InvoiceRepository _repository;
+  final IncomeRepository _incomes;
 
   Future<ChatReply> answer(String question, {DateTime? now}) async {
-    final tools = LocalChatTools(_repository);
+    final tools = LocalChatTools(_repository, _incomes);
     final reference = now ?? DateTime.now();
     final normalized = _normalize(question);
     final month = _monthFromQuestion(normalized, reference);
@@ -25,6 +27,59 @@ class LocalChatAssistant {
       sourceId: monthKey,
       capturedAt: DateTime.now(),
     );
+
+    if (_isIncomeQuestion(normalized)) {
+      final entries = await tools.incomeEntries();
+      final categories = await tools.incomeCategories();
+      final names = {
+        for (final category in categories) category.id: category.name,
+      };
+      final monthly = entries
+          .where((entry) => MonthUtils.key(entry.receivedAt) == monthKey)
+          .toList(growable: false);
+      final total = monthly.fold<int>(
+        0,
+        (sum, entry) => sum + entry.amountMinor,
+      );
+      String answer;
+      if (normalized.contains('gan day') || normalized.contains('moi nhat')) {
+        answer = entries.isEmpty
+            ? 'Chưa có khoản thu nào được lưu trên thiết bị.'
+            : 'Các khoản thu gần đây: ${entries.take(5).map((entry) => '${names[entry.categoryId] ?? 'Chưa phân loại'}: ${MoneyFormatter.format(entry.amountMinor)}').join('; ')}.';
+      } else if (_isCategoryQuestion(normalized) ||
+          _isRankingQuestion(normalized)) {
+        final totals = <String, int>{};
+        for (final entry in monthly) {
+          totals.update(
+            entry.categoryId,
+            (value) => value + entry.amountMinor,
+            ifAbsent: () => entry.amountMinor,
+          );
+        }
+        final ranked = totals.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+        answer = ranked.isEmpty
+            ? '${MonthUtils.label(month)} chưa có khoản thu nào.'
+            : 'Khoản thu theo danh mục ${MonthUtils.label(month)}: ${ranked.take(5).map((entry) => '${names[entry.key] ?? 'Chưa phân loại'}: ${MoneyFormatter.format(entry.value)}').join('; ')}.';
+      } else {
+        answer =
+            '${MonthUtils.label(month)} bạn đã ghi nhận ${monthly.length} khoản thu, tổng thu ${MoneyFormatter.format(total)}.';
+      }
+      return ChatReply(
+        text: answer,
+        citations: [
+          ChatCitation(
+            label: 'Dữ liệu khoản thu ${MonthUtils.label(month)}',
+            sourceType: 'local',
+            sourceId: monthKey,
+          ),
+        ],
+        facts: [
+          ChatFact('income_count', '${monthly.length}'),
+          ChatFact('income_total_minor_vnd', '$total'),
+        ],
+      );
+    }
 
     if (_isBudgetQuestion(normalized)) {
       final result = await tools.budgetStatus(monthKey);
@@ -142,7 +197,7 @@ class LocalChatAssistant {
 
     return ChatReply(
       text:
-          'Mình có thể trả lời về tổng chi, ngân sách, danh mục, so sánh '
+          'Mình có thể trả lời về tổng thu, tổng chi, ngân sách, danh mục, so sánh '
           'tháng, dự báo và khoản chi định kỳ. Bạn có thể hỏi cụ thể hơn.',
       citations: const [],
     );
@@ -360,6 +415,10 @@ class LocalChatAssistant {
       value.contains('ngan sach') ||
       value.contains('budget') ||
       value.contains('han muc');
+
+  bool _isIncomeQuestion(String value) => RegExp(
+    r'\b(thu nhap|khoan thu|tong thu|da thu|tien thu|nguon thu|nhan duoc|luong|tien thuong|income|thu)\b',
+  ).hasMatch(value);
 
   bool _isRecurringQuestion(String value) =>
       value.contains('dinh ky') ||

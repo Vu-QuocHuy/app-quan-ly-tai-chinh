@@ -2,10 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/auth/data/supabase_auth_service.dart';
-import '../../features/chat/data/chat_api_client.dart';
 import '../../features/chat/data/chat_history_store.dart';
 import '../../features/chat/domain/local_chat_assistant.dart';
-import '../../features/export/data/backup_catalog_store.dart';
 import '../../features/groups/data/group_service.dart';
 import '../../features/groups/domain/group_models.dart';
 import '../../features/income/data/income_repository.dart';
@@ -200,23 +198,11 @@ final expenseGroupDetailsProvider = FutureProvider.autoDispose
       return service.loadDetails(group);
     });
 
-final backupCatalogStoreProvider = Provider<BackupCatalogStore>((ref) {
-  final userId = ref.watch(authUserProvider).value?.id;
-  return BackupCatalogStore(scope: userId);
-});
-
-final backupRecordsProvider = FutureProvider<List<BackupRecord>>((ref) {
-  return ref.watch(backupCatalogStoreProvider).load();
-});
-
 final localChatAssistantProvider = Provider<LocalChatAssistant>((ref) {
-  return LocalChatAssistant(ref.watch(invoiceRepositoryProvider));
-});
-
-final chatApiClientProvider = Provider<ChatApiClient>((ref) {
-  ref.watch(authUserProvider);
-  final client = ref.watch(supabaseClientProvider);
-  return ChatApiClient(supabaseClient: client);
+  return LocalChatAssistant(
+    ref.watch(invoiceRepositoryProvider),
+    ref.watch(incomeRepositoryProvider),
+  );
 });
 
 final aiExtractionClientProvider = Provider<AiExtractionClient>((ref) {
@@ -390,10 +376,6 @@ final categoriesProvider = StreamProvider<List<CategoryEntity>>((ref) {
 
 final incomeCategoriesProvider = StreamProvider<List<CategoryEntity>>((ref) {
   return ref.watch(invoiceRepositoryProvider).watchIncomeCategories();
-});
-
-final merchantRulesProvider = StreamProvider<List<MerchantRuleEntity>>((ref) {
-  return ref.watch(invoiceRepositoryProvider).watchMerchantRules();
 });
 
 final selectedMonthProvider = StateProvider<DateTime>((ref) {

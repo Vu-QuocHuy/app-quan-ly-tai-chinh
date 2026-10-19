@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum ImportSource { income, camera, gallery, qrPayment, manual, history }
+enum ImportSource { income, scan, manual, history }
 
 class ImportSourceSheet extends StatelessWidget {
   const ImportSourceSheet({super.key});
@@ -38,22 +38,10 @@ class ImportSourceSheet extends StatelessWidget {
                 onTap: () => Navigator.pop(context, ImportSource.income),
               ),
               _SourceTile(
-                icon: Icons.photo_camera_outlined,
-                title: 'Chụp hóa đơn',
-                subtitle: 'OCR trên thiết bị, sau đó kiểm tra dữ liệu',
-                onTap: () => Navigator.pop(context, ImportSource.camera),
-              ),
-              _SourceTile(
-                icon: Icons.photo_library_outlined,
-                title: 'Chọn ảnh',
-                subtitle: 'Dùng ảnh hóa đơn đã có trong máy',
-                onTap: () => Navigator.pop(context, ImportSource.gallery),
-              ),
-              _SourceTile(
-                icon: Icons.qr_code_scanner,
-                title: 'Quét QR thanh toán',
-                subtitle: 'Đọc thông tin người nhận, rồi mở app ngân hàng',
-                onTap: () => Navigator.pop(context, ImportSource.qrPayment),
+                icon: Icons.document_scanner_outlined,
+                title: 'Quét',
+                subtitle: 'Chọn QR thanh toán hoặc OCR hóa đơn',
+                onTap: () => Navigator.pop(context, ImportSource.scan),
               ),
               const Divider(),
               _SourceTile(

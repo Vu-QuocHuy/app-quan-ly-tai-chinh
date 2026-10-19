@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_providers.dart';
+import '../../../core/utils/money_formatter.dart';
+import '../../budgets/presentation/category_management.dart';
+import '../../invoices/domain/invoice_models.dart';
 import '../data/income_repository.dart';
 
 class IncomeEntrySheet extends ConsumerStatefulWidget {
@@ -36,9 +38,9 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
   }
 
   Future<void> _save() async {
-    final value = int.tryParse(_amount.text);
+    final value = MoneyFormatter.tryParse(_amount.text);
     if (value == null || value <= 0 || value > 9007199254740991) {
-      setState(() => _error = 'Nhập số tiền lớn hơn 0.');
+      setState(() => _error = 'Nhập số tiền nguyên lớn hơn 0.');
       return;
     }
     final categories =
@@ -109,6 +111,21 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
     }
   }
 
+  Future<void> _addCategory(List<CategoryEntity> categories) async {
+    final category = await createCategoryFromEntry(
+      context,
+      ref,
+      categories,
+      CategoryKind.income,
+    );
+    if (category != null && mounted) {
+      setState(() {
+        _categoryId = category.id;
+        _categoryError = null;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final categories =
@@ -117,70 +134,81 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
         ? _categoryId
         : categories.firstOrNull?.id;
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          24,
-          12,
-          24,
-          MediaQuery.viewInsetsOf(context).bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              widget.entry == null ? 'Thêm khoản thu' : 'Sửa khoản thu',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _amount,
-              autofocus: true,
-              enabled: !_saving,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _save(),
-              decoration: InputDecoration(
-                labelText: 'Số tiền (₫)',
-                errorText: _error,
-                prefixIcon: const Icon(Icons.add_circle_outline),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            12,
+            24,
+            MediaQuery.viewInsetsOf(context).bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                widget.entry == null ? 'Thêm khoản thu' : 'Sửa khoản thu',
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              key: ValueKey('income-category-${categoryId ?? 'loading'}'),
-              initialValue: categoryId,
-              decoration: InputDecoration(
-                labelText: 'Danh mục thu',
-                errorText: _categoryError,
-                prefixIcon: const Icon(Icons.category_outlined),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _amount,
+                autofocus: true,
+                enabled: !_saving,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: false,
+                ),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _save(),
+                decoration: InputDecoration(
+                  labelText: 'Số tiền (₫)',
+                  errorText: _error,
+                  prefixIcon: const Icon(Icons.add_circle_outline),
+                ),
               ),
-              items: [
-                for (final category in categories)
-                  DropdownMenuItem(
-                    value: category.id,
-                    child: Text(category.name),
-                  ),
-              ],
-              onChanged: _saving || categories.isEmpty
-                  ? null
-                  : (id) => setState(() {
-                      _categoryId = id;
-                      _categoryError = null;
-                    }),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              child: Text(_saving ? 'Đang lưu…' : 'Lưu khoản thu'),
-            ),
-            if (widget.entry != null)
-              TextButton(
-                onPressed: _saving ? null : _delete,
-                child: const Text('Xóa khoản thu'),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                key: ValueKey('income-category-${categoryId ?? 'loading'}'),
+                initialValue: categoryId,
+                decoration: InputDecoration(
+                  labelText: 'Danh mục thu',
+                  errorText: _categoryError,
+                  prefixIcon: const Icon(Icons.category_outlined),
+                ),
+                items: [
+                  for (final category in categories)
+                    DropdownMenuItem(
+                      value: category.id,
+                      child: Text(category.name),
+                    ),
+                ],
+                onChanged: _saving || categories.isEmpty
+                    ? null
+                    : (id) => setState(() {
+                        _categoryId = id;
+                        _categoryError = null;
+                      }),
               ),
-          ],
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _saving ? null : () => _addCategory(categories),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Thêm loại khoản thu'),
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _saving ? null : _save,
+                child: Text(_saving ? 'Đang lưu…' : 'Lưu khoản thu'),
+              ),
+              if (widget.entry != null)
+                TextButton(
+                  onPressed: _saving ? null : _delete,
+                  child: const Text('Xóa khoản thu'),
+                ),
+            ],
+          ),
         ),
       ),
     );
