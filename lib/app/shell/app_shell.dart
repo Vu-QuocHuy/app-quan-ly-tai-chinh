@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/config/feature_flags.dart';
 import '../../core/constants/app_constants.dart';
@@ -13,6 +14,7 @@ import '../../features/ingestion/application/import_coordinator.dart';
 import '../../features/ingestion/application/import_queue.dart';
 import '../../features/ingestion/data/pending_import_store.dart';
 import '../../features/ingestion/domain/import_job.dart';
+import '../../features/ingestion/domain/quick_transaction_parser.dart';
 import '../../features/ingestion/presentation/import_source_sheet.dart';
 import '../../features/income/presentation/income_entry_sheet.dart';
 import '../../features/payments/application/qr_payment_providers.dart';
@@ -37,6 +39,12 @@ class _AppShellState extends ConsumerState<AppShell>
 
   bool _isImporting = false;
   bool _isSyncing = false;
+  bool _initialSyncComplete = false;
+  bool _initialSyncStarted = false;
+  String? _initialSyncLoadingFor;
+  bool _canUseCachedData = false;
+  String? _initialSyncUserId;
+  String? _initialSyncError;
   bool _syncRequestedWhileRunning = false;
   int _importIndex = 0;
   int _importTotal = 0;
@@ -54,9 +62,6 @@ class _AppShellState extends ConsumerState<AppShell>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startAutoSyncTimer();
-    if (!kIsWeb) unawaited(_resumePendingImports());
-    unawaited(_syncCloud());
-    unawaited(_processDueRecurringIncomes());
   }
 
   @override
@@ -71,8 +76,10 @@ class _AppShellState extends ConsumerState<AppShell>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _startAutoSyncTimer();
-      unawaited(_syncCloud());
-      unawaited(_processDueRecurringIncomes());
+      if (_initialSyncComplete) {
+        unawaited(_syncCloud());
+        unawaited(_processDueRecurringIncomes());
+      }
       if (!kIsWeb) unawaited(_resumePendingImports());
     } else {
       _autoSyncTimer?.cancel();
@@ -89,7 +96,7 @@ class _AppShellState extends ConsumerState<AppShell>
   }
 
   Future<void> _syncCloud() async {
-    if (!mounted) return;
+    if (!mounted || !_initialSyncComplete) return;
     if (_isSyncing) {
       _syncRequestedWhileRunning = true;
       return;
@@ -111,6 +118,61 @@ class _AppShellState extends ConsumerState<AppShell>
         _syncRequestedWhileRunning = false;
         unawaited(_syncCloud());
       }
+    }
+  }
+
+  Future<void> _loadInitialData() async {
+    final userId = _initialSyncUserId;
+    if (userId == null || _initialSyncLoadingFor == userId) return;
+    _initialSyncLoadingFor = userId;
+    setState(() => _initialSyncError = null);
+    final flags = ref.read(featureFlagsProvider).value ?? FeatureFlags.defaults;
+    if (ref.read(supabaseClientProvider) == null || !flags.cloudSync) {
+      _initialSyncLoadingFor = null;
+      if (mounted) setState(() => _initialSyncComplete = true);
+      return;
+    }
+    try {
+      // A normal sync can stop after ten pages per data type.
+      while (true) {
+        if (!mounted || userId != _initialSyncUserId) return;
+        final result = await ref
+            .read(syncCoordinatorProvider)
+            .runOnce(batchSize: 100);
+        if (!result.upload.configured || !result.upload.signedIn) {
+          throw StateError('Chưa có phiên đăng nhập để tải dữ liệu.');
+        }
+        if (!result.hasMore) {
+          if (!mounted || userId != _initialSyncUserId) return;
+          setState(() => _initialSyncComplete = true);
+          try {
+            final preferences = await SharedPreferences.getInstance();
+            await preferences.setBool('initial_sync_complete.$userId', true);
+          } on Object {
+            // Cached data still works; the offline shortcut is unavailable.
+          }
+          unawaited(_processDueRecurringIncomes());
+          if (!kIsWeb) unawaited(_resumePendingImports());
+          return;
+        }
+      }
+    } on Object catch (error) {
+      var canUseCachedData = false;
+      try {
+        final preferences = await SharedPreferences.getInstance();
+        canUseCachedData =
+            preferences.getBool('initial_sync_complete.$userId') ?? false;
+      } on Object {
+        // No cached sync marker is available on this device.
+      }
+      if (mounted && userId == _initialSyncUserId) {
+        setState(() {
+          _canUseCachedData = canUseCachedData;
+          _initialSyncError = friendlyMessage(error);
+        });
+      }
+    } finally {
+      if (_initialSyncLoadingFor == userId) _initialSyncLoadingFor = null;
     }
   }
 
@@ -171,6 +233,59 @@ class _AppShellState extends ConsumerState<AppShell>
 
   @override
   Widget build(BuildContext context) {
+    final signedInUser = ref.watch(authUserProvider).valueOrNull;
+    final userId =
+        signedInUser?.id ??
+        (ref.watch(supabaseClientProvider) == null ? 'local' : null);
+    if (_initialSyncUserId != userId) {
+      _initialSyncUserId = userId;
+      _initialSyncStarted = false;
+      _initialSyncComplete = false;
+      _initialSyncError = null;
+      _canUseCachedData = false;
+    }
+    if (userId != null && !_initialSyncStarted) {
+      _initialSyncStarted = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_loadInitialData());
+      });
+    }
+    if (!_initialSyncComplete) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.gutter),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_initialSyncError == null)
+                  const CircularProgressIndicator(),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  _initialSyncError == null
+                      ? 'Đang tải đầy đủ dữ liệu tài khoản…'
+                      : 'Chưa tải được dữ liệu tài khoản: $_initialSyncError',
+                  textAlign: TextAlign.center,
+                ),
+                if (_initialSyncError != null) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  FilledButton(
+                    onPressed: _loadInitialData,
+                    child: const Text('Thử tải lại'),
+                  ),
+                  if (_canUseCachedData)
+                    TextButton(
+                      onPressed: () =>
+                          setState(() => _initialSyncComplete = true),
+                      child: const Text('Dùng dữ liệu đã lưu trên máy'),
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     ref.listen(plansProvider, (previous, next) {
       final plans = next.asData?.value;
       if (plans != null) {
@@ -478,6 +593,8 @@ class _AppShellState extends ConsumerState<AppShell>
     );
     if (source == null || !mounted) return;
     switch (source) {
+      case ImportSource.quick:
+        await _showQuickEntry();
       case ImportSource.income:
         await showModalBottomSheet<bool>(
           context: context,
@@ -497,6 +614,86 @@ class _AppShellState extends ConsumerState<AppShell>
         if (mounted) context.push('/review', extra: draft);
       case ImportSource.history:
         if (mounted) context.push('/invoices');
+    }
+  }
+
+  Future<void> _showQuickEntry() async {
+    final controller = TextEditingController();
+    String? error;
+    final transaction = await showDialog<QuickTransaction>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          title: const Text('Nhập nhanh giao dịch'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 300,
+            decoration: InputDecoration(
+              hintText: 'Ví dụ: ăn trưa 35k hôm qua',
+              errorText: error,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              onPressed: () {
+                try {
+                  Navigator.pop(
+                    dialogContext,
+                    QuickTransactionParser.parse(controller.text),
+                  );
+                } on FormatException catch (exception) {
+                  update(() => error = exception.message);
+                }
+              },
+              child: const Text('Kiểm tra'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (transaction == null || !mounted) return;
+    final categories = transaction.isIncome
+        ? ref.read(incomeCategoriesProvider).valueOrNull
+        : ref.read(categoriesProvider).valueOrNull;
+    final categoryId = categories
+        ?.where(
+          (category) => transaction.title.toLowerCase().contains(
+            category.name.toLowerCase(),
+          ),
+        )
+        .firstOrNull
+        ?.id;
+    if (transaction.isIncome) {
+      await showModalBottomSheet<bool>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (context) => IncomeEntrySheet(
+          initialAmountMinor: transaction.amountMinor,
+          initialDate: transaction.date,
+          initialCategoryId: categoryId,
+        ),
+      );
+    } else {
+      final draft = ref.read(importCoordinatorProvider).createManualDraft();
+      if (mounted) {
+        context.push(
+          '/review',
+          extra: draft.copyWith(
+            sellerName: transaction.title,
+            subtotalMinor: transaction.amountMinor,
+            totalMinor: transaction.amountMinor,
+            issuedAt: transaction.date,
+            categoryId: categoryId,
+          ),
+        );
+      }
     }
   }
 

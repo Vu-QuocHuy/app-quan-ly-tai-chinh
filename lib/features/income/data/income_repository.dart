@@ -107,6 +107,7 @@ class IncomeRepository {
     int amountMinor, {
     required IncomeSource source,
     String? categoryId,
+    DateTime? receivedAt,
     IncomeEntry? existing,
   }) async {
     if (amountMinor <= 0 || amountMinor > 9007199254740991) {
@@ -121,7 +122,7 @@ class IncomeRepository {
           categoryId ??
           existing?.categoryId ??
           IncomeEntry.unclassifiedCategoryId,
-      receivedAt: existing?.receivedAt ?? now,
+      receivedAt: existing?.receivedAt ?? receivedAt ?? now,
       updatedAt: now,
     );
     await _db.transaction(() async {

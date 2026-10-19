@@ -10,10 +10,41 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private val bankPackages = mapOf(
+        "mb" to "com.mbmobile",
+        "icb" to "com.vietinbank.ipay",
+        "bidv" to "com.vnpay.bidv",
+        "acb" to "mobile.acb.com.vn",
+        "ocb" to "vn.com.ocb.awe",
+        "vcb" to "com.VCB",
+        "tcb" to "vn.com.techcombank.bb.app",
+    )
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "hoadoninsight/bank_apps")
             .setMethodCallHandler { call, result ->
+                if (call.method == "openBankApp") {
+                    val packageName = bankPackages[call.argument<String>("appId")]
+                    if (packageName == null) {
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
+                    val intent = packageManager.getLaunchIntentForPackage(packageName)
+                    try {
+                        if (intent == null || intent.resolveActivity(packageManager) == null) {
+                            result.success(false)
+                        } else {
+                            startActivity(intent)
+                            result.success(true)
+                        }
+                    } catch (_: ActivityNotFoundException) {
+                        result.success(false)
+                    } catch (_: SecurityException) {
+                        result.success(false)
+                    }
+                    return@setMethodCallHandler
+                }
                 if (call.method == "openPaymentPage") {
                     val uri = Uri.parse(call.argument<String>("url") ?: "")
                     if (uri.scheme != "https" || uri.host != "dl.vietqr.io" || uri.path != "/pay") {
@@ -72,16 +103,7 @@ class MainActivity : FlutterActivity() {
                     result.notImplemented()
                     return@setMethodCallHandler
                 }
-                val packages = mapOf(
-                    "mb" to "com.mbmobile",
-                    "icb" to "com.vietinbank.ipay",
-                    "bidv" to "com.vnpay.bidv",
-                    "acb" to "mobile.acb.com.vn",
-                    "ocb" to "vn.com.ocb.awe",
-                    "vcb" to "com.VCB",
-                    "tcb" to "vn.com.techcombank.bb.app",
-                )
-                val installed = packages.filterValues { packageName ->
+                val installed = bankPackages.filterValues { packageName ->
                     try {
                         packageManager.getApplicationInfo(packageName, 0).enabled
                     } catch (_: android.content.pm.PackageManager.NameNotFoundException) {

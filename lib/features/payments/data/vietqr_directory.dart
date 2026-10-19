@@ -44,9 +44,8 @@ class VietQrBankApp {
       'tn': transferDescription?.trim().isNotEmpty == true
           ? transferDescription!.trim()
           : 'Chuyen khoan',
-      'url':
-          (returnUri ?? Uri.parse('hoadoninsight://payment-return/qr-payment'))
-              .toString(),
+      'url': (returnUri ?? Uri.parse('https://www.vietqr.io/deeplink'))
+          .toString(),
       if (canPrefillRecipient && recipientName?.trim().isNotEmpty == true)
         'bn': recipientName!.trim(),
     });
@@ -91,13 +90,16 @@ class VietQrDirectory {
   void dispose() => _client.close();
 
   Future<List<VietQrBankApp>> loadAvailableBankApps() async {
-    final apps = await loadBankApps();
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return apps;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      return loadBankApps();
+    }
     final installed = await const MethodChannel(
       'hoadoninsight/bank_apps',
     ).invokeListMethod<String>('installedBankAppIds');
     final ids = installed?.toSet() ?? <String>{};
-    return apps.where((app) => ids.contains(app.id)).toList(growable: false);
+    return _fallbackApps
+        .where((app) => ids.contains(app.id))
+        .toList(growable: false);
   }
 
   Future<List<VietQrBankApp>> loadBankApps() async {
