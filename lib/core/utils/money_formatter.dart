@@ -35,7 +35,10 @@ abstract final class MoneyFormatter {
   }
 
   static int? tryParse(String input) {
-    final normalized = input.replaceAll(RegExp(r'[^0-9-]'), '');
-    return int.tryParse(normalized);
+    final value = input.trim().replaceAll(RegExp(r'\s*₫\s*$'), '');
+    if (!RegExp(r'^-?(?:\d+|\d{1,3}(?:\.\d{3})+)$').hasMatch(value)) {
+      return null;
+    }
+    return int.tryParse(value.replaceAll('.', ''));
   }
 }

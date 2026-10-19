@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/providers/app_providers.dart';
@@ -50,9 +49,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Trợ lý chi tiêu'),
+            Text('Trợ lý tài chính'),
             Text(
-              'Chi tiêu, hóa đơn và ngân sách của bạn',
+              'Khoản thu, chi tiêu và ngân sách của bạn',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
             ),
           ],
@@ -101,7 +100,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            'Bắt đầu bằng một câu hỏi về chi tiêu của bạn.',
+            'Bắt đầu bằng một câu hỏi về thu chi của bạn.',
             textAlign: TextAlign.center,
           ),
         ),
@@ -132,6 +131,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget _buildSuggestions(BuildContext context) {
     if (_messages.length > 1 || _sending) return const SizedBox.shrink();
     const suggestions = [
+      'Tháng này tôi đã thu bao nhiêu?',
       'Tháng này tôi đã chi bao nhiêu?',
       'Danh mục nào chi nhiều nhất?',
       'Tôi có khoản chi định kỳ nào không?',
@@ -177,12 +177,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            IconButton(
-              tooltip: 'Phân tích ảnh hóa đơn',
-              onPressed: _sending ? null : _attachInvoiceImage,
-              icon: const Icon(Icons.add_photo_alternate_outlined),
-            ),
-            const SizedBox(width: 4),
             Semantics(
               button: true,
               label: 'Gửi câu hỏi',
@@ -196,35 +190,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _attachInvoiceImage() async {
-    final image = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 92,
-      maxWidth: 2400,
-    );
-    if (image == null || !mounted) return;
-    setState(() => _sending = true);
-    try {
-      final bytes = await image.readAsBytes();
-      final outcome = await ref
-          .read(importCoordinatorProvider)
-          .importImage(
-            bytes: bytes,
-            fileName: image.name,
-            imagePath: image.path,
-          );
-      if (!mounted) return;
-      setState(() => _sending = false);
-      await context.push('/review', extra: outcome.result.invoice);
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _sending = false;
-        _connectionNote = 'Không thể phân tích ảnh: ${friendlyMessage(error)}';
-      });
-    }
   }
 
   Future<void> _loadHistory() async {
@@ -369,7 +334,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     id: 'welcome',
     role: ChatMessageRole.assistant,
     text:
-        'Xin chào! Mình có thể giúp bạn xem tổng chi, ngân sách, danh mục, '
+        'Xin chào! Mình có thể giúp bạn xem tổng thu, tổng chi, ngân sách, danh mục, '
         'so sánh tháng và khoản chi định kỳ.',
     createdAt: DateTime.now(),
   );

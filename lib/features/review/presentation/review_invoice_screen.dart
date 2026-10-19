@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
+import '../../budgets/presentation/category_management.dart';
 import '../../ingestion/domain/invoice_validator.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../../shared/errors/error_presenter.dart';
@@ -166,6 +167,9 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                       ),
                       const SizedBox(height: 20),
                       DropdownButtonFormField<String>(
+                        key: ValueKey(
+                          'expense-category-${_categoryForDropdown(_categoryId, categories)}',
+                        ),
                         initialValue: _categoryForDropdown(
                           _categoryId,
                           categories,
@@ -186,6 +190,16 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                           setState(() => _categoryId = value);
                           _recomputeDirty();
                         },
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: _saving
+                              ? null
+                              : () => _addCategory(categories),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Thêm loại khoản chi'),
+                        ),
                       ),
                       const SizedBox(height: 20),
                       TextFormField(
@@ -272,6 +286,9 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                       _fieldPair(
                         minFieldWidth: 148,
                         first: DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            'invoice-category-${_categoryForDropdown(_categoryId, categories)}',
+                          ),
                           initialValue: _categoryForDropdown(
                             _categoryId,
                             categories,
@@ -303,6 +320,16 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                             prefixIcon: Icon(Icons.sell_outlined),
                           ),
                           textInputAction: TextInputAction.next,
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: _saving
+                              ? null
+                              : () => _addCategory(categories),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Thêm loại khoản chi'),
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -809,7 +836,9 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: draft.unitPriceController,
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: false,
+                    ),
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       labelText: 'Đơn giá',
@@ -828,6 +857,9 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                 label: 'Thành tiền *',
               ),
               second: DropdownButtonFormField<String>(
+                key: ValueKey(
+                  'line-category-${draft.id}-${_categoryForDropdown(draft.categoryId, categories)}',
+                ),
                 initialValue: _categoryForDropdown(
                   draft.categoryId,
                   categories,
@@ -850,10 +882,41 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                 },
               ),
             ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _saving
+                    ? null
+                    : () => _addCategory(categories, lineIndex: index),
+                icon: const Icon(Icons.add),
+                label: const Text('Thêm loại khoản chi'),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _addCategory(
+    List<CategoryEntity> categories, {
+    int? lineIndex,
+  }) async {
+    final category = await createCategoryFromEntry(
+      context,
+      ref,
+      categories,
+      CategoryKind.expense,
+    );
+    if (category == null || !mounted) return;
+    setState(() {
+      if (lineIndex == null) {
+        _categoryId = category.id;
+      } else if (lineIndex < _lineDrafts.length) {
+        _lineDrafts[lineIndex].categoryId = category.id;
+      }
+    });
+    _recomputeDirty();
   }
 
   void _addLine() {
@@ -993,7 +1056,7 @@ class _MoneyField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
-      keyboardType: TextInputType.number,
+      keyboardType: const TextInputType.numberWithOptions(decimal: false),
       textInputAction: TextInputAction.next,
       decoration: InputDecoration(
         labelText: label,

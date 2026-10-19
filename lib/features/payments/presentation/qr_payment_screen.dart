@@ -1,9 +1,12 @@
 import 'dart:async';
 
+import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:uuid/uuid.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -19,7 +22,14 @@ import '../data/vietqr_parser.dart';
 import '../domain/qr_payment_draft.dart';
 
 class QrPaymentScreen extends ConsumerStatefulWidget {
-  const QrPaymentScreen({super.key});
+  const QrPaymentScreen({
+    this.showScanTabs = false,
+    this.onOcrImageReady,
+    super.key,
+  });
+
+  final bool showScanTabs;
+  final Future<void> Function(XFile image)? onOcrImageReady;
 
   @override
   ConsumerState<QrPaymentScreen> createState() => _QrPaymentScreenState();
@@ -32,6 +42,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
     detectionSpeed: DetectionSpeed.noDuplicates,
     formats: const [BarcodeFormat.qrCode],
   );
+  CameraController? _ocrCameraController;
   late final QrPaymentDraftStore _store;
   final _directory = VietQrDirectory();
   late final TextEditingController _amountController;
@@ -46,6 +57,13 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   String? _scanError;
   bool _loadingDraft = true;
   bool _scanLocked = false;
+  bool _isPickingImage = false;
+  bool _isPickingOcrImage = false;
+  bool _isCapturingOcrImage = false;
+  bool _isStartingOcrCamera = false;
+  String? _ocrCameraError;
+  int _ocrCameraRequest = 0;
+  int _activeScanTab = 0;
   bool _awaitingBankReturn = false;
   bool _leftForBank = false;
   bool _returnedFromBank = false;
@@ -74,6 +92,8 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
     _accountController.dispose();
     _recipientController.dispose();
     _memoController.dispose();
+    final ocrCameraController = _ocrCameraController;
+    if (ocrCameraController != null) unawaited(ocrCameraController.dispose());
     unawaited(_scannerController.dispose());
     _directory.dispose();
     super.dispose();
@@ -81,19 +101,21 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if ((state == AppLifecycleState.inactive ||
-            state == AppLifecycleState.paused) &&
-        _awaitingBankReturn) {
-      _leftForBank = true;
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      if (_awaitingBankReturn) _leftForBank = true;
+      if (_ocrCameraController != null) unawaited(_stopOcrCamera());
       return;
     }
-    if (state == AppLifecycleState.resumed &&
-        _leftForBank &&
-        _awaitingBankReturn &&
-        _draft != null) {
-      _leftForBank = false;
-      _awaitingBankReturn = false;
-      _showPaymentReturnPrompt();
+    if (state == AppLifecycleState.resumed) {
+      if (_activeScanTab == 1 && widget.showScanTabs && _draft == null) {
+        unawaited(_startOcrCamera());
+      }
+      if (_leftForBank && _awaitingBankReturn && _draft != null) {
+        _leftForBank = false;
+        _awaitingBankReturn = false;
+        _showPaymentReturnPrompt();
+      }
     }
   }
 
@@ -176,6 +198,32 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
     _accountController.text = draft.accountNumber;
     _recipientController.text = draft.recipientName;
     _memoController.text = draft.memo;
+  }
+
+  Future<void> _pickQrImage() async {
+    if (_isPickingImage || _scanLocked || _draft != null) return;
+    setState(() => _isPickingImage = true);
+    try {
+      final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (image == null || !mounted || _draft != null) return;
+      final capture = await _scannerController.analyzeImage(
+        image.path,
+        formats: const [BarcodeFormat.qrCode],
+      );
+      if (!mounted) return;
+      if (capture == null ||
+          !capture.barcodes.any((barcode) => barcode.rawValue != null)) {
+        _showScanError('Không tìm thấy mã QR trong ảnh. Hãy chọn ảnh khác.');
+        return;
+      }
+      await _onQrDetected(capture);
+    } on Object {
+      _showScanError(
+        'Không thể đọc ảnh QR. Hãy thử ảnh khác hoặc quét trực tiếp.',
+      );
+    } finally {
+      if (mounted) setState(() => _isPickingImage = false);
+    }
   }
 
   Future<void> _onQrDetected(BarcodeCapture capture) async {
@@ -262,8 +310,22 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
 
   Future<void> _openBankApp({required bool chooseAnother}) async {
     if (!_validateForm()) return;
-    final apps = await _directory.loadBankApps();
+    List<VietQrBankApp> apps;
+    try {
+      apps = await _directory.loadAvailableBankApps();
+    } on Object {
+      _showMessage(
+        'Không kiểm tra được app ngân hàng đã cài. Hãy mở lại ứng dụng và thử lại.',
+      );
+      return;
+    }
     if (!mounted) return;
+    if (apps.isEmpty) {
+      _showMessage(
+        'Chưa nhận diện được app ngân hàng hỗ trợ trên thiết bị. Hiện hỗ trợ nhận diện MB, VietinBank, BIDV, ACB, OCB, Vietcombank và Techcombank.',
+      );
+      return;
+    }
     VietQrBankApp? selected;
     if (!chooseAnother && _lastBankAppId != null) {
       for (final app in apps) {
@@ -298,12 +360,15 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Chọn app ngân hàng',
+                        kIsWeb ||
+                                defaultTargetPlatform != TargetPlatform.android
+                            ? 'Chọn app ngân hàng'
+                            : 'App ngân hàng đã cài',
                         style: theme.textTheme.titleLarge,
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Một số ngân hàng có thể tự điền thông tin. Hãy luôn kiểm tra người nhận và số tiền trong app ngân hàng trước khi xác nhận.',
+                        'Ưu tiên app hỗ trợ điền sẵn. Thông tin chuyển khoản được gửi qua VietQR.io. Hãy kiểm tra người nhận và số tiền trong app ngân hàng trước khi xác nhận.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -323,7 +388,9 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                           child: Icon(Icons.account_balance_outlined),
                         ),
                         title: Text(app.name),
-                        subtitle: Text(app.bankName),
+                        subtitle: Text(
+                          '${app.bankName}\n${app.supportsAutofill ? 'Hỗ trợ điền sẵn chuyển khoản' : 'Chỉ mở app; cần nhập hoặc quét lại'}',
+                        ),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => Navigator.pop(sheetContext, app),
                       );
@@ -340,6 +407,17 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
 
   Future<void> _launchBankApp(VietQrBankApp app) async {
     if (!_validateForm() || _isLaunchingBank) return;
+    if (!app.supportsAutofill) {
+      final proceed = await showConfirmDialog(
+        context,
+        title: '${app.name} chưa hỗ trợ điền sẵn',
+        message:
+            'Dịch vụ hiện chỉ mở được app này. Bạn sẽ cần nhập hoặc quét lại trong app ngân hàng. Chọn app có hỗ trợ điền sẵn để chuyển tiếp thông tin QR.',
+        confirmLabel: 'Vẫn mở app',
+        cancelLabel: 'Chọn lại',
+      );
+      if (!proceed || !mounted) return;
+    }
     setState(() => _isLaunchingBank = true);
     final draft = _draftFromFields(bankAppId: app.id);
     try {
@@ -348,13 +426,22 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
       final receivingBank = banks
           .where((bank) => bank.bin == draft.bankBin)
           .firstOrNull;
+      if (receivingBank == null) {
+        _showMessage(
+          'Chưa xác định được ngân hàng nhận từ mã QR. Hãy kiểm tra kết nối và thử lại; chưa mở app để tránh mất thông tin chuyển khoản.',
+        );
+        return;
+      }
       setState(() => _banks = banks);
       final launchUri = app.launchUri(
-        bankCode: receivingBank?.code,
+        bankCode: receivingBank.code,
         accountNumber: draft.accountNumber,
         amountVnd: draft.amountVnd,
         transferDescription: draft.memo,
         recipientName: draft.recipientName,
+        returnUri: kIsWeb
+            ? Uri.base.replace(path: '/', query: '', fragment: '/qr-payment')
+            : null,
       );
       await _store.writeDraft(draft);
       if (!mounted) return;
@@ -367,16 +454,20 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
         _awaitingBankReturn = true;
         _leftForBank = false;
       });
-      final opened = await launchUrl(
-        launchUri,
-        mode: LaunchMode.externalApplication,
-      );
+      final opened = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? await const MethodChannel(
+                  'hoadoninsight/bank_apps',
+                ).invokeMethod<bool>('openPaymentPage', {
+                  'url': launchUri.toString(),
+                }) ??
+                false
+          : await launchUrl(launchUri, mode: LaunchMode.externalApplication);
       if (!mounted) return;
       if (opened) {
         _showMessage(
-          receivingBank == null
-              ? 'Đã mở ${app.name}. Chưa tra được mã ngân hàng; hãy nhập và kiểm tra thông tin chuyển khoản thủ công.'
-              : 'Đã mở ${app.name}. Hãy kiểm tra người nhận và số tiền trước khi xác nhận.',
+          app.supportsAutofill
+              ? 'Đã mở trang chuyển tiếp tới ${app.name}. Hoàn tất bước mở ngân hàng trên trang này và kiểm tra thông tin chuyển khoản.'
+              : 'Đã mở trang chuyển tiếp tới ${app.name}. App này cần nhập hoặc quét lại thông tin chuyển khoản.',
         );
         unawaited(_syncPreferredBankApp(app.id));
         final scanRecorded = await (_scanEventFuture ?? Future.value(true));
@@ -393,7 +484,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
           _leftForBank = false;
         });
         _showMessage(
-          'Không mở được ${app.name}. Kiểm tra app đã cài đặt hoặc chọn app khác.',
+          'Không tìm thấy trình duyệt để mở trang chuyển tiếp. Hãy bật hoặc cài Chrome, Samsung Internet, Firefox hay Edge rồi thử lại.',
         );
       }
     } on Object {
@@ -577,26 +668,241 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   @override
   Widget build(BuildContext context) {
     final draft = _draft;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          draft == null ? 'Quét QR thanh toán' : 'Kiểm tra khoản chi',
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Lịch sử thanh toán QR',
-            onPressed: () => context.push('/qr-payment/history'),
-            icon: const Icon(Icons.history),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            draft == null
+                ? widget.showScanTabs
+                      ? 'Quét'
+                      : 'Quét QR thanh toán'
+                : 'Kiểm tra khoản chi',
           ),
-          const SizedBox(width: 8),
-        ],
+          bottom: widget.showScanTabs && draft == null && !_loadingDraft
+              ? TabBar(
+                  tabs: [
+                    Tab(icon: Icon(Icons.qr_code_scanner), text: 'QR'),
+                    Tab(
+                      icon: Icon(Icons.document_scanner_outlined),
+                      text: 'OCR',
+                    ),
+                  ],
+                  onTap: _onScanTabSelected,
+                )
+              : null,
+          actions: [
+            IconButton(
+              tooltip: 'Lịch sử thanh toán QR',
+              onPressed: () => context.push('/qr-payment/history'),
+              icon: const Icon(Icons.history),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
+        body: _loadingDraft
+            ? const Center(child: CircularProgressIndicator())
+            : draft != null
+            ? _buildDetails(context, draft)
+            : widget.showScanTabs
+            ? TabBarView(
+                physics: const NeverScrollableScrollPhysics(),
+                children: [_buildScanner(context), _buildOcrPicker(context)],
+              )
+            : _buildScanner(context),
+        bottomNavigationBar: draft == null ? null : _buildActions(context),
       ),
-      body: _loadingDraft
-          ? const Center(child: CircularProgressIndicator())
-          : draft == null
-          ? _buildScanner(context)
-          : _buildDetails(context, draft),
-      bottomNavigationBar: draft == null ? null : _buildActions(context),
+    );
+  }
+
+  void _onScanTabSelected(int index) {
+    if (index == _activeScanTab) {
+      if (index == 1) unawaited(_startOcrCamera());
+      return;
+    }
+    _activeScanTab = index;
+    if (index == 1) {
+      unawaited(_activateOcrCamera());
+    } else {
+      unawaited(_activateQrScanner());
+    }
+  }
+
+  Future<void> _activateOcrCamera() async {
+    await _scannerController.stop();
+    if (_activeScanTab == 1) await _startOcrCamera();
+  }
+
+  Future<void> _activateQrScanner() async {
+    await _stopOcrCamera();
+    if (_activeScanTab == 0) await _scannerController.start();
+  }
+
+  Future<void> _startOcrCamera() async {
+    if (_isStartingOcrCamera ||
+        _ocrCameraController?.value.isInitialized == true) {
+      return;
+    }
+    final request = ++_ocrCameraRequest;
+    setState(() {
+      _isStartingOcrCamera = true;
+      _ocrCameraError = null;
+    });
+    CameraController? controller;
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        throw CameraException('NoCamera', 'No camera found.');
+      }
+      var description = cameras.first;
+      for (final camera in cameras) {
+        if (camera.lensDirection == CameraLensDirection.back) {
+          description = camera;
+          break;
+        }
+      }
+      controller = CameraController(
+        description,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+      await controller.initialize();
+      if (!mounted || request != _ocrCameraRequest || _activeScanTab != 1) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _ocrCameraController = controller);
+    } on CameraException catch (error) {
+      if (mounted && request == _ocrCameraRequest) {
+        setState(() {
+          _ocrCameraError = error.code == 'CameraAccessDenied'
+              ? 'Hãy cấp quyền camera cho trình duyệt để chụp hóa đơn.'
+              : 'Không thể mở camera. Hãy kiểm tra quyền truy cập camera.';
+        });
+      }
+      if (controller != null) await controller.dispose();
+    } on Object {
+      if (mounted && request == _ocrCameraRequest) {
+        setState(() {
+          _ocrCameraError =
+              'Không tìm thấy camera. Bạn có thể chọn ảnh bằng nút thư viện.';
+        });
+      }
+      if (controller != null) await controller.dispose();
+    } finally {
+      if (mounted && request == _ocrCameraRequest) {
+        setState(() => _isStartingOcrCamera = false);
+      }
+    }
+  }
+
+  Future<void> _stopOcrCamera() async {
+    ++_ocrCameraRequest;
+    final controller = _ocrCameraController;
+    _ocrCameraController = null;
+    if (mounted) {
+      setState(() {
+        _isStartingOcrCamera = false;
+        _ocrCameraError = null;
+      });
+    }
+    if (controller != null) await controller.dispose();
+  }
+
+  Future<void> _captureOcrImage() async {
+    final controller = _ocrCameraController;
+    if (controller == null || _isCapturingOcrImage) return;
+    setState(() => _isCapturingOcrImage = true);
+    try {
+      final image = await controller.takePicture();
+      await _stopOcrCamera();
+      await widget.onOcrImageReady?.call(image);
+    } on CameraException {
+      if (mounted) _showMessage('Không chụp được ảnh. Hãy thử lại.');
+    } on Object {
+      if (mounted) _showMessage('Không thể xử lý ảnh đã chụp.');
+    } finally {
+      if (mounted) {
+        setState(() => _isCapturingOcrImage = false);
+        if (_activeScanTab == 1) unawaited(_startOcrCamera());
+      }
+    }
+  }
+
+  Future<void> _pickOcrImage() async {
+    if (_isPickingOcrImage) return;
+    setState(() => _isPickingOcrImage = true);
+    await _stopOcrCamera();
+    try {
+      final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (image != null && mounted) {
+        await widget.onOcrImageReady?.call(image);
+      }
+    } on Object {
+      if (mounted) _showMessage('Không thể mở ảnh. Hãy chọn ảnh khác.');
+    } finally {
+      if (mounted) {
+        setState(() => _isPickingOcrImage = false);
+        if (_activeScanTab == 1) unawaited(_startOcrCamera());
+      }
+    }
+  }
+
+  Widget _buildOcrPicker(BuildContext context) {
+    final theme = Theme.of(context);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (_ocrCameraController case final controller?
+            when controller.value.isInitialized)
+          Positioned.fill(child: CameraPreview(controller))
+        else
+          ColoredBox(
+            color: theme.colorScheme.surfaceContainerLow,
+            child: Center(
+              child: _isStartingOcrCamera
+                  ? const CircularProgressIndicator()
+                  : Text(
+                      _ocrCameraError ?? 'Đang mở camera…',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+            ),
+          ),
+        if (_ocrCameraController?.value.isInitialized == true)
+          Positioned(
+            bottom: 16,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: FloatingActionButton.large(
+                heroTag: 'ocr-capture',
+                onPressed: _isCapturingOcrImage ? null : _captureOcrImage,
+                tooltip: 'Chụp hóa đơn',
+                child: _isCapturingOcrImage
+                    ? const CircularProgressIndicator()
+                    : const Icon(Icons.camera_alt_outlined),
+              ),
+            ),
+          ),
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: FloatingActionButton.small(
+            heroTag: 'ocr-gallery',
+            onPressed: widget.onOcrImageReady == null || _isPickingOcrImage
+                ? null
+                : _pickOcrImage,
+            tooltip: 'Chọn ảnh từ thư viện',
+            child: _isPickingOcrImage
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.photo_library_outlined),
+          ),
+        ),
+      ],
     );
   }
 
@@ -625,53 +931,38 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                   ),
                 ),
               ),
-              Positioned(
-                left: 24,
-                right: 24,
-                bottom: 24,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface.withValues(alpha: 0.94),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _scanError ?? 'Đưa mã VietQR vào trong khung quét',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.titleSmall,
+              if (_scanError != null)
+                Positioned(
+                  left: 24,
+                  right: 80,
+                  bottom: 16,
+                  child: Material(
+                    color: theme.colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        _scanError!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: theme.colorScheme.onErrorContainer,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Nếu đăng nhập, thông tin người nhận và trạng thái QR được lưu riêng tư trên cloud. Chỉ khoản chi đã xác nhận mới được ghi vào thu chi.',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            IconButton.filledTonal(
-                              tooltip: 'Bật hoặc tắt đèn pin',
-                              onPressed: _scannerController.toggleTorch,
-                              icon: const Icon(Icons.flashlight_on_outlined),
-                            ),
-                            const SizedBox(width: 12),
-                            IconButton.filledTonal(
-                              tooltip: 'Đổi camera',
-                              onPressed: _scannerController.switchCamera,
-                              icon: const Icon(Icons.cameraswitch_outlined),
-                            ),
-                          ],
-                        ),
-                      ],
+                      ),
                     ),
                   ),
+                ),
+              Positioned(
+                right: 16,
+                bottom: 16,
+                child: FloatingActionButton.small(
+                  onPressed: _isPickingImage ? null : _pickQrImage,
+                  tooltip: 'Chọn ảnh QR từ thư viện',
+                  child: _isPickingImage
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.photo_library_outlined),
                 ),
               ),
             ],
@@ -731,6 +1022,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
             maxLength: 34,
             decoration: InputDecoration(
               labelText: 'Số tài khoản / thẻ người nhận',
+              counterText: '',
               suffixIcon: IconButton(
                 tooltip: 'Sao chép số tài khoản',
                 onPressed: _copyAccountNumber,
@@ -752,6 +1044,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
             decoration: const InputDecoration(
               labelText: 'Tên người nhận / cửa hàng',
               hintText: 'Được điền từ mã QR nếu có',
+              counterText: '',
             ),
           ),
           const SizedBox(height: 8),
@@ -812,6 +1105,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
             decoration: InputDecoration(
               labelText: 'Nội dung chuyển khoản',
               hintText: 'Có thể chỉnh sửa nội dung đọc từ QR',
+              counterText: '',
               suffixIcon: IconButton(
                 tooltip: 'Sao chép nội dung chuyển khoản',
                 onPressed: () => _copyToClipboard(
@@ -822,20 +1116,12 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          Text(
-            'Số tài khoản và mã ngân hàng chỉ lưu tạm trên thiết bị rồi được xóa. Tên người nhận, số tiền, danh mục và nội dung sẽ lưu cùng khoản chi để đồng bộ.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
         ],
       ),
     );
   }
 
   Widget _buildActions(BuildContext context) {
-    final theme = Theme.of(context);
     return SafeArea(
       top: false,
       child: Padding(
@@ -888,13 +1174,6 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                     onPressed: _isLaunchingBank ? null : _chooseBankApp,
                     icon: const Icon(Icons.swap_horiz),
                     label: const Text('Chọn app khác'),
-                  ),
-                  Text(
-                    'VietQR.io hiện chỉ điều hướng sang app ngân hàng; ngân hàng có thể yêu cầu quét QR hoặc nhập lại thông tin.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
                   ),
                 ],
               ),

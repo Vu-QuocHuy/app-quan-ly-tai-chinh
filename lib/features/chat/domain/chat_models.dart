@@ -43,8 +43,6 @@ class ChatFact {
 
   final String key;
   final String value;
-
-  Map<String, String> toJson() => {'key': key, 'value': value};
 }
 
 @immutable
@@ -100,13 +98,11 @@ class ChatReply {
     required this.text,
     this.citations = const [],
     this.facts = const [],
-    this.usedExternalData = false,
   });
 
   final String text;
   final List<ChatCitation> citations;
   final List<ChatFact> facts;
-  final bool usedExternalData;
 }
 
 DateTime? _parseDate(Object? value) {

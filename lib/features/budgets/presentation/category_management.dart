@@ -202,6 +202,58 @@ class _CategoryManagementScreenState
   }
 }
 
+Future<CategoryEntity?> createCategoryFromEntry(
+  BuildContext context,
+  WidgetRef ref,
+  List<CategoryEntity> categories,
+  CategoryKind kind,
+) async {
+  final month = ref.read(selectedMonthProvider);
+  final result = await _showCategoryDialog(
+    context,
+    categories: categories,
+    kind: kind,
+    monthLabel: MonthUtils.label(month),
+  );
+  if (result == null || !context.mounted) return null;
+  try {
+    final repository = ref.read(invoiceRepositoryProvider);
+    await repository.saveCategory(result.category);
+    if (result.initialBudgetMinor case final limit?) {
+      try {
+        await repository.saveBudget(
+          BudgetEntity(
+            id: '${MonthUtils.key(month)}-${result.category.id}',
+            monthKey: MonthUtils.key(month),
+            categoryId: result.category.id,
+            limitMinor: limit,
+          ),
+        );
+      } on Object catch (error) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Đã lưu danh mục nhưng chưa lưu được hạn mức: ${friendlyMessage(error)}',
+              ),
+            ),
+          );
+        }
+      }
+    }
+    return result.category;
+  } on Object catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Không thể lưu danh mục: ${friendlyMessage(error)}'),
+        ),
+      );
+    }
+    return null;
+  }
+}
+
 class _CategoryList extends StatelessWidget {
   const _CategoryList({
     required this.categories,
