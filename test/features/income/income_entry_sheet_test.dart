@@ -144,6 +144,7 @@ class _FakeIncomeRepository extends Fake implements IncomeRepository {
     required IncomeSource source,
     String? categoryId,
     IncomeEntry? existing,
+    DateTime? receivedAt,
   }) async {
     savedAmount = amountMinor;
     savedCategoryId = categoryId;

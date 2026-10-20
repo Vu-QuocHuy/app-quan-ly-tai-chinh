@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum ImportSource { income, scan, manual, history }
+enum ImportSource { quick, income, scan, manual, history }
 
 class ImportSourceSheet extends StatelessWidget {
   const ImportSourceSheet({super.key});
@@ -25,6 +25,12 @@ class ImportSourceSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
+              _SourceTile(
+                icon: Icons.bolt_outlined,
+                title: 'Nhập nhanh',
+                subtitle: 'Ví dụ: ăn trưa 35k, nhận lương 12 triệu',
+                onTap: () => Navigator.pop(context, ImportSource.quick),
+              ),
               _SourceTile(
                 icon: Icons.edit_note,
                 title: 'Thêm khoản chi',

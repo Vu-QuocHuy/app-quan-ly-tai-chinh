@@ -8,9 +8,18 @@ import '../../invoices/domain/invoice_models.dart';
 import '../data/income_repository.dart';
 
 class IncomeEntrySheet extends ConsumerStatefulWidget {
-  const IncomeEntrySheet({this.entry, super.key});
+  const IncomeEntrySheet({
+    this.entry,
+    this.initialAmountMinor,
+    this.initialDate,
+    this.initialCategoryId,
+    super.key,
+  });
 
   final IncomeEntry? entry;
+  final int? initialAmountMinor;
+  final DateTime? initialDate;
+  final String? initialCategoryId;
 
   @override
   ConsumerState<IncomeEntrySheet> createState() => _IncomeEntrySheetState();
@@ -18,7 +27,9 @@ class IncomeEntrySheet extends ConsumerStatefulWidget {
 
 class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
   late final TextEditingController _amount = TextEditingController(
-    text: widget.entry?.amountMinor.toString() ?? '',
+    text:
+        (widget.entry?.amountMinor ?? widget.initialAmountMinor)?.toString() ??
+        '',
   );
   String? _categoryId;
   bool _saving = false;
@@ -28,7 +39,7 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
   @override
   void initState() {
     super.initState();
-    _categoryId = widget.entry?.categoryId;
+    _categoryId = widget.entry?.categoryId ?? widget.initialCategoryId;
   }
 
   @override
@@ -63,6 +74,7 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
             value,
             source: widget.entry?.source ?? IncomeSource.manual,
             categoryId: categoryId,
+            receivedAt: widget.initialDate,
             existing: widget.entry,
           );
       if (mounted) Navigator.pop(context, true);

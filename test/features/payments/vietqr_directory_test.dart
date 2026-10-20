@@ -122,7 +122,7 @@ void main() {
         'am': '125000',
         'tn': 'Thanh toan hoa don',
         'bn': 'NGUYEN AN',
-        'url': 'hoadoninsight://payment-return/qr-payment',
+        'url': 'https://www.vietqr.io/deeplink',
       });
     });
 
