@@ -1,3 +1,5 @@
+import '../../../shared/widgets/finmi_page_header.dart';
+import '../../../shared/widgets/finmi_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +13,8 @@ import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/widgets/app_error_state.dart';
 import '../../../app/theme/theme_mode_provider.dart';
+import '../../../app/theme/finmi_appearance.dart';
+import '../../../app/theme/app_theme.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -27,6 +31,11 @@ class SettingsScreen extends ConsumerWidget {
         ref.watch(featureFlagsProvider).value ?? FeatureFlags.defaults;
     final supabaseConfigured = ref.watch(supabaseClientProvider) != null;
     final themeMode = ref.watch(themeModeProvider);
+    final selectedAppearance = ref.watch(finmiAppearanceProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final visibleAppearance = selectedAppearance.isDark == isDark
+        ? selectedAppearance
+        : FinmiAppearance.fromId(isDark ? 'midnight' : 'white');
     final themeLabel = switch (themeMode) {
       ThemeMode.light => 'Sáng',
       ThemeMode.dark => 'Tối',
@@ -37,9 +46,9 @@ class SettingsScreen extends ConsumerWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar(pinned: true, title: Text('Cài đặt')),
+          const FinmiSliverHeader(title: 'Cài đặt và đồng bộ'),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 112),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 100),
             sliver: SliverList.list(
               children: [
                 _Section(
@@ -72,7 +81,7 @@ class SettingsScreen extends ConsumerWidget {
                               ? Icons.cloud_done_outlined
                               : Icons.cloud_off_outlined,
                         ),
-                        title: const Text('Đồng bộ dữ liệu'),
+                        title: const Text('Đồng bộ dữ liệu', maxLines: 3),
                         subtitle: Text(
                           !featureFlags.cloudSync
                               ? 'Đồng bộ hiện đang tạm tắt.'
@@ -101,7 +110,7 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                     ListTile(
                       leading: const Icon(Icons.cloud_download_outlined),
-                      title: const Text('Khôi phục tùy chỉnh'),
+                      title: const Text('Khôi phục tùy chỉnh', maxLines: 3),
                       subtitle: const Text(
                         'Lấy giao diện và cảnh báo từ tài khoản khi đổi thiết bị.',
                       ),
@@ -116,7 +125,14 @@ class SettingsScreen extends ConsumerWidget {
                   children: [
                     ListTile(
                       leading: const Icon(Icons.brightness_6_outlined),
-                      title: const Text('Giao diện'),
+                      title: const Text('Giao diện', maxLines: 3),
+                      subtitle: Text('${visibleAppearance.name} · $themeLabel'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _chooseAppearance(context, ref),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.contrast_outlined),
+                      title: const Text('Chế độ sáng tối', maxLines: 3),
                       subtitle: Text(themeLabel),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => _chooseThemeMode(context, ref),
@@ -126,7 +142,7 @@ class SettingsScreen extends ConsumerWidget {
                         secondary: const Icon(
                           Icons.notifications_active_outlined,
                         ),
-                        title: const Text('Cảnh báo ngân sách'),
+                        title: const Text('Cảnh báo ngân sách', maxLines: 3),
                         subtitle: const Text(
                           'Hiện cảnh báo khi dùng từ 80% hoặc vượt ngân sách.',
                         ),
@@ -154,7 +170,7 @@ class SettingsScreen extends ConsumerWidget {
                           Icons.warning_amber_outlined,
                           color: Theme.of(context).colorScheme.error,
                         ),
-                        title: const Text('Xung đột dữ liệu'),
+                        title: const Text('Xung đột dữ liệu', maxLines: 3),
                         subtitle: Text(
                           '$conflictCount hóa đơn cần bạn chọn bản giữ lại.',
                         ),
@@ -170,7 +186,7 @@ class SettingsScreen extends ConsumerWidget {
                   children: [
                     ExpansionTile(
                       leading: const Icon(Icons.backup_outlined),
-                      title: const Text('Khôi phục dữ liệu'),
+                      title: const Text('Khôi phục dữ liệu', maxLines: 3),
                       subtitle: const Text(
                         'Khôi phục từ tệp hoặc backup cloud.',
                       ),
@@ -196,7 +212,10 @@ class SettingsScreen extends ConsumerWidget {
                             Icons.delete_outline,
                             color: Theme.of(context).colorScheme.error,
                           ),
-                          title: const Text('Xóa dữ liệu trên thiết bị'),
+                          title: const Text(
+                            'Xóa dữ liệu trên thiết bị',
+                            maxLines: 3,
+                          ),
                           subtitle: const Text(
                             'Thao tác này không thể hoàn tác.',
                           ),
@@ -212,7 +231,7 @@ class SettingsScreen extends ConsumerWidget {
                   children: [
                     ListTile(
                       leading: const Icon(Icons.history_outlined),
-                      title: const Text('Lịch sử nhập hóa đơn'),
+                      title: const Text('Lịch sử nhập hóa đơn', maxLines: 3),
                       subtitle: const Text(
                         'Theo dõi tác vụ nhập và thử lại khi gặp lỗi.',
                       ),
@@ -291,7 +310,7 @@ class SettingsScreen extends ConsumerWidget {
           await provider.delete(selection.entry);
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đã xóa backup khỏi Supabase.')),
+            const SnackBar(content: Text('Đã xóa backup khỏi tài khoản.')),
           );
           continue;
         }
@@ -328,7 +347,7 @@ class SettingsScreen extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Đã khôi phục ${preview.readyCount} mục từ Supabase.',
+              'Đã khôi phục ${preview.readyCount} mục từ bản sao lưu trực tuyến.',
             ),
           ),
         );
@@ -492,6 +511,99 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _chooseAppearance(BuildContext context, WidgetRef ref) async {
+    final chosen = ref.read(finmiAppearanceProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final current = chosen.isDark == isDark
+        ? chosen
+        : FinmiAppearance.fromId(isDark ? 'midnight' : 'white');
+    final selected = await showModalBottomSheet<FinmiAppearance>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.85,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            children: [
+              Text(
+                'Chọn giao diện',
+                style: Theme.of(sheetContext).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Màu sắc thay đổi, dữ liệu và thao tác được giữ nguyên.',
+              ),
+              const SizedBox(height: 16),
+              for (final appearance in FinmiAppearance.values)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Theme(
+                    data: AppTheme.forAppearance(appearance),
+                    child: Builder(
+                      builder: (context) => Material(
+                        color: appearance.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: current.id == appearance.id
+                                ? appearance.primary
+                                : appearance.tokens.border,
+                            width: 1.25,
+                          ),
+                        ),
+                        child: ListTile(
+                          leading: Container(
+                            width: 32,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: appearance.tokens.heroBackground,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: appearance.tokens.border,
+                              ),
+                            ),
+                          ),
+                          title: Text(appearance.name),
+                          subtitle: Text(appearance.description),
+                          trailing: current.id == appearance.id
+                              ? const Icon(Icons.check_circle_outline)
+                              : null,
+                          onTap: () => Navigator.pop(sheetContext, appearance),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected == null || !context.mounted) return;
+    try {
+      await ref.read(finmiAppearanceProvider.notifier).set(selected);
+      if (!context.mounted) return;
+      await _setThemeMode(
+        context,
+        ref,
+        selected.isDark ? ThemeMode.dark : ThemeMode.light,
+      );
+    } on Object catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Không thể lưu giao diện: ${friendlyMessage(error)}'),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _chooseThemeMode(BuildContext context, WidgetRef ref) async {
     final current = ref.read(themeModeProvider);
     final selected = await showModalBottomSheet<ThemeMode>(
@@ -582,7 +694,7 @@ Future<_CloudBackupSelection?> _showCloudBackupDialog(
     context: context,
     builder: (dialogContext) => AlertDialog(
       icon: const Icon(Icons.cloud_queue_outlined),
-      title: const Text('Backup trên Supabase'),
+      title: const Text('Bản sao lưu trực tuyến', maxLines: 3),
       content: SizedBox(
         width: 520,
         child: entries.isEmpty
@@ -668,9 +780,9 @@ Future<bool?> _confirmCloudBackupDelete(
     context: context,
     builder: (dialogContext) => AlertDialog(
       icon: const Icon(Icons.delete_outline),
-      title: const Text('Xóa backup cloud?'),
+      title: const Text('Xóa backup cloud?', maxLines: 3),
       content: Text(
-        '“${entry.fileName}” sẽ bị xóa khỏi Supabase và không thể khôi phục.',
+        '“${entry.fileName}” sẽ bị xóa khỏi tài khoản và không thể khôi phục.',
       ),
       actions: [
         TextButton(
@@ -700,7 +812,7 @@ Future<bool?> _showRestorePreview(
     context: context,
     builder: (dialogContext) => AlertDialog(
       icon: const Icon(Icons.restore_page_outlined),
-      title: const Text('Xem trước bản khôi phục'),
+      title: const Text('Xem trước bản khôi phục', maxLines: 3),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480, maxHeight: 420),
         child: SingleChildScrollView(
@@ -773,13 +885,13 @@ Future<String?> _showBackupPasswordDialog(BuildContext context) async {
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.lock_outline),
-        title: const Text('Mở backup mã hóa'),
+        title: const Text('Mở backup mã hóa', maxLines: 3),
         content: Form(
           key: formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextFormField(
+              FinmiTextField(
                 controller: passwordController,
                 autofocus: true,
                 obscureText: true,
@@ -868,7 +980,7 @@ class _BackupManagement extends StatelessWidget {
       children: [
         ListTile(
           leading: const Icon(Icons.cloud_queue_outlined),
-          title: const Text('Quản lý backup Supabase'),
+          title: const Text('Quản lý bản sao lưu', maxLines: 3),
           subtitle: Text(
             onManageCloud == null
                 ? 'Đăng nhập để xem và khôi phục backup cloud.'
@@ -879,7 +991,7 @@ class _BackupManagement extends StatelessWidget {
         ),
         ListTile(
           leading: const Icon(Icons.restore_page_outlined),
-          title: const Text('Khôi phục JSON hoặc backup mã hóa'),
+          title: const Text('Khôi phục JSON hoặc backup mã hóa', maxLines: 3),
           subtitle: const Text(
             'Hỗ trợ JSON cũ và .hdbak; xem trước, bỏ qua bản trùng rồi mới ghi dữ liệu.',
           ),
@@ -902,7 +1014,7 @@ class _LoadingTile extends StatelessWidget {
         height: 24,
         child: CircularProgressIndicator(strokeWidth: 2),
       ),
-      title: Text('Đang tải…'),
+      title: Text('Đang tải…', maxLines: 3),
     );
   }
 }
@@ -945,7 +1057,11 @@ class _Section extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
           child: Text(title, style: Theme.of(context).textTheme.titleMedium),
         ),
-        Card(child: Column(children: children)),
+        for (final child in children)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Card(child: child),
+          ),
       ],
     );
   }

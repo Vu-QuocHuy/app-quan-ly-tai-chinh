@@ -17,10 +17,12 @@ class EntityListRow extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.semanticLabel,
+    this.outlined = false,
     super.key,
   });
 
-  final Widget leading;
+  final Widget? leading;
+  final bool outlined;
   final String title;
   final String? subtitle;
   final Widget? trailing;
@@ -35,6 +37,39 @@ class EntityListRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    final stack =
+        MediaQuery.sizeOf(context).width < 360 ||
+        MediaQuery.textScalerOf(context).scale(14) / 14 >= 1.3;
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          title,
+          style: outlined
+              ? theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                )
+              : theme.textTheme.titleMedium,
+        ),
+        if (badge != null) ...[const SizedBox(height: 4), badge!],
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle!,
+            style:
+                (outlined
+                        ? theme.textTheme.bodySmall
+                        : theme.textTheme.bodyMedium)
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+        if (stack && trailing != null) ...[
+          const SizedBox(height: 8),
+          trailing!,
+        ],
+      ],
+    );
     final row = InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -42,52 +77,20 @@ class EntityListRow extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 64),
         child: Padding(
           padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.gutter,
+            horizontal: 13,
             vertical: AppSpacing.md,
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              leading,
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleMedium,
-                          ),
-                        ),
-                        if (badge != null) ...[
-                          const SizedBox(width: AppSpacing.sm),
-                          badge!,
-                        ],
-                      ],
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (trailing != null) ...[
+              if (leading != null) ...[
+                leading!,
+                const SizedBox(width: AppSpacing.sm),
+              ],
+              Expanded(child: details),
+              if (!stack && trailing != null) ...[
                 const SizedBox(width: AppSpacing.md),
-                trailing!,
+                Flexible(child: trailing!),
               ],
             ],
           ),
@@ -95,7 +98,10 @@ class EntityListRow extends StatelessWidget {
       ),
     );
 
-    if (semanticLabel == null) return row;
+    final surface = outlined
+        ? Card(margin: const EdgeInsets.only(bottom: 8), child: row)
+        : row;
+    if (semanticLabel == null) return surface;
     // `button: true` chỉ đặt CỜ; hành động tap đến từ `onTap:`. Bọc InkWell
     // trong ExcludeSemantics gỡ mất node duy nhất mang `SemanticsAction.tap`,
     // nên nếu không truyền lại onTap thì TalkBack đọc được dòng mà không kích
@@ -106,7 +112,7 @@ class EntityListRow extends StatelessWidget {
       label: semanticLabel,
       onTap: onTap,
       onLongPress: onLongPress,
-      child: ExcludeSemantics(child: row),
+      child: ExcludeSemantics(child: surface),
     );
   }
 }

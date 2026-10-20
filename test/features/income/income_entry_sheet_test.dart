@@ -60,13 +60,14 @@ void main() {
       const TextInputType.numberWithOptions(decimal: false),
     );
 
-    await tester.enterText(find.byType(TextField), '250000');
+    await tester.enterText(find.byType(TextField).first, '250000');
     await tester.tap(
       find.byKey(const ValueKey('income-category-income_salary')),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Thưởng').last);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Lưu khoản thu'));
     await tester.tap(find.text('Lưu khoản thu'));
     await tester.pumpAndSettle();
 
@@ -124,6 +125,7 @@ void main() {
       );
       await tester.tap(find.text('Lưu danh mục'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Lưu khoản thu'));
       await tester.tap(find.text('Lưu khoản thu'));
       await tester.pumpAndSettle();
 
@@ -144,6 +146,7 @@ class _FakeIncomeRepository extends Fake implements IncomeRepository {
     required IncomeSource source,
     String? categoryId,
     IncomeEntry? existing,
+    String? note,
     DateTime? receivedAt,
   }) async {
     savedAmount = amountMinor;

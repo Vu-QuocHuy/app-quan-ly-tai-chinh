@@ -17,7 +17,7 @@ class SyncConflictsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final conflicts = ref.watch(invoiceConflictsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Xung đột đồng bộ')),
+      appBar: AppBar(title: const Text('Xung đột đồng bộ', maxLines: 3)),
       body: SafeArea(
         child: conflicts.when(
           data: (items) => items.isEmpty

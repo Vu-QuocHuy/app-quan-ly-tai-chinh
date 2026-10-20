@@ -42,7 +42,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Loại giao dịch'), findsOneWidget);
+    expect(find.text('Tất cả'), findsOneWidget);
+    expect(find.text('Khoản thu'), findsOneWidget);
+    expect(find.text('Khoản chi'), findsOneWidget);
     expect(find.text('Mọi trạng thái'), findsNothing);
     expect(find.text('Danh mục'), findsNothing);
     expect(find.text('Tháng'), findsNothing);
@@ -127,7 +129,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Thu'));
+    await tester.tap(find.text('Khoản thu'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('transaction-filter-button')));
     await tester.pumpAndSettle();

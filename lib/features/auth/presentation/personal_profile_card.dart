@@ -1,3 +1,4 @@
+import '../../../shared/widgets/finmi_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -95,7 +96,7 @@ class _PersonalProfileCardState extends State<PersonalProfileCard> {
               const LinearProgressIndicator(),
             ] else ...[
               const SizedBox(height: AppSpacing.lg),
-              TextFormField(
+              FinmiTextField(
                 controller: _name,
                 decoration: const InputDecoration(
                   labelText: 'Họ và tên',
@@ -109,7 +110,7 @@ class _PersonalProfileCardState extends State<PersonalProfileCard> {
                     : null,
               ),
               const SizedBox(height: AppSpacing.sm),
-              TextFormField(
+              FinmiTextField(
                 controller: _phone,
                 decoration: const InputDecoration(
                   labelText: 'Số điện thoại (không bắt buộc)',

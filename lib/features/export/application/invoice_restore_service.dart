@@ -261,6 +261,7 @@ abstract final class InvoiceRestoreParser {
                 id: parsedEntry.id,
                 amountMinor: parsedEntry.amountMinor,
                 source: parsedEntry.source,
+                note: parsedEntry.note,
                 receivedAt: parsedEntry.receivedAt,
                 updatedAt: parsedEntry.updatedAt,
                 categoryId: IncomeEntry.unclassifiedCategoryId,
