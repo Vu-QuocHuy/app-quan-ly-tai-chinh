@@ -27,7 +27,9 @@ class IncomeEntrySheet extends ConsumerStatefulWidget {
 
 class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
   late final TextEditingController _amount = TextEditingController(
-    text: (widget.entry?.amountMinor ?? widget.initialAmountMinor)?.toString() ?? '',
+    text:
+        (widget.entry?.amountMinor ?? widget.initialAmountMinor)?.toString() ??
+        '',
   );
   String? _categoryId;
   bool _saving = false;

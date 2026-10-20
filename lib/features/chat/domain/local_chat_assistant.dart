@@ -38,13 +38,16 @@ class LocalChatAssistant {
         scenario = QuickTransactionParser.parse(question, now: reference);
       } on FormatException {
         return const ChatReply(
-          text: 'Hãy nêu số tiền muốn giảm chi, tăng thu hoặc tiết kiệm mỗi tháng.',
+          text:
+              'Hãy nêu số tiền muốn giảm chi, tăng thu hoặc tiết kiệm mỗi tháng.',
         );
       }
       final period = RegExp(r'(\d+)\s*thang').firstMatch(normalized);
       final months = int.tryParse(period?.group(1) ?? '') ?? 1;
       if (months < 1 || months > 60) {
-        return const ChatReply(text: 'Hãy chọn khoảng thời gian từ 1 đến 60 tháng.');
+        return const ChatReply(
+          text: 'Hãy chọn khoảng thời gian từ 1 đến 60 tháng.',
+        );
       }
       final insights = await tools.spendingInsights(monthKey);
       final income = (await tools.incomeEntries())
@@ -53,7 +56,8 @@ class LocalChatAssistant {
       final baseSavings = income - insights.forecastTotalMinor;
       final adjustedSavings = baseSavings + scenario.amountMinor;
       return ChatReply(
-        text: 'Nếu thay đổi ${MoneyFormatter.format(scenario.amountMinor)} mỗi tháng, '
+        text:
+            'Nếu thay đổi ${MoneyFormatter.format(scenario.amountMinor)} mỗi tháng, '
             'chênh lệch thu − chi dự kiến là ${MoneyFormatter.format(adjustedSavings)}/tháng; '
             'sau $months tháng là ${MoneyFormatter.format(adjustedSavings * months)}. '
             'Đây là phép tính giả định, chưa ghi giao dịch.',

@@ -19,8 +19,17 @@ void main() {
   });
 
   test('rejects missing and zero amounts', () {
-    expect(() => QuickTransactionParser.parse('Ăn trưa'), throwsFormatException);
-    expect(() => QuickTransactionParser.parse('Ăn trưa 0đ'), throwsFormatException);
-    expect(() => QuickTransactionParser.parse('Ăn trưa 1,5đ'), throwsFormatException);
+    expect(
+      () => QuickTransactionParser.parse('Ăn trưa'),
+      throwsFormatException,
+    );
+    expect(
+      () => QuickTransactionParser.parse('Ăn trưa 0đ'),
+      throwsFormatException,
+    );
+    expect(
+      () => QuickTransactionParser.parse('Ăn trưa 1,5đ'),
+      throwsFormatException,
+    );
   });
 }

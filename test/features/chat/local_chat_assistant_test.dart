@@ -44,16 +44,19 @@ void main() {
     expect(reply.facts.any((fact) => fact.key == 'total_minor_vnd'), isTrue);
   });
 
-  test('calculates a hypothetical saving without recording a transaction', () async {
-    final assistant = LocalChatAssistant(repository, incomes);
-    final reply = await assistant.answer(
-      'Nếu giảm chi 500k mỗi tháng trong 6 tháng?',
-      now: DateTime(2026, 10, 20),
-    );
-    expect(reply.text, contains('3.000.000'));
-    expect(reply.text, contains('chưa ghi giao dịch'));
-    expect(await incomes.getAll(), isEmpty);
-  });
+  test(
+    'calculates a hypothetical saving without recording a transaction',
+    () async {
+      final assistant = LocalChatAssistant(repository, incomes);
+      final reply = await assistant.answer(
+        'Nếu giảm chi 500k mỗi tháng trong 6 tháng?',
+        now: DateTime(2026, 10, 20),
+      );
+      expect(reply.text, contains('3.000.000'));
+      expect(reply.text, contains('chưa ghi giao dịch'));
+      expect(await incomes.getAll(), isEmpty);
+    },
+  );
 
   test('answers budget and recent invoice questions offline', () async {
     final date = DateTime(2026, 8, 12);
