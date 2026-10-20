@@ -36,6 +36,7 @@ class IncomeEntry {
     required this.receivedAt,
     required this.updatedAt,
     this.categoryId = unclassifiedCategoryId,
+    this.note = '',
   });
 
   final String id;
@@ -44,6 +45,7 @@ class IncomeEntry {
   final String categoryId;
   final DateTime receivedAt;
   final DateTime updatedAt;
+  final String note;
 
   static IncomeEntry fromPayload(Map<String, dynamic> payload) {
     final id = payload['id'];
@@ -51,6 +53,7 @@ class IncomeEntry {
     final receivedAt = DateTime.tryParse('${payload['receivedAt'] ?? ''}');
     final updatedAt = DateTime.tryParse('${payload['updatedAt'] ?? ''}');
     final rawCategoryId = payload['categoryId'];
+    final note = payload['note'] ?? '';
     if (id is! String ||
         id.trim().isEmpty ||
         id.length > 128 ||
@@ -61,6 +64,8 @@ class IncomeEntry {
             (rawCategoryId is! String ||
                 rawCategoryId.trim().isEmpty ||
                 rawCategoryId.length > 128)) ||
+        note is! String ||
+        note.length > 2000 ||
         receivedAt == null ||
         updatedAt == null) {
       throw const FormatException('Khoản thu không hợp lệ.');
@@ -72,6 +77,7 @@ class IncomeEntry {
       receivedAt: receivedAt.toLocal(),
       updatedAt: updatedAt.toLocal(),
       categoryId: rawCategoryId as String? ?? unclassifiedCategoryId,
+      note: note,
     );
   }
 
@@ -80,6 +86,7 @@ class IncomeEntry {
     'amountMinor': amountMinor,
     'source': source.name,
     'categoryId': categoryId,
+    'note': note,
     'receivedAt': receivedAt.toUtc().toIso8601String(),
     'updatedAt': updatedAt.toUtc().toIso8601String(),
   };
@@ -108,6 +115,8 @@ class IncomeRepository {
     required IncomeSource source,
     String? categoryId,
     IncomeEntry? existing,
+    String? note,
+    DateTime? receivedAt,
   }) async {
     if (amountMinor <= 0 || amountMinor > 9007199254740991) {
       throw const FormatException('Số tiền thu phải lớn hơn 0.');
@@ -121,9 +130,11 @@ class IncomeRepository {
           categoryId ??
           existing?.categoryId ??
           IncomeEntry.unclassifiedCategoryId,
-      receivedAt: existing?.receivedAt ?? now,
+      receivedAt: receivedAt ?? existing?.receivedAt ?? now,
+      note: note?.trim() ?? existing?.note ?? '',
       updatedAt: now,
     );
+    IncomeEntry.fromPayload(entry.toPayload());
     await _db.transaction(() async {
       await _db.into(_db.incomes).insertOnConflictUpdate(_companion(entry));
       await _enqueue(entry.id, 'upsert', entry.toPayload());
@@ -212,6 +223,7 @@ class IncomeRepository {
         categoryId: Value(entry.categoryId),
         receivedAt: entry.receivedAt,
         updatedAt: entry.updatedAt,
+        note: Value(entry.note),
       );
 
   static IncomeEntry _fromRow(IncomeRow row) => IncomeEntry(
@@ -221,5 +233,6 @@ class IncomeRepository {
     receivedAt: row.receivedAt,
     updatedAt: row.updatedAt,
     categoryId: row.categoryId,
+    note: row.note,
   );
 }

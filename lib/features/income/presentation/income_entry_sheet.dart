@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
@@ -21,6 +22,9 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
     text: widget.entry?.amountMinor.toString() ?? '',
   );
   String? _categoryId;
+  late final _note = TextEditingController(text: widget.entry?.note ?? '');
+  late DateTime _date =
+      widget.entry?.receivedAt ?? DateUtils.dateOnly(DateTime.now());
   bool _saving = false;
   String? _error;
   String? _categoryError;
@@ -34,6 +38,7 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
   @override
   void dispose() {
     _amount.dispose();
+    _note.dispose();
     super.dispose();
   }
 
@@ -64,6 +69,8 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
             source: widget.entry?.source ?? IncomeSource.manual,
             categoryId: categoryId,
             existing: widget.entry,
+            note: _note.text,
+            receivedAt: _date,
           );
       if (mounted) Navigator.pop(context, true);
     } on Object {
@@ -81,7 +88,7 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Xóa khoản thu?'),
+        title: const Text('Xóa khoản thu?', maxLines: 3),
         content: const Text(
           'Khoản thu này sẽ bị xóa khỏi lịch sử và tổng thu.',
         ),
@@ -196,6 +203,34 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
                   icon: const Icon(Icons.add),
                   label: const Text('Thêm loại khoản thu'),
                 ),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _note,
+                enabled: !_saving,
+                maxLines: 3,
+                maxLength: 2000,
+                decoration: const InputDecoration(labelText: 'Nội dung'),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.calendar_today_outlined),
+                label: Text(
+                  'Ngày giao dịch: ${DateFormat('dd/MM/yyyy').format(_date)}',
+                ),
+                onPressed: _saving
+                    ? null
+                    : () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: _date,
+                          firstDate: DateTime(1900),
+                          lastDate: DateTime(2100, 12, 31),
+                        );
+                        if (date != null && mounted) {
+                          setState(() => _date = date);
+                        }
+                      },
               ),
               const SizedBox(height: 20),
               FilledButton(

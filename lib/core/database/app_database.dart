@@ -69,6 +69,7 @@ class Incomes extends Table {
       .references(Categories, #id)();
   DateTimeColumn get receivedAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  TextColumn get note => text().withDefault(const Constant(''))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -291,7 +292,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -302,6 +303,14 @@ class AppDatabase extends _$AppDatabase {
       });
     },
     onUpgrade: (migrator, from, to) async {
+      if (from < 14 && from >= 8) {
+        final columns = (await customSelect(
+          'PRAGMA table_info(incomes)',
+        ).get()).map((row) => row.read<String>('name')).toSet();
+        if (!columns.contains('note')) {
+          await migrator.addColumn(incomes, incomes.note);
+        }
+      }
       if (from < 8) {
         await migrator.createTable(incomes);
       } else if (from < 11) {

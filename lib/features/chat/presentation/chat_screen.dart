@@ -7,13 +7,37 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/providers/app_providers.dart';
+import '../data/chat_history_store.dart';
 import '../domain/chat_models.dart';
 import '../domain/chat_privacy_policy.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 
+Future<void> showFinmiAssistant(BuildContext context) =>
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) {
+        final media = MediaQuery.of(context);
+        return Padding(
+          padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+          child: SizedBox(
+            height:
+                (media.size.height -
+                    media.viewInsets.bottom -
+                    media.padding.top) *
+                (media.viewInsets.bottom > 0 ? .95 : .7),
+            child: const ChatScreen(embedded: true),
+          ),
+        );
+      },
+    );
+
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({super.key});
+  const ChatScreen({this.embedded = false, super.key});
+  final bool embedded;
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -44,46 +68,59 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Trợ lý tài chính'),
-            Text(
-              'Khoản thu, chi tiêu và ngân sách của bạn',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Xóa lịch sử trò chuyện',
-            onPressed: _messages.isEmpty || _sending ? null : _clearHistory,
-            icon: const Icon(Icons.delete_sweep_outlined),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            if (_connectionNote != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: AppCallout(
-                  icon: Icons.cloud_off_outlined,
-                  tone: CalloutTone.warning,
-                  message: _connectionNote!,
-                  liveRegion: true,
+    final content = Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Trợ lý tài chính',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
-            Expanded(child: _buildMessages(context)),
-            _buildSuggestions(context),
-            _buildComposer(context),
-          ],
+              IconButton(
+                tooltip: 'Xóa lịch sử trò chuyện',
+                onPressed: _messages.isEmpty || _sending ? null : _clearHistory,
+                icon: const Icon(Icons.delete_sweep_outlined),
+              ),
+              IconButton(
+                tooltip: 'Đóng trợ lý',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
         ),
-      ),
+        const Divider(height: 1),
+        Expanded(
+          child: SafeArea(
+            top: false,
+            child: LayoutBuilder(
+              builder: (context, constraints) => Column(
+                children: [
+                  if (_connectionNote != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: AppCallout(
+                        icon: Icons.cloud_off_outlined,
+                        tone: CalloutTone.warning,
+                        message: _connectionNote!,
+                        liveRegion: true,
+                      ),
+                    ),
+                  Expanded(child: _buildMessages(context)),
+                  if (constraints.maxHeight >= 350) _buildSuggestions(context),
+                  _buildComposer(context),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
+    return widget.embedded ? content : Scaffold(body: SafeArea(child: content));
   }
 
   Widget _buildMessages(BuildContext context) {
@@ -138,9 +175,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       'Có khoản chi nào bất thường không?',
     ];
     return SizedBox(
-      height: 48,
+      height: 48 * (MediaQuery.textScalerOf(context).scale(14) / 14),
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         scrollDirection: Axis.horizontal,
         itemCount: suggestions.length,
         separatorBuilder: (_, _) => const SizedBox(width: 8),
@@ -212,8 +249,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _scrollToEnd();
   }
 
-  Future<void> _persistMessage(ChatMessage message) async {
-    final store = ref.read(chatHistoryStoreProvider);
+  Future<void> _persistMessage(
+    ChatMessage message,
+    ChatHistoryStore store,
+  ) async {
     try {
       final savedToCloud = await store.append(message);
       if (savedToCloud || !store.canSyncCloud || !mounted) return;
@@ -232,8 +271,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _enqueueMessagePersistence(ChatMessage message) {
+    final store = ref.read(chatHistoryStoreProvider);
     _pendingPersistence = _pendingPersistence.then(
-      (_) => _persistMessage(message),
+      (_) => _persistMessage(message, store),
     );
   }
 
@@ -298,7 +338,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Xóa lịch sử trò chuyện?'),
+        title: const Text('Xóa lịch sử trò chuyện?', maxLines: 3),
         content: const Text(
           'Lịch sử trên thiết bị sẽ bị xóa; nếu đã đăng nhập, bản cloud cũng bị xóa.',
         ),

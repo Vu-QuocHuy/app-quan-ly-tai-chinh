@@ -49,54 +49,58 @@ void main() {
     },
   );
 
-  testWidgets('opens fixed expenses first and creates a recurring bill', (
-    tester,
-  ) async {
-    final repository = _FakePlanRepository();
-    const expenseCategories = [
-      CategoryEntity(
-        id: 'housing',
-        name: 'Nhà ở',
-        iconName: 'home',
-        colorValue: 0xFF2563EB,
-      ),
-    ];
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          planRepositoryProvider.overrideWithValue(repository),
-          plansProvider.overrideWith((ref) => Stream.value(const [])),
-          categoriesProvider.overrideWith(
-            (ref) => Stream.value(expenseCategories),
-          ),
-          incomeCategoriesProvider.overrideWith(
-            (ref) => Stream.value(const []),
-          ),
-        ],
-        child: const MaterialApp(home: PlanScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'shows income and expense sections and creates a recurring bill',
+    (tester) async {
+      final repository = _FakePlanRepository();
+      const expenseCategories = [
+        CategoryEntity(
+          id: 'housing',
+          name: 'Nhà ở',
+          iconName: 'home',
+          colorValue: 0xFF2563EB,
+        ),
+      ];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            planRepositoryProvider.overrideWithValue(repository),
+            plansProvider.overrideWith((ref) => Stream.value(const [])),
+            categoriesProvider.overrideWith(
+              (ref) => Stream.value(expenseCategories),
+            ),
+            incomeCategoriesProvider.overrideWith(
+              (ref) => Stream.value(const []),
+            ),
+          ],
+          child: const MaterialApp(home: PlanScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Thêm khoản chi cố định'), findsOneWidget);
-    expect(find.text('Thêm khoản thu cố định'), findsNothing);
-    await tester.tap(find.text('Thêm khoản chi cố định'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).at(0), 'Tiền nhà');
-    await tester.enterText(find.byType(TextField).at(1), '5000000');
-    await tester.tap(find.byKey(const ValueKey('recurring-bill-category')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Nhà ở').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Lưu'));
-    await tester.pumpAndSettle();
+      expect(find.text('Thêm khoản chi cố định'), findsNothing);
+      expect(find.text('Thêm khoản thu cố định'), findsNothing);
+      expect(find.text('Thêm mục tiêu'), findsNothing);
+      await tester.tap(find.byTooltip('Thêm khoản định kỳ'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Khoản chi định kỳ'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Tiền nhà');
+      await tester.enterText(find.byType(TextField).at(1), '5000000');
+      await tester.tap(find.byKey(const ValueKey('recurring-bill-category')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Nhà ở').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Lưu'));
+      await tester.pumpAndSettle();
 
-    final saved = repository.saved as RecurringBill;
-    expect(saved.title, 'Tiền nhà');
-    expect(saved.amountMinor, 5000000);
-    expect(saved.frequency, BillFrequency.monthly);
-    expect(saved.categoryId, 'housing');
-  });
+      final saved = repository.saved as RecurringBill;
+      expect(saved.title, 'Tiền nhà');
+      expect(saved.amountMinor, 5000000);
+      expect(saved.frequency, BillFrequency.monthly);
+      expect(saved.categoryId, 'housing');
+    },
+  );
 
   testWidgets('creates a monthly income with a selected category', (
     tester,
@@ -133,9 +137,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Thu cố định'));
+    await tester.tap(find.byTooltip('Thêm khoản định kỳ'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Thêm khoản thu cố định'));
+    await tester.tap(find.text('Khoản thu định kỳ'));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField).at(0), 'Lương tháng');

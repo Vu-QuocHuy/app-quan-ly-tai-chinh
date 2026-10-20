@@ -1,3 +1,4 @@
+import '../../../shared/widgets/finmi_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -202,7 +203,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                         ),
                       ),
                       const SizedBox(height: 20),
-                      TextFormField(
+                      FinmiTextField(
                         controller: _sellerController,
                         textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
@@ -222,7 +223,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 12),
-                      TextFormField(
+                      FinmiTextField(
                         controller: _sellerController,
                         decoration: InputDecoration(
                           labelText: _isManualSource
@@ -310,7 +311,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                             _recomputeDirty();
                           },
                         ),
-                        second: TextFormField(
+                        second: FinmiTextField(
                           controller: _tagsController,
                           decoration: const InputDecoration(
                             labelText: 'Nhãn',
@@ -333,7 +334,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      TextFormField(
+                      FinmiTextField(
                         controller: _notesController,
                         decoration: InputDecoration(
                           labelText: 'Ghi chú',
@@ -806,7 +807,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                 ),
               ],
             ),
-            TextFormField(
+            FinmiTextField(
               controller: draft.descriptionController,
               textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
@@ -822,7 +823,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: TextFormField(
+                  child: FinmiTextField(
                     controller: draft.quantityController,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -834,7 +835,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: TextFormField(
+                  child: FinmiTextField(
                     controller: draft.unitPriceController,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: false,
@@ -1054,7 +1055,7 @@ class _MoneyField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
+    return FinmiTextField(
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: false),
       textInputAction: TextInputAction.next,

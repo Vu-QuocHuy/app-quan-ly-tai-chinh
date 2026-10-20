@@ -10,6 +10,7 @@ import '../../features/budgets/presentation/category_management.dart';
 import '../../features/auth/presentation/account_screen.dart';
 import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/dashboard/presentation/dashboard_screen.dart';
+import '../../features/dashboard/presentation/statistics_screen.dart';
 import '../../features/invoices/domain/invoice_models.dart';
 import '../../features/invoices/presentation/invoice_detail_screen.dart';
 import '../../features/invoices/presentation/invoice_attachments_screen.dart';
@@ -208,6 +209,10 @@ final appRouter = GoRouter(
       ],
     ),
     GoRoute(
+      path: '/statistics',
+      builder: (context, state) => const StatisticsScreen(),
+    ),
+    GoRoute(
       path: '/chat',
       parentNavigatorKey: _rootKey,
       builder: (context, state) => const ChatScreen(),
@@ -218,6 +223,7 @@ final appRouter = GoRouter(
       builder: (context, state) {
         final onPickOcrImage = state.extra;
         return QrPaymentScreen(
+          initialScanTab: state.uri.queryParameters['tab'] == 'receipt' ? 1 : 0,
           showScanTabs: onPickOcrImage is Future<void> Function(XFile),
           onOcrImageReady: onPickOcrImage is Future<void> Function(XFile)
               ? onPickOcrImage

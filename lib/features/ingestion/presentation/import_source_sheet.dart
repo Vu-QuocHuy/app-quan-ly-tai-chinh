@@ -11,12 +11,12 @@ class ImportSourceSheet extends StatelessWidget {
     return SafeArea(
       child: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Giao dịch', style: theme.textTheme.headlineSmall),
+              Text('Giao dịch', style: theme.textTheme.titleLarge),
               const SizedBox(height: 8),
               Text(
                 'Ghi khoản thu, khoản chi hoặc xem lại lịch sử.',
@@ -39,14 +39,14 @@ class ImportSourceSheet extends StatelessWidget {
               ),
               _SourceTile(
                 icon: Icons.document_scanner_outlined,
-                title: 'Quét',
-                subtitle: 'Chọn QR thanh toán hoặc OCR hóa đơn',
+                title: 'Quét QR hoặc hóa đơn',
+                subtitle: 'Kiểm tra thông tin trước khi lưu khoản chi',
                 onTap: () => Navigator.pop(context, ImportSource.scan),
               ),
               const Divider(),
               _SourceTile(
                 icon: Icons.receipt_long_outlined,
-                title: 'Lịch sử giao dịch',
+                title: 'Lịch sử thu chi',
                 subtitle: 'Tìm kiếm và lọc các khoản thu chi đã ghi',
                 onTap: () => Navigator.pop(context, ImportSource.history),
               ),
@@ -78,20 +78,26 @@ class _SourceTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Material(
         color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: scheme.outlineVariant, width: 1.25),
+        ),
         child: Semantics(
           button: true,
           child: ListTile(
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
             ),
             minTileHeight: 64,
             contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-            leading: CircleAvatar(
-              radius: 20,
-              backgroundColor: scheme.primaryContainer,
-              foregroundColor: scheme.onPrimaryContainer,
-              child: Icon(icon, size: 21),
+            leading: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: scheme.primary,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 21, color: scheme.onPrimary),
             ),
             title: Text(title),
             subtitle: Text(subtitle),

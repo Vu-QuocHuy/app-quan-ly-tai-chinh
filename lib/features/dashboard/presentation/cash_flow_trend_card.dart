@@ -293,7 +293,9 @@ class _Legend extends StatelessWidget {
         child: const SizedBox(width: 10, height: 10),
       ),
       const SizedBox(width: AppSpacing.xs),
-      Text(label, style: Theme.of(context).textTheme.bodySmall),
+      Flexible(
+        child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+      ),
     ],
   );
 }

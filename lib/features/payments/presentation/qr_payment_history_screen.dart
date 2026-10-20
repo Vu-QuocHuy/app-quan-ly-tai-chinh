@@ -55,7 +55,7 @@ class QrPaymentHistoryScreen extends ConsumerWidget {
     final categories = ref.watch(categoriesProvider).value ?? const [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Lịch sử thanh toán QR')),
+      appBar: AppBar(title: const Text('Lịch sử thanh toán QR', maxLines: 3)),
       body: history.when(
         loading: () => const Padding(
           padding: EdgeInsets.fromLTRB(16, 8, 16, 24),

@@ -1,7 +1,9 @@
+import '../../features/income/presentation/transaction_entry_sheet.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -21,6 +23,9 @@ import '../../shared/dialogs/confirm_dialog.dart';
 import '../../shared/errors/error_presenter.dart';
 import '../../shared/widgets/reading_pane.dart';
 import '../theme/app_tokens.dart';
+import '../../shared/widgets/finmi_brand.dart';
+import '../../shared/widgets/finmi_assistant_button.dart';
+import 'finmi_actions.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({required this.navigationShell, super.key});
@@ -148,23 +153,23 @@ class _AppShellState extends ConsumerState<AppShell>
 
   static const _destinations = [
     NavigationDestination(
-      icon: Icon(Icons.space_dashboard_outlined),
-      selectedIcon: Icon(Icons.space_dashboard),
+      icon: Icon(CupertinoIcons.house),
+      selectedIcon: Icon(CupertinoIcons.house_fill),
       label: 'Tổng quan',
     ),
     NavigationDestination(
-      icon: Icon(Icons.savings_outlined),
-      selectedIcon: Icon(Icons.savings),
+      icon: Icon(CupertinoIcons.chart_pie),
+      selectedIcon: Icon(CupertinoIcons.chart_pie_fill),
       label: 'Ngân sách',
     ),
     NavigationDestination(
-      icon: Icon(Icons.groups_outlined),
-      selectedIcon: Icon(Icons.groups),
+      icon: Icon(CupertinoIcons.group),
+      selectedIcon: Icon(CupertinoIcons.group_solid),
       label: 'Nhóm',
     ),
     NavigationDestination(
-      icon: Icon(Icons.settings_outlined),
-      selectedIcon: Icon(Icons.settings),
+      icon: Icon(CupertinoIcons.gear_alt),
+      selectedIcon: Icon(CupertinoIcons.gear_alt_fill),
       label: 'Cài đặt',
     ),
   ];
@@ -192,7 +197,13 @@ class _AppShellState extends ConsumerState<AppShell>
     final width = MediaQuery.sizeOf(context).width;
     final pendingQrPayment = ref.watch(pendingQrPaymentDraftProvider);
     final useRail = AppBreakpoints.useRail(width);
-    final content = widget.navigationShell;
+    final largeText = MediaQuery.textScalerOf(context).scale(12) / 12 >= 1.3;
+    final wrapNavigation = largeText || width < 360;
+    final content = FinmiActions(
+      openSource: (source) => _openSource(source),
+      scanReceipt: () => _openSource(ImportSource.scan, receipt: true),
+      child: widget.navigationShell,
+    );
     final scheme = Theme.of(context).colorScheme;
     final invoiceAction = _isImporting ? _cancelImport : _showImportSources;
     final invoiceActionTooltip = _isImporting
@@ -272,26 +283,9 @@ class _AppShellState extends ConsumerState<AppShell>
                           selectedIndex: widget.navigationShell.currentIndex,
                           onDestinationSelected: _goBranch,
                           labelType: NavigationRailLabelType.all,
-                          leading: Padding(
-                            padding: const EdgeInsets.only(
-                              bottom: AppSpacing.xl,
-                            ),
-                            child: Tooltip(
-                              message: 'Quản lý Tài chính',
-                              child: DecoratedBox(
-                                decoration: ShapeDecoration(
-                                  color: scheme.primary,
-                                  shape: AppShapes.control,
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(AppSpacing.md),
-                                  child: Icon(
-                                    Icons.account_balance_wallet_outlined,
-                                    color: scheme.onPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
+                          leading: const Padding(
+                            padding: EdgeInsets.only(bottom: 24),
+                            child: FinmiBrand(width: 76),
                           ),
                           destinations: _destinations
                               .map(
@@ -328,60 +322,103 @@ class _AppShellState extends ConsumerState<AppShell>
               ],
             ),
           ),
-          Positioned(
-            right: AppSpacing.gutter,
-            bottom: useRail ? 96 : AppSpacing.lg,
-            child: FloatingActionButton(
-              heroTag: 'shell-chat',
-              tooltip: 'Mở trợ lý chi tiêu',
-              onPressed: () => context.push('/chat'),
-              child: const Icon(Icons.chat_bubble_outline),
+          if (!wrapNavigation || useRail)
+            Positioned(
+              right: AppSpacing.gutter,
+              bottom: useRail ? 96 : AppSpacing.lg,
+              child: const FinmiAssistantButton(),
             ),
-          ),
         ],
       ),
       bottomNavigationBar: useRail
           ? null
-          : BottomAppBar(
-              shape: const CircularNotchedRectangle(),
-              notchMargin: 8,
-              height: 80,
-              padding: EdgeInsets.zero,
-              color: scheme.surfaceContainerLow,
-              child: Row(
-                children: [
-                  _bottomDestination(context, 0),
-                  _bottomDestination(context, 1),
-                  Semantics(
-                    excludeSemantics: true,
-                    button: true,
-                    label: invoiceActionTooltip,
-                    onTap: invoiceAction,
-                    child: InkWell(
-                      excludeFromSemantics: true,
-                      onTap: invoiceAction,
-                      child: SizedBox(
-                        width: 72,
-                        height: 80,
-                        child: Align(
-                          alignment: Alignment.bottomCenter,
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Text(
-                              _isImporting ? 'Hủy nhập' : 'Giao dịch',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(color: scheme.onSurfaceVariant),
+          : SafeArea(
+              top: false,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLow,
+                  border: Border(
+                    top: BorderSide(color: scheme.outlineVariant, width: 1.25),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final scale =
+                          MediaQuery.textScalerOf(context).scale(12) / 12;
+                      final destinations = <Widget>[
+                        _bottomDestination(context, 0),
+                        _bottomDestination(context, 1),
+                        Expanded(
+                          child: Semantics(
+                            button: true,
+                            label: _isImporting
+                                ? 'Hủy nhập'
+                                : 'Quét QR thanh toán hoặc hóa đơn',
+                            child: InkWell(
+                              onTap: _isImporting
+                                  ? _cancelImport
+                                  : () => _openSource(ImportSource.scan),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 2,
+                                  vertical: 4,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 48,
+                                      height: 48,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: scheme.primary,
+                                        borderRadius: AppShapes.controlRadius,
+                                      ),
+                                      child: Icon(
+                                        _isImporting
+                                            ? Icons.stop_circle_outlined
+                                            : Icons.qr_code_scanner_rounded,
+                                        color: scheme.onPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
+                        _bottomDestination(context, 2),
+                        _bottomDestination(context, 3),
+                      ];
+                      if (wrapNavigation) {
+                        final columns = scale >= 1.8 ? 2 : 3;
+                        return Wrap(
+                          children: [
+                            for (final item in [
+                              ...destinations,
+                              const Expanded(
+                                child: Padding(
+                                  padding: EdgeInsets.all(6),
+                                  child: FinmiAssistantButton(),
+                                ),
+                              ),
+                            ])
+                              SizedBox(
+                                width: constraints.maxWidth / columns,
+                                child: Row(children: [item]),
+                              ),
+                          ],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: destinations,
+                      );
+                    },
                   ),
-                  _bottomDestination(context, 2),
-                  _bottomDestination(context, 3),
-                ],
+                ),
               ),
             ),
       floatingActionButtonLocation: useRail
@@ -394,11 +431,7 @@ class _AppShellState extends ConsumerState<AppShell>
               icon: invoiceActionIcon,
               label: Text(invoiceActionLabel),
             )
-          : FloatingActionButton(
-              onPressed: invoiceAction,
-              tooltip: invoiceActionTooltip,
-              child: invoiceActionIcon,
-            ),
+          : null,
     );
   }
 
@@ -408,53 +441,57 @@ class _AppShellState extends ConsumerState<AppShell>
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Expanded(
-      child: Semantics(
-        excludeSemantics: true,
-        button: true,
-        selected: selected,
-        label: destination.label,
-        onTap: () => _goBranch(index),
-        child: InkWell(
-          excludeFromSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+        child: Semantics(
+          button: true,
+          selected: selected,
+          label: destination.label,
+          excludeSemantics: true,
           onTap: () => _goBranch(index),
-          child: SizedBox.expand(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                DecoratedBox(
-                  decoration: ShapeDecoration(
-                    color: selected ? scheme.primary : Colors.transparent,
-                    shape: AppShapes.pill,
+          child: Material(
+            color: selected ? scheme.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              onTap: () => _goBranch(index),
+              borderRadius: BorderRadius.circular(10),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 62),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 2,
+                    vertical: 7,
                   ),
-                  child: SizedBox(
-                    width: 56,
-                    height: 32,
-                    child: IconTheme(
-                      data: IconThemeData(
-                        size: 24,
-                        color: selected
-                            ? scheme.onPrimary
-                            : scheme.onSurfaceVariant,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconTheme(
+                        data: IconThemeData(
+                          size: 20,
+                          color: selected
+                              ? scheme.onPrimary
+                              : scheme.onSurfaceVariant,
+                        ),
+                        child: destination.icon,
                       ),
-                      child: selected
-                          ? (destination.selectedIcon ?? destination.icon)
-                          : destination.icon,
-                    ),
+                      const SizedBox(height: 4),
+                      Text(
+                        destination.label,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 11,
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          color: selected
+                              ? scheme.onPrimary
+                              : scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  destination.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    color: selected
-                        ? scheme.onSurface
-                        : scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -470,13 +507,14 @@ class _AppShellState extends ConsumerState<AppShell>
   }
 
   Future<void> _showImportSources() async {
-    final source = await showModalBottomSheet<ImportSource>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => const ImportSourceSheet(),
-    );
-    if (source == null || !mounted) return;
+    await showTransactionEntry(context);
+  }
+
+  Future<void> _openSource(ImportSource source, {bool receipt = false}) async {
+    if (_isImporting) {
+      _showMessage('Đang đọc hóa đơn. Vui lòng đợi hoặc hủy tác vụ hiện tại.');
+      return;
+    }
     switch (source) {
       case ImportSource.income:
         await showModalBottomSheet<bool>(
@@ -488,7 +526,7 @@ class _AppShellState extends ConsumerState<AppShell>
       case ImportSource.scan:
         if (mounted) {
           context.push(
-            '/qr-payment',
+            receipt ? '/qr-payment?tab=receipt' : '/qr-payment',
             extra: (XFile image) => _importImageFile(image),
           );
         }

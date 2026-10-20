@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_tokens.dart';
+import '../../app/theme/finmi_theme.dart';
 
 /// Thẻ L1. Gộp bộ ba `Card > InkWell > Padding` và cặp `Card > Padding` thành
 /// một widget.
 ///
-/// QUY TẮC BIÊN: khi `onTap != null`, widget này TỰ ĐỘNG thêm
-/// `BorderSide(color: scheme.outline)` — 3.68:1 sáng / 5.20:1 tối — nên mọi tap
-/// target không phải là dòng-trong-danh-sách-có-divider đều thoả WCAG 1.4.11.
-/// Thẻ tĩnh giữ borderless và dựa vào bậc tông 1.21:1 / 1.17:1.
+/// Thẻ tĩnh và thẻ tương tác đều có viền Finmi 1.25 dp trên nền đặc.
 class AppCard extends StatelessWidget {
   const AppCard({
     required this.child,
@@ -38,14 +36,13 @@ class AppCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final interactive = onTap != null;
 
+    final tokens = context.finmi;
     final effectiveShape =
         shape ??
-        (interactive
-            ? RoundedRectangleBorder(
-                borderRadius: AppShapes.cardRadius,
-                side: BorderSide(color: scheme.outline),
-              )
-            : AppShapes.card);
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(tokens.cardRadius),
+          side: BorderSide(color: tokens.border, width: tokens.outlineWidth),
+        );
 
     Widget content = Padding(padding: padding, child: child);
 

@@ -1,3 +1,5 @@
+import '../../../shared/widgets/finmi_brand.dart';
+import '../../../shared/widgets/finmi_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -56,26 +58,40 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     final isSignedOut =
         client != null && user.hasValue && user.valueOrNull == null;
     return Scaffold(
-      appBar: isSignedOut ? null : AppBar(title: const Text('Tài khoản')),
-      body: SafeArea(
-        child: client == null
-            ? _buildCenteredContent(const _ConfigurationMissingCard())
-            : user.when(
-                data: (currentUser) => currentUser == null
-                    ? _buildAuthExperience(context)
-                    : _buildCenteredContent(
-                        _buildSignedIn(context, currentUser),
-                      ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => _buildCenteredContent(
-                  _StatusCard(
-                    icon: Icons.error_outline,
-                    title: 'Không đọc được phiên đăng nhập',
-                    message: friendlyMessage(error),
-                    isError: true,
+      appBar: isSignedOut
+          ? null
+          : AppBar(title: const Text('Tài khoản', maxLines: 3)),
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          color: isSignedOut ? const Color(0xFF123D32) : null,
+          image: isSignedOut
+              ? const DecorationImage(
+                  image: AssetImage('assets/branding/finmi/background-dark.png'),
+                  fit: BoxFit.cover,
+                )
+              : null,
+        ),
+        child: SafeArea(
+          child: client == null
+              ? _buildCenteredContent(const _ConfigurationMissingCard())
+              : user.when(
+                  data: (currentUser) => currentUser == null
+                      ? _buildAuthExperience(context)
+                      : _buildCenteredContent(
+                          _buildSignedIn(context, currentUser),
+                        ),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (error, _) => _buildCenteredContent(
+                    _StatusCard(
+                      icon: Icons.error_outline,
+                      title: 'Không đọc được phiên đăng nhập',
+                      message: friendlyMessage(error),
+                      isError: true,
+                    ),
                   ),
                 ),
-              ),
+        ),
       ),
     );
   }
@@ -151,124 +167,29 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
   Widget _buildAuthIntro(BuildContext context, {required bool expanded}) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final heroBackground = scheme.brightness == Brightness.light
-        ? scheme.primary
-        : scheme.primaryContainer;
-    final heroForeground = scheme.brightness == Brightness.light
-        ? scheme.onPrimary
-        : scheme.onPrimaryContainer;
-    final heroAccent = scheme.brightness == Brightness.light
-        ? scheme.tertiaryContainer
-        : scheme.tertiary;
-
-    return DecoratedBox(
-      decoration: ShapeDecoration(color: heroBackground, shape: AppShapes.card),
-      child: Stack(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(
-                painter: _AuthLinePainter(
-                  lineColor: heroForeground.withValues(alpha: 0.13),
-                  accentColor: heroAccent.withValues(alpha: 0.72),
-                  expanded: expanded,
-                ),
-              ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
             ),
+            child: const FinmiBrand(width: 160),
           ),
-          Padding(
-            padding: EdgeInsets.all(expanded ? AppSpacing.xxl : AppSpacing.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DecoratedBox(
-                      decoration: ShapeDecoration(
-                        color: heroForeground,
-                        shape: AppShapes.control,
-                      ),
-                      child: SizedBox(
-                        width: 52,
-                        height: 52,
-                        child: Icon(
-                          Icons.account_balance_wallet_outlined,
-                          size: 26,
-                          color: heroBackground,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Flexible(
-                      child: Text(
-                        'QUẢN LÝ CHI TIÊU',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: heroForeground.withValues(alpha: 0.82),
-                          letterSpacing: 1.1,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: expanded ? AppSpacing.section : AppSpacing.xl),
-                Text(
-                  expanded
-                      ? 'Chi tiêu rõ ràng.\nTài chính chủ động.'
-                      : 'Làm chủ chi tiêu,\ntừng ngày một.',
-                  style:
-                      (expanded
-                              ? theme.textTheme.displaySmall
-                              : theme.textTheme.headlineMedium)
-                          ?.copyWith(
-                            color: heroForeground,
-                            fontWeight: FontWeight.w700,
-                            height: 1.12,
-                            letterSpacing: -0.6,
-                          ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 460),
-                  child: Text(
-                    'Ghi nhận thu chi, theo dõi ngân sách và hiểu rõ hơn thói quen tài chính của bạn.',
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: heroForeground.withValues(alpha: 0.82),
-                      height: 1.5,
-                    ),
-                  ),
-                ),
-                if (expanded) ...[
-                  const SizedBox(height: AppSpacing.section),
-                  _AuthBenefit(
-                    icon: Icons.receipt_long_outlined,
-                    title: 'Theo dõi thu chi',
-                    subtitle: 'Biết tiền đến từ đâu và được sử dụng thế nào.',
-                    foregroundColor: heroForeground,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  _AuthBenefit(
-                    icon: Icons.savings_outlined,
-                    title: 'Kiểm soát ngân sách',
-                    subtitle: 'Chủ động đặt giới hạn cho từng danh mục.',
-                    foregroundColor: heroForeground,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  _AuthBenefit(
-                    icon: Icons.insights_outlined,
-                    title: 'Nhìn lại thói quen',
-                    subtitle: 'Theo dõi dòng tiền qua các báo cáo dễ hiểu.',
-                    foregroundColor: heroForeground,
-                  ),
-                ],
-                const SizedBox(height: AppSpacing.xxl),
-              ],
-            ),
+          const SizedBox(height: 20),
+          Text(
+            'Theo dõi chi tiêu mỗi ngày',
+            style: theme.textTheme.titleLarge?.copyWith(color: Colors.white),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Ghi khoản thu chi, kiểm tra hóa đơn và chủ động với ngân sách của bạn.',
+            style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
           ),
         ],
       ),
@@ -325,10 +246,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _registering ? 'TÀI KHOẢN MỚI' : 'CHÀO MỪNG TRỞ LẠI',
+                          _registering ? 'Tài khoản mới' : 'Chào mừng trở lại',
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: scheme.tertiary,
-                            letterSpacing: 0.9,
+                            letterSpacing: 0,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -359,6 +280,11 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 container: true,
                 label: 'Chọn đăng nhập hoặc đăng ký',
                 child: SegmentedButton<bool>(
+                  direction:
+                      MediaQuery.sizeOf(context).width < 360 ||
+                          MediaQuery.textScalerOf(context).scale(14) / 14 >= 1.3
+                      ? Axis.vertical
+                      : Axis.horizontal,
                   style: ButtonStyle(
                     minimumSize: const WidgetStatePropertyAll(
                       Size.fromHeight(48),
@@ -403,7 +329,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 ),
                 const SizedBox(height: AppSpacing.lg),
               ],
-              TextFormField(
+              FinmiTextField(
                 controller: _emailController,
                 enabled: !_busy,
                 keyboardType: TextInputType.emailAddress,
@@ -420,7 +346,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 validator: AuthValidators.email,
               ),
               const SizedBox(height: AppSpacing.lg),
-              TextFormField(
+              FinmiTextField(
                 controller: _passwordController,
                 enabled: !_busy,
                 obscureText: _obscurePassword,
@@ -481,7 +407,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 ),
               if (_registering) ...[
                 const SizedBox(height: AppSpacing.lg),
-                TextFormField(
+                FinmiTextField(
                   controller: _confirmationController,
                   enabled: !_busy,
                   obscureText: _obscurePassword,
@@ -519,7 +445,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                       const Icon(Icons.person_add_alt_1_outlined),
                     if (_busy || _registering)
                       const SizedBox(width: AppSpacing.sm),
-                    Text(_registering ? 'Tạo tài khoản' : 'Đăng nhập'),
+                    Flexible(
+                      child: Text(
+                        _registering ? 'Tạo tài khoản' : 'Đăng nhập',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -537,7 +468,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       children: [
         _StatusCard(
           icon: Icons.cloud_done_outlined,
-          title: 'Đã kết nối Supabase',
+          title: 'Đã kết nối tài khoản',
           message: user.email ?? 'Tài khoản ${user.id}',
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -619,7 +550,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       error: (error, _) => Card(
         child: ListTile(
           leading: const Icon(Icons.link_off_outlined),
-          title: const Text('Không tải được phương thức đăng nhập'),
+          title: const Text(
+            'Không tải được phương thức đăng nhập',
+            maxLines: 3,
+          ),
           subtitle: Text(friendlyMessage(error)),
           trailing: IconButton(
             tooltip: 'Tải lại',
@@ -738,7 +672,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
-        _message = 'Không thể kết nối Supabase: ${friendlyMessage(error)}';
+        _message = 'Không thể kết nối tài khoản: ${friendlyMessage(error)}';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -946,7 +880,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           ? 'Đã gửi ${result.upload.pushed}, tải về ${result.applied}; có ${result.conflicts} xung đột cần kiểm tra.'
           : result.upload.failed > 0
           ? 'Đã gửi ${result.upload.pushed} thay đổi, ${result.upload.failed} thay đổi bị lỗi.'
-          : 'Đã gửi ${result.upload.pushed}, tải về ${result.applied} thay đổi từ Supabase.';
+          : 'Đã gửi ${result.upload.pushed}, tải về ${result.applied} thay đổi từ tài khoản.';
     });
   }
 
@@ -985,7 +919,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           final scheme = Theme.of(context).colorScheme;
           return AlertDialog(
             icon: Icon(Icons.delete_forever_outlined, color: scheme.error),
-            title: const Text('Xóa tài khoản?'),
+            title: const Text('Xóa tài khoản?', maxLines: 3),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1156,143 +1090,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 }
 
-class _AuthBenefit extends StatelessWidget {
-  const _AuthBenefit({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.foregroundColor,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color foregroundColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        DecoratedBox(
-          decoration: ShapeDecoration(
-            color: scheme.tertiaryContainer,
-            shape: AppShapes.control,
-          ),
-          child: SizedBox(
-            width: 40,
-            height: 40,
-            child: Icon(
-              icon,
-              size: AppIconSizes.md,
-              color: scheme.onTertiaryContainer,
-            ),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: foregroundColor,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                subtitle,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: foregroundColor.withValues(alpha: 0.82),
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AuthLinePainter extends CustomPainter {
-  const _AuthLinePainter({
-    required this.lineColor,
-    required this.accentColor,
-    required this.expanded,
-  });
-
-  final Color lineColor;
-  final Color accentColor;
-  final bool expanded;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final line = Paint()
-      ..color = lineColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    if (expanded) {
-      final center = Offset(size.width * 0.87, size.height * 0.18);
-      for (var index = 0; index < 3; index++) {
-        canvas.drawCircle(center, 28 + index * 22, line);
-      }
-    }
-
-    final curve = Path()
-      ..moveTo(size.width * 0.54, size.height * 0.93)
-      ..cubicTo(
-        size.width * 0.66,
-        size.height * 0.82,
-        size.width * 0.72,
-        size.height * 0.98,
-        size.width * 0.81,
-        size.height * 0.88,
-      )
-      ..cubicTo(
-        size.width * 0.88,
-        size.height * 0.78,
-        size.width * 0.92,
-        size.height * 0.98,
-        size.width * 0.98,
-        size.height * 0.86,
-      );
-    canvas.drawPath(
-      curve,
-      Paint()
-        ..color = accentColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-
-    for (final point in [
-      Offset(size.width * 0.65, size.height * 0.9),
-      Offset(size.width * 0.81, size.height * 0.88),
-      Offset(size.width * 0.94, size.height * 0.9),
-    ]) {
-      canvas.drawCircle(
-        point,
-        3.5,
-        Paint()
-          ..color = accentColor
-          ..style = PaintingStyle.fill,
-      );
-      canvas.drawCircle(point, 8, line);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_AuthLinePainter oldDelegate) =>
-      lineColor != oldDelegate.lineColor ||
-      accentColor != oldDelegate.accentColor ||
-      expanded != oldDelegate.expanded;
-}
-
 class _ConfigurationMissingCard extends StatelessWidget {
   const _ConfigurationMissingCard();
 
@@ -1304,7 +1101,7 @@ class _ConfigurationMissingCard extends StatelessWidget {
       title: 'Cần cấu hình tài khoản',
       message:
           'Ứng dụng yêu cầu đăng nhập trước khi sử dụng. Bản build này chưa có '
-          'cấu hình Supabase; hãy tạo lại bản build với SUPABASE_URL và '
+          'cấu hình dịch vụ tài khoản. Hãy liên hệ người quản lý ứng dụng. '
           'SUPABASE_PUBLISHABLE_KEY. Lần đăng nhập đầu cần có kết nối mạng.',
     );
   }
@@ -1333,13 +1130,13 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Đổi mật khẩu'),
+      title: const Text('Đổi mật khẩu', maxLines: 3),
       content: Form(
         key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextFormField(
+            FinmiTextField(
               controller: _passwordController,
               obscureText: _obscure,
               autofocus: true,
@@ -1359,7 +1156,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
                   : null,
             ),
             const SizedBox(height: 12),
-            TextFormField(
+            FinmiTextField(
               controller: _confirmationController,
               obscureText: _obscure,
               decoration: const InputDecoration(labelText: 'Nhập lại mật khẩu'),
