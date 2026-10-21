@@ -23,6 +23,10 @@ class DriftSyncCursorStore {
     return SyncCursor(updatedAt: row.updatedAt, updatedId: row.updatedId);
   }
 
+  /// Gom nhiều lần ghi vào một transaction để stream Drift chỉ phát một lần.
+  Future<T> transaction<T>(Future<T> Function() action) =>
+      _db.transaction(action);
+
   Future<void> write({
     required String userId,
     required String aggregateType,

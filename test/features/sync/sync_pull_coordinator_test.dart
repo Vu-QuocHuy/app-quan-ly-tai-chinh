@@ -49,6 +49,36 @@ void main() {
     expect(gateway.cursors.last?.updatedId, 'remote-1');
   });
 
+  test('applies a page in one transaction so watchers rebuild once', () async {
+    final base = DateTime.utc(2026, 8, 10);
+    final gateway = _RecordingPullGateway([
+      for (var i = 0; i < 20; i++)
+        _change(
+          id: 'remote-${i.toString().padLeft(2, '0')}',
+          revision: 1,
+          sellerName: 'Store $i',
+          updatedAt: base.add(Duration(seconds: i)),
+        ),
+    ]);
+    var emissions = 0;
+    final subscription = repository.watchInvoiceSummaries().listen(
+      (_) => emissions++,
+    );
+    await pumpEventQueue();
+    final before = emissions;
+
+    final result = await SyncPullCoordinator(
+      repository: repository,
+      cursors: DriftSyncCursorStore(database),
+      gateway: gateway,
+    ).runOnce(userId: 'user-1');
+    await pumpEventQueue();
+    await subscription.cancel();
+
+    expect(result.applied, 20);
+    expect(emissions - before, 1);
+  });
+
   test('marks equal-revision divergent content as a conflict', () async {
     final localTime = DateTime.utc(2026, 8, 31, 2);
     await repository.saveInvoice(
