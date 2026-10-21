@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/shell/finmi_actions.dart';
+import '../../../app/theme/finance_colors.dart';
 import '../../../app/theme/finmi_theme.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
@@ -192,6 +193,14 @@ class DashboardScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
+                if (snapshot.valueOrNull?.overBudgetCategories case final over?
+                    when over.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _BudgetWarningCard(
+                    overBudget: over,
+                    onTap: () => context.go('/budgets'),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 FinmiSectionLabel(
                   'Tiện ích',
@@ -616,6 +625,100 @@ class _Utility extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Cảnh báo theo từng danh mục: top 3 danh mục vượt hạn mức nhiều nhất.
+/// Danh mục chưa đặt hạn mức là không giới hạn nên không có cảnh báo tổng.
+class _BudgetWarningCard extends StatelessWidget {
+  const _BudgetWarningCard({required this.overBudget, required this.onTap});
+
+  static const _maxWarnings = 3;
+
+  final List<CategoryBudgetStatus> overBudget;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final over = context.finance.budgetOver;
+    final hiddenCount = overBudget.length - _maxWarnings;
+    return AppCard(
+      key: const ValueKey('budget-warning-card'),
+      onTap: onTap,
+      padding: const EdgeInsets.all(13),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, size: 20, color: over.color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${overBudget.length} danh mục vượt hạn mức',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: over.color,
+                  ),
+                ),
+              ),
+              Icon(
+                CupertinoIcons.chevron_right,
+                size: 16,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+          for (final item in overBudget.take(_maxWarnings)) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.categoryName,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        '${MoneyFormatter.format(item.spentMinor)} / '
+                        '${MoneyFormatter.format(item.limitMinor)}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Vượt ${MoneyFormatter.format(item.overMinor)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: over.color,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (hiddenCount > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              'và $hiddenCount mục khác vượt hạn mức',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

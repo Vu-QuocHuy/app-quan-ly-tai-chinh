@@ -53,7 +53,6 @@ class BudgetScreen extends ConsumerWidget {
               child: _BudgetSummary(
                 snapshot: dashboard,
                 categories: categories.valueOrNull ?? const [],
-                budgets: budgets.valueOrNull ?? const [],
               ),
             ),
           ),
@@ -138,7 +137,7 @@ class BudgetScreen extends ConsumerWidget {
           decoration: const InputDecoration(
             labelText: 'Hạn mức tháng',
             suffixText: '₫',
-            helperText: 'Nhập số tiền không có phần thập phân.',
+            helperText: 'Để trống hoặc nhập 0 để không giới hạn.',
           ),
         ),
         actions: [
@@ -148,7 +147,8 @@ class BudgetScreen extends ConsumerWidget {
                 final confirmed = await showConfirmDialog(
                   context,
                   title: 'Xóa hạn mức ngân sách?',
-                  message: 'Hạn mức cho danh mục “${category.name}” sẽ bị xóa.',
+                  message:
+                      'Danh mục “${category.name}” sẽ trở về không giới hạn.',
                   confirmLabel: 'Xóa hạn mức',
                   destructive: true,
                 );
@@ -173,9 +173,18 @@ class BudgetScreen extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () {
+              if (inputValue.trim().isEmpty) {
+                Navigator.pop(context, const _BudgetDialogResult.delete());
+                return;
+              }
               final parsed = MoneyFormatter.tryParse(inputValue);
               if (parsed == null || parsed < 0) return;
-              Navigator.pop(context, _BudgetDialogResult.value(parsed));
+              Navigator.pop(
+                context,
+                parsed == 0
+                    ? const _BudgetDialogResult.delete()
+                    : _BudgetDialogResult.value(parsed),
+              );
             },
             child: const Text('Lưu'),
           ),
@@ -183,8 +192,10 @@ class BudgetScreen extends ConsumerWidget {
       ),
     );
     if (result == null) return;
-    if (result.delete && current != null) {
-      await ref.read(invoiceRepositoryProvider).deleteBudget(current.id);
+    if (result.delete) {
+      if (current != null) {
+        await ref.read(invoiceRepositoryProvider).deleteBudget(current.id);
+      }
       return;
     }
     final value = result.value;
@@ -227,9 +238,12 @@ class _BudgetTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final finance = context.finance;
+    // Danh mục chưa đặt hạn mức (hoặc hạn mức 0) mặc định là không giới hạn.
     final limit = budget?.limitMinor ?? 0;
-    final ratio = limit <= 0 ? 0.0 : spentMinor / limit;
-    final progressColor = ratio >= 1
+    final unlimited = limit <= 0;
+    final ratio = unlimited ? 0.0 : spentMinor / limit;
+    final isOver = !unlimited && spentMinor > limit;
+    final progressColor = isOver
         ? finance.budgetOver.color
         : ratio >= 0.8
         ? finance.budgetWarn.color
@@ -247,20 +261,35 @@ class _BudgetTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  category.name,
-                  style: Theme.of(context).textTheme.titleSmall,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        category.name,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ),
+                    if (isOver)
+                      Tooltip(
+                        message: 'Vượt hạn mức',
+                        child: Icon(
+                          Icons.warning_amber_rounded,
+                          size: 18,
+                          color: finance.budgetOver.color,
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  budget == null
-                      ? 'Chưa đặt hạn mức · Đã chi ${MoneyFormatter.format(spentMinor)}'
+                  unlimited
+                      ? 'Không giới hạn · Đã chi ${MoneyFormatter.format(spentMinor)}'
                       : 'Hạn mức: ${MoneyFormatter.format(limit)} · Đã chi ${MoneyFormatter.format(spentMinor)} (${(ratio * 100).round()}%)',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
-                if (budget != null) ...[
+                if (!unlimited) ...[
                   const SizedBox(height: 8),
                   LinearProgressIndicator(
                     value: ratio.clamp(0, 1),
@@ -270,13 +299,14 @@ class _BudgetTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    remaining >= 0
-                        ? 'Còn lại ${MoneyFormatter.format(remaining)}'
-                        : 'Vượt ${MoneyFormatter.format(-remaining)}',
+                    isOver
+                        ? 'Vượt hạn mức ${MoneyFormatter.format(-remaining)}'
+                        : 'Còn lại ${MoneyFormatter.format(remaining)}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: remaining < 0
+                      color: isOver
                           ? finance.budgetOver.color
                           : scheme.onSurfaceVariant,
+                      fontWeight: isOver ? FontWeight.w600 : null,
                     ),
                   ),
                 ],
@@ -295,15 +325,10 @@ class _BudgetTile extends StatelessWidget {
 }
 
 class _BudgetSummary extends StatefulWidget {
-  const _BudgetSummary({
-    required this.snapshot,
-    required this.categories,
-    required this.budgets,
-  });
+  const _BudgetSummary({required this.snapshot, required this.categories});
 
   final AsyncValue<DashboardSnapshot> snapshot;
   final List<CategoryEntity> categories;
-  final List<BudgetEntity> budgets;
 
   @override
   State<_BudgetSummary> createState() => _BudgetSummaryState();
@@ -338,10 +363,9 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
               ),
             ],
           ),
+          // Không cảnh báo theo tổng; chỉ liệt kê danh mục vượt hạn mức riêng.
           data: (data) {
-            final hasBudget = data.budgetLimitMinor > 0;
-            final remaining = data.budgetLimitMinor - data.totalMinor;
-            final isOver = hasBudget && remaining < 0;
+            final overBudget = data.overBudgetCategories;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -369,32 +393,19 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
                 MoneyText(
                   data.totalMinor,
                   emphasis: MoneyEmphasis.title,
-                  tone: isOver
-                      ? context.finance.budgetOver
-                      : context.finance.expense,
+                  tone: context.finance.expense,
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  hasBudget
-                      ? 'Hạn mức: ${MoneyFormatter.format(data.budgetLimitMinor)} · Đã dùng ${(data.totalMinor / data.budgetLimitMinor * 100).round()}% · ${isOver ? 'Vượt' : 'Còn lại'} ${MoneyFormatter.format(remaining.abs())}'
-                      : 'Chưa đặt tổng hạn mức cho tháng này',
+                  overBudget.isEmpty
+                      ? 'Danh mục chưa đặt hạn mức được tính là không giới hạn.'
+                      : '${overBudget.length} danh mục vượt hạn mức',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: isOver ? scheme.error : scheme.onSurfaceVariant,
+                    color: overBudget.isEmpty
+                        ? scheme.onSurfaceVariant
+                        : context.finance.budgetOver.color,
                   ),
                 ),
-                if (hasBudget) ...[
-                  const SizedBox(height: 12),
-                  LinearProgressIndicator(
-                    value: (data.totalMinor / data.budgetLimitMinor).clamp(
-                      0,
-                      1,
-                    ),
-                    minHeight: 6,
-                    color: isOver ? scheme.error : scheme.primary,
-                    backgroundColor: scheme.surfaceContainerHighest,
-                    semanticsLabel: isOver ? 'Vượt hạn mức' : 'Trong hạn mức',
-                  ),
-                ],
                 if (_expanded) ...[
                   const Divider(height: 24),
                   Text(
@@ -402,15 +413,9 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
-                  if (!widget.budgets.any(
-                    (b) =>
-                        (data.categoryTotals[b.categoryId] ?? 0) > b.limitMinor,
-                  ))
+                  if (overBudget.isEmpty)
                     const Text('Chưa có danh mục nào vượt hạn mức.'),
-                  for (final budget in widget.budgets.where(
-                    (b) =>
-                        (data.categoryTotals[b.categoryId] ?? 0) > b.limitMinor,
-                  ))
+                  for (final item in overBudget)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Row(
@@ -418,7 +423,7 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
                         children: [
                           CategoryAvatar(
                             category: widget.categories
-                                .where((c) => c.id == budget.categoryId)
+                                .where((c) => c.id == item.categoryId)
                                 .firstOrNull,
                             radius: 16,
                           ),
@@ -427,17 +432,9 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                Text(item.categoryName),
                                 Text(
-                                  widget.categories
-                                          .where(
-                                            (c) => c.id == budget.categoryId,
-                                          )
-                                          .firstOrNull
-                                          ?.name ??
-                                      'Khác',
-                                ),
-                                Text(
-                                  'Vượt ${MoneyFormatter.format((data.categoryTotals[budget.categoryId] ?? 0) - budget.limitMinor)}',
+                                  'Vượt ${MoneyFormatter.format(item.overMinor)}',
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(color: scheme.error),
                                 ),
