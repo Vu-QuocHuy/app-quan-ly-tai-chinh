@@ -57,11 +57,15 @@ class GroupExpenseSplit {
     required this.userId,
     required this.amountMinor,
     this.settledAt,
+    this.participantName,
   });
 
   final String? userId;
   final int amountMinor;
   final DateTime? settledAt;
+
+  /// Tên người ngoài nhóm vào bill qua QR; `null` với thành viên nhóm.
+  final String? participantName;
 
   bool get isSettled => settledAt != null;
 }
@@ -77,6 +81,9 @@ class GroupExpense {
     required this.splits,
     this.sourceInvoiceId,
     this.sourceSnapshot,
+    this.splitMode = 'custom',
+    this.joinOpen = false,
+    this.joinCode,
   });
 
   final String id;
@@ -88,6 +95,11 @@ class GroupExpense {
   final List<GroupExpenseSplit> splits;
   final String? sourceInvoiceId;
   final Map<String, dynamic>? sourceSnapshot;
+
+  /// `'equal'`: tự chia đều lại khi có người vào/rời bill; `'custom'`: thủ công.
+  final String splitMode;
+  final bool joinOpen;
+  final String? joinCode;
 
   bool get isSharedInvoice => sourceInvoiceId != null;
 }

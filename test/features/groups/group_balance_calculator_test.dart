@@ -78,4 +78,91 @@ void main() {
       isEmpty,
     );
   });
+
+  test('phần của người ngoài nhóm không vào số dư thành viên', () {
+    for (final settled in [null, DateTime(2026, 10, 21)]) {
+      final balances = GroupBalanceCalculator.calculate(
+        memberIds: const ['payer', 'member'],
+        expenses: [
+          GroupExpense(
+            id: 'expense-1',
+            groupId: 'group-1',
+            payerId: 'payer',
+            description: 'Ăn tối',
+            totalMinor: 300000,
+            createdAt: DateTime(2026, 10, 21),
+            splitMode: 'equal',
+            splits: [
+              const GroupExpenseSplit(userId: 'payer', amountMinor: 100000),
+              const GroupExpenseSplit(userId: 'member', amountMinor: 100000),
+              GroupExpenseSplit(
+                userId: 'guest',
+                amountMinor: 100000,
+                settledAt: settled,
+                participantName: 'Dũng',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      expect(balances, {'payer': 100000, 'member': -100000});
+    }
+  });
+
+  test('gợi ý tất toán chỉ giữa thành viên nhóm', () {
+    final balances = GroupBalanceCalculator.calculate(
+      memberIds: const ['payer', 'member'],
+      expenses: [
+        GroupExpense(
+          id: 'expense-1',
+          groupId: 'group-1',
+          payerId: 'payer',
+          description: 'Ăn tối',
+          totalMinor: 300000,
+          createdAt: DateTime(2026, 10, 21),
+          splits: const [
+            GroupExpenseSplit(userId: 'member', amountMinor: 100000),
+            GroupExpenseSplit(userId: 'guest-1', amountMinor: 100000),
+            GroupExpenseSplit(userId: 'guest-2', amountMinor: 100000),
+          ],
+        ),
+      ],
+    );
+    final transfers = GroupBalanceCalculator.calculateSettlementTransfers(
+      balances,
+    );
+
+    expect(
+      transfers
+          .map(
+            (transfer) =>
+                '${transfer.fromUserId}->${transfer.toUserId}:${transfer.amountMinor}',
+          )
+          .toList(),
+      ['member->payer:100000'],
+    );
+  });
+
+  test('người trả không thuộc nhóm thì bỏ qua phần được nhận', () {
+    final balances = GroupBalanceCalculator.calculate(
+      memberIds: const ['member'],
+      expenses: [
+        GroupExpense(
+          id: 'expense-1',
+          groupId: 'group-1',
+          payerId: 'former-member',
+          description: 'Taxi',
+          totalMinor: 100000,
+          createdAt: DateTime(2026, 10, 21),
+          splits: const [
+            GroupExpenseSplit(userId: 'member', amountMinor: 50000),
+            GroupExpenseSplit(userId: 'former-member', amountMinor: 50000),
+          ],
+        ),
+      ],
+    );
+
+    expect(balances, {'member': -50000});
+  });
 }
