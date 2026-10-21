@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../domain/external_bill.dart';
 import '../domain/group_models.dart';
 
 class ExpenseGroupService {
@@ -8,6 +9,7 @@ class ExpenseGroupService {
     caseSensitive: false,
   );
   static const _maxSafeInteger = 9007199254740991;
+  static final _billCodePattern = RegExp(r'^[0-9A-F]{10}$');
 
   const ExpenseGroupService(this._client);
 
@@ -149,7 +151,8 @@ class ExpenseGroupService {
           .from('group_expenses')
           .select(
             'id, group_id, payer_id, description, total_minor, created_at, '
-            'source_invoice_id, source_snapshot',
+            'source_invoice_id, source_snapshot, split_mode, join_open, '
+            'join_code',
           )
           .eq('group_id', group.id)
           .order('created_at', ascending: false),
@@ -162,7 +165,10 @@ class ExpenseGroupService {
         : _asRows(
             await _client
                 .from('group_expense_splits')
-                .select('expense_id, user_id, amount_minor, settled_at')
+                .select(
+                  'expense_id, user_id, amount_minor, settled_at, '
+                  'participant_name',
+                )
                 .inFilter('expense_id', expenseIds),
           );
     List<Map<String, dynamic>> auditRows;
@@ -252,6 +258,7 @@ class ExpenseGroupService {
                 map['settled_at'],
                 'group_expense_split.settledAt',
               ),
+              participantName: map['participant_name'] as String?,
             ),
           );
     }
@@ -353,8 +360,12 @@ class ExpenseGroupService {
     required String description,
     required int totalMinor,
     required Map<String, int> splitAmounts,
+    required String splitMode,
   }) async {
     _requiredUuid(expenseId, 'expenseId');
+    if (splitMode != 'equal' && splitMode != 'custom') {
+      throw const FormatException('Cách chia không hợp lệ.');
+    }
     _requiredString(description, 'description', 160, minLength: 2);
     if (totalMinor < 1 || totalMinor > _maxSafeInteger) {
       throw const FormatException('Tổng tiền khoản chi không hợp lệ.');
@@ -383,8 +394,72 @@ class ExpenseGroupService {
         'p_splits': splitAmounts.entries
             .map((entry) => {'user_id': entry.key, 'amount_minor': entry.value})
             .toList(growable: false),
+        'p_split_mode': splitMode,
       },
     );
+  }
+
+  /// Mở lời mời vào bill; trả mã 10 ký tự (giữ mã cũ nếu đã có).
+  Future<String> openBillInvite(String expenseId) async {
+    _requiredUuid(expenseId, 'expenseId');
+    final code = await _client.rpc(
+      'open_group_bill_invite',
+      params: {'p_expense_id': expenseId},
+    );
+    if (code is! String || !_billCodePattern.hasMatch(code)) {
+      throw const FormatException('Mã mời bill không hợp lệ.');
+    }
+    return code;
+  }
+
+  Future<void> closeBillInvite(String expenseId) async {
+    _requiredUuid(expenseId, 'expenseId');
+    await _client.rpc(
+      'close_group_bill_invite',
+      params: {'p_expense_id': expenseId},
+    );
+  }
+
+  /// Vào bill bằng mã 10 ký tự; trả `expense_id`.
+  Future<String> joinBill(String code) async {
+    final normalized = code.trim().toUpperCase();
+    if (!_billCodePattern.hasMatch(normalized)) {
+      throw const FormatException('Mã mời bill phải có 10 ký tự 0-9, A-F.');
+    }
+    final expenseId = await _client.rpc(
+      'join_group_bill',
+      params: {'p_code': normalized},
+    );
+    if (expenseId == null) throw StateError('Mã mời không hợp lệ.');
+    return _requiredUuid(expenseId, 'expenseId');
+  }
+
+  Future<void> leaveBill(String expenseId) async {
+    _requiredUuid(expenseId, 'expenseId');
+    await _client.rpc('leave_group_bill', params: {'p_expense_id': expenseId});
+  }
+
+  Future<List<ExternalBill>> listExternalBills() async {
+    final value = await _client.rpc('list_my_external_bills');
+    if (value is! List) {
+      throw const FormatException('Danh sách bill không hợp lệ.');
+    }
+    return value.map(ExternalBill.fromJson).toList(growable: false);
+  }
+
+  /// Nhóm của bill nếu người dùng là thành viên; `null` với người ngoài nhóm
+  /// (RLS không trả dòng nào).
+  Future<String?> expenseGroupIdOf(String expenseId) async {
+    _requiredUuid(expenseId, 'expenseId');
+    final rows = _asRows(
+      await _client
+          .from('group_expenses')
+          .select('group_id')
+          .eq('id', expenseId)
+          .limit(1),
+    );
+    if (rows.isEmpty) return null;
+    return _requiredUuid(rows.first['group_id'], 'group_expense.groupId');
   }
 
   Future<void> deleteExpense(String expenseId) async {
@@ -489,6 +564,14 @@ class ExpenseGroupService {
     if (splitTotal != totalMinor) {
       throw const FormatException('Tổng phần chia không khớp khoản chi.');
     }
+    final splitMode = map['split_mode'];
+    if (splitMode != 'equal' && splitMode != 'custom') {
+      throw const FormatException('group_expense.splitMode không hợp lệ.');
+    }
+    final joinOpen = map['join_open'];
+    if (joinOpen is! bool) {
+      throw const FormatException('group_expense.joinOpen không hợp lệ.');
+    }
     return GroupExpense(
       id: expenseId,
       groupId: rowGroupId,
@@ -510,6 +593,9 @@ class ExpenseGroupService {
         map['source_snapshot'],
         'group_expense.sourceSnapshot',
       ),
+      splitMode: splitMode as String,
+      joinOpen: joinOpen,
+      joinCode: map['join_code'] as String?,
     );
   }
 

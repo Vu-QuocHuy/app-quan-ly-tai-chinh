@@ -20,6 +20,8 @@ import '../data/group_service.dart';
 import '../domain/group_balance_calculator.dart';
 import '../domain/group_models.dart';
 import '../domain/invite_link.dart';
+import 'bill_invite_qr_sheet.dart';
+import 'external_bills_section.dart';
 import 'group_expense_dialog.dart';
 import 'group_invite_qr_sheet.dart';
 import 'group_split_dialog.dart';
@@ -32,6 +34,7 @@ class GroupScreen extends ConsumerStatefulWidget {
 }
 
 class _GroupScreenState extends ConsumerState<GroupScreen> {
+  final _externalBillsKey = GlobalKey();
   bool _busy = false;
 
   @override
@@ -62,6 +65,10 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
             ),
             if (service != null)
               const SliverToBoxAdapter(child: _DirectShareInbox()),
+            if (service != null)
+              SliverToBoxAdapter(
+                child: ExternalBillsSection(key: _externalBillsKey),
+              ),
             if (service == null)
               const SliverFillRemaining(
                 hasScrollBody: false,
@@ -215,33 +222,51 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       ),
     );
     if (method == null || !mounted) return;
-    final String? code;
+    final InviteLink? link;
     switch (method) {
       case _JoinMethod.scan:
         final raw = await Navigator.of(context).push<String>(
           MaterialPageRoute(
             builder: (_) => QrScanScreen(
-              title: 'Quét mã mời nhóm',
-              validate: (raw) => InviteLink.parse(raw) is GroupInviteLink
-                  ? null
-                  : 'Mã QR này không phải mã mời nhóm.',
+              title: 'Quét mã mời',
+              validate: (raw) => InviteLink.parse(raw) == null
+                  ? 'Mã QR này không phải mã mời nhóm hoặc bill.'
+                  : null,
             ),
           ),
         );
-        code = switch (raw == null ? null : InviteLink.parse(raw)) {
-          GroupInviteLink(code: final value) => value,
-          _ => null,
-        };
+        link = raw == null ? null : InviteLink.parse(raw);
       case _JoinMethod.type:
-        code = await _askText(
-          title: 'Tham gia nhóm',
+        final text = await _askText(
+          title: 'Tham gia nhóm hoặc bill',
           label: 'Mã mời',
-          hint: 'Nhập mã 8 ký tự',
+          hint: 'Mã nhóm 8 ký tự hoặc mã bill 10 ký tự',
           confirmLabel: 'Tham gia',
         );
+        if (text == null) return;
+        link = InviteLink.parse(text);
+        if (link == null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Mã mời phải có 8 ký tự (nhóm) hoặc 10 ký tự (bill), '
+                'gồm 0-9 và A-F.',
+              ),
+            ),
+          );
+        }
     }
-    if (code == null) return;
-    final inviteCode = code;
+    switch (link) {
+      case GroupInviteLink(:final code):
+        await _joinGroupByCode(code);
+      case BillInviteLink(:final code):
+        await _joinBill(code);
+      case null:
+        return;
+    }
+  }
+
+  Future<void> _joinGroupByCode(String inviteCode) async {
     ExpenseGroup? joinedGroup;
     await _runGroupAction(() async {
       joinedGroup = await ref
@@ -253,12 +278,48 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     await context.push('/groups/${group.id}');
   }
 
+  /// Vào bill: thành viên nhóm thì mở màn nhóm, người ngoài thì cuộn tới
+  /// mục "Bill bạn tham gia".
+  Future<void> _joinBill(String code) async {
+    var joined = false;
+    String? groupId;
+    await _runGroupAction(() async {
+      final service = ref.read(expenseGroupServiceProvider)!;
+      final expenseId = await service.joinBill(code);
+      groupId = await service.expenseGroupIdOf(expenseId);
+      joined = true;
+    });
+    if (!joined || !mounted) return;
+    ref.invalidate(externalBillsProvider);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Đã vào bill')));
+    final id = groupId;
+    if (id != null) {
+      await context.push('/groups/$id');
+      return;
+    }
+    try {
+      await ref.read(externalBillsProvider.future);
+    } on Object catch (_) {
+      // Lỗi tải đã hiện ngay trong mục "Bill bạn tham gia".
+    }
+    final section = _externalBillsKey.currentContext;
+    if (section == null || !section.mounted) return;
+    await Scrollable.ensureVisible(
+      section,
+      duration: const Duration(milliseconds: 300),
+    );
+  }
+
   Future<String?> _askText({
     required String title,
     required String label,
     required String hint,
     required String confirmLabel,
   }) {
+    // Không dispose khi dialog trả kết quả: TextField còn dùng controller
+    // trong animation đóng dialog. Controller không còn ai giữ sẽ được GC thu.
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
@@ -291,7 +352,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           ),
         ],
       ),
-    ).whenComplete(controller.dispose);
+    );
   }
 
   Future<void> _runGroupAction(Future<void> Function() action) async {
@@ -312,11 +373,16 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
 
   Future<void> _refresh() async {
     ref.invalidate(directBillSharesProvider);
+    ref.invalidate(externalBillsProvider);
+    ref.invalidate(expenseGroupsProvider);
     try {
-      ref.invalidate(expenseGroupsProvider);
-      await ref.read(expenseGroupsProvider.future);
+      await Future.wait([
+        ref.read(expenseGroupsProvider.future),
+        ref.read(externalBillsProvider.future),
+      ]);
     } on Object {
-      // Lỗi đã được hiển thị qua trạng thái lỗi của danh sách nhóm.
+      // Lỗi đã được hiển thị qua trạng thái lỗi của danh sách nhóm và mục
+      // "Bill bạn tham gia".
     }
   }
 }
@@ -332,6 +398,8 @@ class GroupDetailScreen extends ConsumerStatefulWidget {
 
 class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   bool _busy = false;
+  bool _showAllMembers = false;
+  bool _showAllExpenses = false;
 
   @override
   Widget build(BuildContext context) {
@@ -351,6 +419,23 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
             onPressed: _refresh,
             icon: const Icon(Icons.refresh),
           ),
+          if (details.asData?.value case final groupDetails?)
+            if (groupDetails.group.ownerId == service?.currentUserId ||
+                groupDetails.members.length == 1)
+              PopupMenuButton<String>(
+                tooltip: 'Tùy chọn nhóm',
+                onSelected: (_) => _leaveGroup(groupDetails),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'leave',
+                    child: Text(
+                      groupDetails.group.ownerId == service?.currentUserId
+                          ? 'Xóa nhóm'
+                          : 'Rời nhóm',
+                    ),
+                  ),
+                ],
+              ),
         ],
       ),
       body: Column(
@@ -407,6 +492,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                         ),
                         onSplitMoney: () => _splitMoney(groupDetails),
                         onSettle: _settleShare,
+                        onShowBillQr: _showBillQr,
                         onEditExpense: (expense) =>
                             _editExpense(groupDetails, expense),
                         onDeleteExpense: _deleteExpense,
@@ -417,7 +503,13 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           userId,
                           displayName,
                         ),
-                        onLeaveGroup: () => _leaveGroup(groupDetails),
+                        showAllMembers: _showAllMembers,
+                        onToggleMembers: () =>
+                            setState(() => _showAllMembers = !_showAllMembers),
+                        showAllExpenses: _showAllExpenses,
+                        onToggleExpenses: () => setState(
+                          () => _showAllExpenses = !_showAllExpenses,
+                        ),
                       ),
                     ],
                   ),
@@ -463,11 +555,44 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     });
   }
 
+  Future<void> _showBillQr(GroupExpense expense) async {
+    String? code;
+    await _runGroupAction(() async {
+      code = await ref
+          .read(expenseGroupServiceProvider)!
+          .openBillInvite(expense.id);
+    });
+    final joinCode = code;
+    if (joinCode == null || !mounted) return;
+    await showBillInviteQrSheet(
+      context,
+      description: expense.description,
+      joinCode: joinCode,
+      onCloseInvite: () => _runGroupAction(() async {
+        await ref
+            .read(expenseGroupServiceProvider)!
+            .closeBillInvite(expense.id);
+      }),
+    );
+  }
+
   Future<void> _editExpense(GroupDetails details, GroupExpense expense) async {
+    final memberIds = {for (final member in details.members) member.userId};
+    final members = [
+      ...details.members,
+      // Người ngoài nhóm đã vào bill: hiện trong dialog để sửa không xóa họ.
+      for (final split in expense.splits)
+        if (split.userId != null && !memberIds.contains(split.userId))
+          GroupMember(
+            userId: split.userId!,
+            displayName: '${split.participantName ?? 'Thành viên'} (Khách)',
+            role: 'member',
+          ),
+    ];
     final draft = await showDialog<GroupExpenseDraft>(
       context: context,
       builder: (context) =>
-          GroupExpenseDialog(members: details.members, initialExpense: expense),
+          GroupExpenseDialog(members: members, initialExpense: expense),
     );
     if (draft == null || !mounted) return;
     await _runGroupAction(() async {
@@ -478,6 +603,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
             description: draft.description,
             totalMinor: draft.totalMinor,
             splitAmounts: draft.splitAmounts!,
+            splitMode: draft.equalSplit ? 'equal' : 'custom',
           );
     });
   }
@@ -624,11 +750,15 @@ class _GroupDetails extends StatelessWidget {
     required this.onShowInviteQr,
     required this.onSplitMoney,
     required this.onSettle,
+    required this.onShowBillQr,
     required this.onEditExpense,
     required this.onDeleteExpense,
     required this.onSetMemberRole,
     required this.onRemoveMember,
-    required this.onLeaveGroup,
+    required this.showAllMembers,
+    required this.onToggleMembers,
+    required this.showAllExpenses,
+    required this.onToggleExpenses,
   });
 
   final GroupDetails details;
@@ -637,16 +767,25 @@ class _GroupDetails extends StatelessWidget {
   final VoidCallback onShowInviteQr;
   final VoidCallback onSplitMoney;
   final Future<void> Function(String expenseId) onSettle;
+  final Future<void> Function(GroupExpense expense) onShowBillQr;
   final Future<void> Function(GroupExpense expense) onEditExpense;
   final Future<void> Function(GroupExpense expense) onDeleteExpense;
   final Future<void> Function(String userId, String role) onSetMemberRole;
   final Future<void> Function(String userId, String displayName) onRemoveMember;
-  final VoidCallback onLeaveGroup;
+  final bool showAllMembers;
+  final VoidCallback onToggleMembers;
+  final bool showAllExpenses;
+  final VoidCallback onToggleExpenses;
 
   @override
   Widget build(BuildContext context) {
     final names = {
-      for (final member in details.members) member.userId: member.displayName,
+      // Tên người ngoài nhóm trong bill, để nhật ký không hiện "Tài khoản đã xóa".
+      for (final expense in details.expenses)
+        for (final split in expense.splits)
+          if (split.userId != null && split.participantName != null)
+            split.userId!: split.participantName!,
+      for (final member in details.members) member.userId: _memberName(member),
     };
     final balances = _balances();
     final transfers = GroupBalanceCalculator.calculateSettlementTransfers(
@@ -655,107 +794,164 @@ class _GroupDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.account_balance_wallet_outlined),
-            title: const Text('Quỹ chung', maxLines: 3),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/groups/${details.group.id}/fund'),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    context.push('/groups/${details.group.id}/fund'),
+                icon: const Icon(Icons.account_balance_wallet_outlined),
+                label: const Text('Quỹ chung'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: busy ? null : onSplitMoney,
+                icon: const Icon(Icons.call_split_outlined),
+                label: const Text('Chia tiền'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+            ),
+          ],
         ),
+        const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: onShowInviteQr,
-                    icon: const Icon(Icons.qr_code_2),
-                    label: const Text('QR mời vào nhóm'),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Thành viên (${details.members.length})',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton.filledTonal(
+                      tooltip: 'Mời thành viên bằng QR',
+                      onPressed: onShowInviteQr,
+                      icon: const Icon(Icons.qr_code_2),
+                    ),
+                  ],
                 ),
-                const Divider(),
-                Text(
-                  'Thành viên (${details.members.length})',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                for (final member in details.members)
+                const SizedBox(height: 8),
+                for (final member
+                    in details.members
+                        .take(showAllMembers ? details.members.length : 4)
+                        .toList()
+                        .asMap()
+                        .entries) ...[
+                  if (member.key > 0) const Divider(indent: 48, height: 1),
                   _MemberTile(
-                    member: member,
+                    member: member.value,
                     currentUserId: currentUserId,
                     isGroupOwner: details.group.ownerId == currentUserId,
-                    balanceLabel: _balanceLabel(balances[member.userId] ?? 0),
+                    balanceLabel: _balanceLabel(
+                      balances[member.value.userId] ?? 0,
+                    ),
                     onSetRole: onSetMemberRole,
                     onRemove: onRemoveMember,
+                  ),
+                ],
+                if (details.members.length > 4)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: onToggleMembers,
+                      child: Text(
+                        showAllMembers
+                            ? 'Thu gọn thành viên'
+                            : 'Xem tất cả ${details.members.length} thành viên',
+                      ),
+                    ),
                   ),
               ],
             ),
           ),
         ),
         if (transfers.isNotEmpty)
-          _SettlementSuggestions(transfers: transfers, names: names),
-        if (details.group.ownerId != currentUserId ||
-            details.members.length == 1)
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              onPressed: onLeaveGroup,
-              icon: Icon(
-                details.group.ownerId == currentUserId
-                    ? Icons.delete_outline
-                    : Icons.logout_outlined,
-              ),
-              label: Text(
-                details.group.ownerId == currentUserId
-                    ? 'Xóa nhóm'
-                    : 'Rời nhóm',
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: _SettlementSuggestions(transfers: transfers, names: names),
+          ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Chia tiền (${details.expenses.length})',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
-          ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: busy ? null : onSplitMoney,
-          icon: const Icon(Icons.call_split_outlined),
-          label: const Text('Chia tiền'),
+            if (details.expenses.length > 3)
+              TextButton(
+                onPressed: onToggleExpenses,
+                child: Text(
+                  showAllExpenses
+                      ? 'Thu gọn'
+                      : 'Xem tất cả (${details.expenses.length})',
+                ),
+              ),
+          ],
         ),
-        const SizedBox(height: 20),
-        Text('Chia tiền', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         if (details.expenses.isEmpty)
           const Text('Chưa có lần chia tiền nào trong nhóm.'),
-        for (final expense in details.expenses)
-          _ExpenseCard(
-            expense: expense,
-            names: names,
-            currentUserId: currentUserId,
-            onSettle: onSettle,
-            canManage:
-                expense.payerId == currentUserId ||
-                details.group.ownerId == currentUserId,
-            onEdit: () => onEditExpense(expense),
-            onDelete: () => onDeleteExpense(expense),
+        for (final expense in details.expenses.take(
+          showAllExpenses ? details.expenses.length : 3,
+        ))
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _ExpenseCard(
+              expense: expense,
+              names: names,
+              memberIds: {for (final m in details.members) m.userId},
+              currentUserId: currentUserId,
+              onSettle: onSettle,
+              canManage:
+                  expense.payerId == currentUserId ||
+                  details.group.ownerId == currentUserId,
+              onShowBillQr: () => onShowBillQr(expense),
+              onEdit: () => onEditExpense(expense),
+              onDelete: () => onDeleteExpense(expense),
+            ),
           ),
         if (details.auditEvents.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          Text(
-            'Lịch sử hoạt động',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          for (final event in details.auditEvents)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
+          const SizedBox(height: 12),
+          Card(
+            child: ExpansionTile(
               leading: const Icon(Icons.history_outlined),
-              title: Text(_auditLabel(event, names)),
-              subtitle: Text(_formatAuditDate(event.createdAt)),
+              title: Text('Lịch sử hoạt động (${details.auditEvents.length})'),
+              children: [
+                for (final event in details.auditEvents)
+                  ListTile(
+                    dense: true,
+                    title: Text(_auditLabel(event, names)),
+                    subtitle: Text(_formatAuditDate(event.createdAt)),
+                  ),
+              ],
             ),
+          ),
         ],
       ],
     );
+  }
+
+  String _memberName(GroupMember member) => _hasMemberName(member.displayName)
+      ? member.displayName.trim()
+      : 'Chưa đặt tên';
+
+  bool _hasMemberName(String value) {
+    final name = value.trim().toLowerCase();
+    return name.isNotEmpty && name != 'thành viên' && name != 'chủ nhóm';
   }
 
   String _auditLabel(GroupAuditEvent event, Map<String, String> names) {
@@ -771,8 +967,26 @@ class _GroupDetails extends StatelessWidget {
       'expense_updated' => '$actor đã sửa khoản chi',
       'expense_deleted' => '$actor đã xóa khoản chi',
       'expense_settled' => '$actor đã xác nhận phần chia',
+      'bill_joined' => _billAuditLabel(event, names, 'đã vào'),
+      'bill_left' => _billAuditLabel(event, names, 'đã rời'),
       _ => 'Có hoạt động mới trong nhóm',
     };
+  }
+
+  String _billAuditLabel(
+    GroupAuditEvent event,
+    Map<String, String> names,
+    String action,
+  ) {
+    // Người ngoài đã rời bill thì không còn tên trong split.
+    final who = names[event.actorId] ?? 'Khách';
+    final description = details.expenses
+        .where((expense) => expense.id == event.expenseId)
+        .firstOrNull
+        ?.description;
+    return description == null
+        ? '$who $action bill'
+        : '$who $action bill “$description”';
   }
 
   String _formatAuditDate(DateTime value) {
@@ -1156,14 +1370,14 @@ class _MemberTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canManage = isGroupOwner && member.userId != currentUserId;
+    final hasName = _hasMemberName(member.displayName);
+    final displayName = hasName ? member.displayName.trim() : 'Chưa đặt tên';
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      dense: true,
+      minVerticalPadding: 10,
       leading: const Icon(Icons.person_outline),
       title: Text(
-        member.userId == currentUserId
-            ? '${member.displayName} (Bạn)'
-            : member.displayName,
+        member.userId == currentUserId ? '$displayName (Bạn)' : displayName,
       ),
       subtitle: Text(
         [
@@ -1174,7 +1388,16 @@ class _MemberTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(balanceLabel),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 132),
+            child: Text(
+              balanceLabel,
+              textAlign: TextAlign.end,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
           if (canManage)
             PopupMenuButton<String>(
               tooltip: 'Quản lý thành viên',
@@ -1204,24 +1427,33 @@ class _MemberTile extends StatelessWidget {
       ),
     );
   }
+
+  bool _hasMemberName(String value) {
+    final name = value.trim().toLowerCase();
+    return name.isNotEmpty && name != 'thành viên' && name != 'chủ nhóm';
+  }
 }
 
 class _ExpenseCard extends StatelessWidget {
   const _ExpenseCard({
     required this.expense,
     required this.names,
+    required this.memberIds,
     required this.currentUserId,
     required this.onSettle,
     required this.canManage,
+    required this.onShowBillQr,
     required this.onEdit,
     required this.onDelete,
   });
 
   final GroupExpense expense;
   final Map<String, String> names;
+  final Set<String> memberIds;
   final String currentUserId;
   final Future<void> Function(String expenseId) onSettle;
   final bool canManage;
+  final Future<void> Function() onShowBillQr;
   final Future<void> Function() onEdit;
   final Future<void> Function() onDelete;
 
@@ -1233,6 +1465,7 @@ class _ExpenseCard extends StatelessWidget {
     final canSettle =
         myShare != null &&
         !myShare.isSettled &&
+        myShare.amountMinor > 0 &&
         expense.payerId != currentUserId;
     final hasSettlement = expense.splits.any((split) => split.isSettled);
     return Card(
@@ -1257,13 +1490,22 @@ class _ExpenseCard extends StatelessWidget {
                   PopupMenuButton<String>(
                     tooltip: 'Quản lý khoản chi',
                     onSelected: (value) {
-                      if (value == 'edit') {
+                      if (value == 'invite') {
+                        onShowBillQr();
+                      } else if (value == 'edit') {
                         onEdit();
                       } else {
                         onDelete();
                       }
                     },
                     itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'invite',
+                        child: ListTile(
+                          leading: Icon(Icons.qr_code_2),
+                          title: Text('QR mời vào bill', maxLines: 3),
+                        ),
+                      ),
                       PopupMenuItem(
                         value: 'edit',
                         child: ListTile(
@@ -1295,26 +1537,45 @@ class _ExpenseCard extends StatelessWidget {
                   ],
                 ),
               ),
-            if (hasSettlement)
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text(
-                  'Đã có thanh toán: không thể sửa hoặc xóa. Hãy tạo khoản điều chỉnh mới nếu cần.',
+            if (expense.splits.isNotEmpty) ...[
+              const Divider(height: 20),
+              for (var index = 0; index < expense.splits.length; index++) ...[
+                if (index > 0) const Divider(height: 16, indent: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _splitName(expense.splits[index]),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (expense.splits[index].userId != null &&
+                                expense.splits[index].participantName != null &&
+                                !memberIds.contains(
+                                  expense.splits[index].userId,
+                                ))
+                              Text(
+                                'Khách',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '${MoneyFormatter.format(expense.splits[index].amountMinor)}${expense.splits[index].isSettled ? ' · Đã trả' : ''}',
+                        textAlign: TextAlign.end,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            for (final split in expense.splits)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: Text(
-                  split.userId == null
-                      ? 'Tài khoản đã xóa'
-                      : names[split.userId!] ?? 'Thành viên',
-                ),
-                trailing: Text(
-                  '${MoneyFormatter.format(split.amountMinor)}${split.isSettled ? ' · Đã trả' : ''}',
-                ),
-              ),
+              ],
+            ],
             if (canSettle)
               Align(
                 alignment: Alignment.centerRight,
@@ -1328,6 +1589,11 @@ class _ExpenseCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _splitName(GroupExpenseSplit split) {
+    if (split.userId == null) return 'Tài khoản đã xóa';
+    return names[split.userId!] ?? split.participantName ?? 'Chưa đặt tên';
   }
 }
 

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hoadon_insight/core/providers/app_providers.dart';
 import 'package:hoadon_insight/features/groups/data/group_service.dart';
+import 'package:hoadon_insight/features/groups/domain/external_bill.dart';
 import 'package:hoadon_insight/features/groups/domain/group_models.dart';
 import 'package:hoadon_insight/features/groups/presentation/group_screen.dart';
 
@@ -76,7 +77,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.arrow_back), findsOneWidget);
-    expect(find.text('QR mời vào nhóm'), findsOneWidget);
+    expect(find.byTooltip('Mời thành viên bằng QR'), findsOneWidget);
     expect(find.text('Chủ nhóm · 0912345678'), findsOneWidget);
     expect(find.text('Nhóm của tôi'), findsNothing);
 
@@ -149,17 +150,19 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(service.listCalls, 1);
+    final externalBefore = service.externalBillCalls;
 
     await tester.fling(find.text('Nhóm của tôi'), const Offset(0, 400), 1000);
     await tester.pumpAndSettle();
     expect(service.listCalls, 2);
+    expect(service.externalBillCalls, greaterThan(externalBefore));
 
     await tester.tap(find.text('Chuyến đi Đà Lạt'));
     await tester.pumpAndSettle();
     final detailsBefore = service.detailCalls;
 
     await tester.fling(
-      find.text('QR mời vào nhóm'),
+      find.byTooltip('Mời thành viên bằng QR'),
       const Offset(0, 400),
       1000,
     );
@@ -175,6 +178,7 @@ class _FakeExpenseGroupService implements ExpenseGroupService {
   final GroupDetails details;
   int listCalls = 0;
   int detailCalls = 0;
+  int externalBillCalls = 0;
 
   @override
   String get currentUserId => 'user-1';
@@ -189,6 +193,12 @@ class _FakeExpenseGroupService implements ExpenseGroupService {
   Future<GroupDetails> loadDetails(ExpenseGroup group) async {
     detailCalls++;
     return details;
+  }
+
+  @override
+  Future<List<ExternalBill>> listExternalBills() async {
+    externalBillCalls++;
+    return const [];
   }
 
   @override

@@ -38,7 +38,7 @@ class _MonthPickerSheetState extends State<_MonthPickerSheet> {
     final now = DateTime.now();
 
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.gutter,
           0,

@@ -22,16 +22,22 @@ abstract final class GroupBalanceCalculator {
     final result = {for (final memberId in memberIds) memberId: 0};
     for (final expense in expenses) {
       final payerId = expense.payerId;
-      if (payerId != null) {
-        result[payerId] = (result[payerId] ?? 0) + expense.totalMinor;
+      // Người trả không còn trong nhóm thì bỏ qua phần được nhận.
+      final payerCounted = payerId != null && result.containsKey(payerId);
+      if (payerCounted) {
+        result[payerId] = result[payerId]! + expense.totalMinor;
       }
       for (final split in expense.splits) {
         final userId = split.userId;
         if (userId == null) continue;
-        if (split.isSettled && payerId != null && userId != payerId) {
-          result[payerId] = (result[payerId] ?? 0) - split.amountMinor;
-        } else {
-          result[userId] = (result[userId] ?? 0) - split.amountMinor;
+        final paidPayer =
+            split.isSettled && payerId != null && userId != payerId;
+        if (!paidPayer && result.containsKey(userId)) {
+          result[userId] = result[userId]! - split.amountMinor;
+        } else if (payerCounted) {
+          // Phần đã trả, hoặc phần của người ngoài nhóm: nợ của người ngoài
+          // chỉ hiện trong bill, không vào số dư của nhóm.
+          result[payerId] = result[payerId]! - split.amountMinor;
         }
       }
     }

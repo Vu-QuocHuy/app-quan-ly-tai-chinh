@@ -17,12 +17,16 @@ class GroupExpenseDraft {
     required this.totalMinor,
     required this.memberIds,
     this.splitAmounts,
+    this.equalSplit = false,
   });
 
   final String description;
   final int totalMinor;
   final List<String> memberIds;
   final Map<String, int>? splitAmounts;
+
+  /// `true` khi người dùng chọn "Đều"; màn nhóm gửi `splitMode: 'equal'`.
+  final bool equalSplit;
 }
 
 /// Biểu mẫu một lần chia tiền: nội dung, tổng tiền, thành viên, cách chia.
@@ -82,7 +86,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
               .map((split) => split.userId)
               .whereType<String>()
               .toSet();
-    _customMode = initial == null ? null : GroupSplitMode.exact;
+    _customMode = _initialMode;
     if (initial != null) {
       for (final split in initial.splits) {
         final userId = split.userId;
@@ -93,6 +97,13 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
         }
       }
     }
+  }
+
+  /// Tạo mới và bill chia đều mở ở "Đều"; bill thủ công mở ở "Số tiền".
+  GroupSplitMode? get _initialMode {
+    final initial = widget.initialExpense;
+    if (initial == null || initial.splitMode == 'equal') return null;
+    return GroupSplitMode.exact;
   }
 
   @override
@@ -163,7 +174,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
               .toSet();
     if (_descriptionController.text != _startDescription ||
         _amountController.text != _startAmount ||
-        _customMode != (initial == null ? null : GroupSplitMode.exact) ||
+        _customMode != _initialMode ||
         _selectedIds.length != initialMemberIds.length ||
         !_selectedIds.containsAll(initialMemberIds)) {
       return true;
@@ -216,6 +227,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
       splitAmounts: widget.initialExpense == null
           ? splitAmounts
           : splitAmounts!,
+      equalSplit: _customMode == null,
     );
   }
 
