@@ -815,6 +815,7 @@ class _GroupDetails extends StatelessWidget {
           _ExpenseCard(
             expense: expense,
             names: names,
+            memberIds: {for (final m in details.members) m.userId},
             currentUserId: currentUserId,
             onSettle: onSettle,
             canManage:
@@ -1314,6 +1315,7 @@ class _ExpenseCard extends StatelessWidget {
   const _ExpenseCard({
     required this.expense,
     required this.names,
+    required this.memberIds,
     required this.currentUserId,
     required this.onSettle,
     required this.canManage,
@@ -1324,6 +1326,7 @@ class _ExpenseCard extends StatelessWidget {
 
   final GroupExpense expense;
   final Map<String, String> names;
+  final Set<String> memberIds;
   final String currentUserId;
   final Future<void> Function(String expenseId) onSettle;
   final bool canManage;
@@ -1339,6 +1342,7 @@ class _ExpenseCard extends StatelessWidget {
     final canSettle =
         myShare != null &&
         !myShare.isSettled &&
+        myShare.amountMinor > 0 &&
         expense.payerId != currentUserId;
     final hasSettlement = expense.splits.any((split) => split.isSettled);
     return Card(
@@ -1424,11 +1428,13 @@ class _ExpenseCard extends StatelessWidget {
                 title: Text(
                   split.userId == null
                       ? 'Tài khoản đã xóa'
-                      : split.participantName ??
-                            names[split.userId!] ??
+                      : names[split.userId!] ??
+                            split.participantName ??
                             'Thành viên',
                 ),
-                subtitle: split.participantName == null
+                subtitle:
+                    split.participantName == null ||
+                        memberIds.contains(split.userId)
                     ? null
                     : const Text('Khách'),
                 trailing: Text(

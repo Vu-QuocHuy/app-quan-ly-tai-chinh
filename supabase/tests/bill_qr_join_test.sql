@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(51);
+select plan(53);
 
 create function pg_temp.act_as(p_user uuid) returns void
 language sql as $$
@@ -420,13 +420,33 @@ select throws_ok(
   'không rời bill khi đã có người thanh toán'
 );
 
+-- Khách vào bill custom có phần 0đ: không đánh dấu đã thanh toán được, bill không bị đóng
+select pg_temp.act_as('00000000-0000-4000-8000-0000000000b2');
+select public.create_group_expense_custom(
+  '10000000-0000-4000-8000-000000000001', 'Bánh', 40000,
+  '[{"user_id":"00000000-0000-4000-8000-0000000000b2","amount_minor":40000}]'::jsonb
+);
+select public.open_group_bill_invite(pg_temp.bill_id('Bánh'));
+select pg_temp.act_as('00000000-0000-4000-8000-0000000000e5');
+select public.join_group_bill(pg_temp.bill_code('Bánh'));
+select throws_ok(
+  format($$select public.settle_group_split(%L)$$, pg_temp.bill_id('Bánh')),
+  'UF001', 'Phần của bạn đang là 0đ, chờ người trả chia lại',
+  'phần 0đ không đánh dấu đã thanh toán được'
+);
+select is(
+  (select join_open from public.group_expenses where id = pg_temp.bill_id('Bánh')),
+  true,
+  'bill vẫn mở lời mời sau khi bị từ chối'
+);
+
 -- Nhật ký nhóm ghi lại người vào và rời bill
 select results_eq(
   $$select event_type, count(*) from public.group_audit_events
     where event_type in ('bill_joined', 'bill_left')
       and actor_id = target_user_id
     group by event_type order by event_type$$,
-  $$values ('bill_joined'::text, 3::bigint), ('bill_left'::text, 2::bigint)$$,
+  $$values ('bill_joined'::text, 4::bigint), ('bill_left'::text, 2::bigint)$$,
   'audit ghi bill_joined và bill_left với actor là người vào/rời'
 );
 

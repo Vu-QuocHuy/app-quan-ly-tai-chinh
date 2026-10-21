@@ -61,12 +61,34 @@ final _details = GroupDetails(
   ],
 );
 
-Future<_FakeExpenseGroupService> _pump(WidgetTester tester) async {
+GroupDetails _withSplits(List<GroupExpenseSplit> splits) => GroupDetails(
+  group: _group,
+  members: _details.members,
+  expenses: [
+    GroupExpense(
+      id: 'expense-1',
+      groupId: 'group-1',
+      payerId: 'user-1',
+      description: 'Ăn tối',
+      totalMinor: 30000,
+      createdAt: DateTime(2026, 10, 21),
+      splitMode: 'custom',
+      splits: splits,
+    ),
+  ],
+  auditEvents: const [],
+);
+
+Future<_FakeExpenseGroupService> _pump(
+  WidgetTester tester, {
+  GroupDetails? details,
+  String userId = 'user-1',
+}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(800, 2400);
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final service = _FakeExpenseGroupService();
+  final service = _FakeExpenseGroupService(details ?? _details, userId);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [expenseGroupServiceProvider.overrideWithValue(service)],
@@ -88,6 +110,50 @@ void main() {
       expect(find.text('Dũng đã vào bill “Ăn tối”'), findsOneWidget);
       expect(find.text('Khách đã rời bill “Ăn tối”'), findsOneWidget);
       expect(find.textContaining('Tài khoản đã xóa'), findsNothing);
+    },
+  );
+
+  testWidgets('phần 0đ không có nút Tôi đã thanh toán, phần > 0 thì có', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      userId: 'user-2',
+      details: _withSplits(const [
+        GroupExpenseSplit(userId: 'user-1', amountMinor: 30000),
+        GroupExpenseSplit(userId: 'user-2', amountMinor: 0),
+      ]),
+    );
+    expect(find.text('Tôi đã thanh toán'), findsNothing);
+
+    await _pump(
+      tester,
+      userId: 'user-2',
+      details: _withSplits(const [
+        GroupExpenseSplit(userId: 'user-1', amountMinor: 20000),
+        GroupExpenseSplit(userId: 'user-2', amountMinor: 10000),
+      ]),
+    );
+    expect(find.text('Tôi đã thanh toán'), findsOneWidget);
+  });
+
+  testWidgets(
+    'khách đã thành viên nhóm hiện tên thành viên, không nhãn Khách',
+    (tester) async {
+      await _pump(
+        tester,
+        details: _withSplits(const [
+          GroupExpenseSplit(userId: 'user-1', amountMinor: 15000),
+          GroupExpenseSplit(
+            userId: 'user-2',
+            amountMinor: 15000,
+            participantName: 'Tên khách cũ',
+          ),
+        ]),
+      );
+      expect(find.text('Lan'), findsWidgets);
+      expect(find.text('Tên khách cũ'), findsNothing);
+      expect(find.text('Khách'), findsNothing);
     },
   );
 
@@ -124,16 +190,20 @@ void main() {
 }
 
 class _FakeExpenseGroupService implements ExpenseGroupService {
+  _FakeExpenseGroupService(this.details, this.userId);
+
+  final GroupDetails details;
+  final String userId;
   final calls = <String>[];
 
   @override
-  String get currentUserId => 'user-1';
+  String get currentUserId => userId;
 
   @override
   Future<List<ExpenseGroup>> listGroups() async => const [_group];
 
   @override
-  Future<GroupDetails> loadDetails(ExpenseGroup group) async => _details;
+  Future<GroupDetails> loadDetails(ExpenseGroup group) async => details;
 
   @override
   Future<String> openBillInvite(String expenseId) async {

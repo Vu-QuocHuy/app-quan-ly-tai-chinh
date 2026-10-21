@@ -383,6 +383,13 @@ begin
     raise exception 'Không tìm thấy phần chia của bạn' using errcode = '22023';
   end if;
 
+  if exists (
+    select 1 from public.group_expense_splits
+    where expense_id = p_expense_id and user_id = v_user_id and amount_minor = 0
+  ) then
+    raise exception 'Phần của bạn đang là 0đ, chờ người trả chia lại' using errcode = 'UF001';
+  end if;
+
   update public.group_expense_splits
   set settled_at = now()
   where expense_id = p_expense_id
