@@ -1,4 +1,5 @@
 import '../../../shared/widgets/finmi_page_header.dart';
+import '../../../shared/widgets/app_refresh.dart';
 import '../../../app/theme/finmi_theme.dart';
 import '../../../app/theme/finance_colors.dart';
 import 'package:flutter/material.dart';
@@ -26,199 +27,208 @@ class PlanScreen extends ConsumerWidget {
     final incomeCategories =
         ref.watch(incomeCategoriesProvider).value ?? const <CategoryEntity>[];
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          FinmiSliverHeader(
-            title: 'Thu chi định kỳ',
-            actions: [
-              FinmiHeaderAction(
-                icon: Icons.add,
-                tooltip: 'Thêm khoản định kỳ',
-                onPressed: () async {
-                  final kind = await showModalBottomSheet<int>(
-                    context: context,
-                    useSafeArea: true,
-                    showDragHandle: true,
-                    builder: (context) => SafeArea(
-                      top: false,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ListTile(
-                            title: const Text('Khoản thu định kỳ'),
-                            leading: const Icon(Icons.south_west),
-                            enabled: incomeCategories.isNotEmpty,
-                            onTap: () => Navigator.pop(context, 0),
-                          ),
-                          ListTile(
-                            title: const Text('Khoản chi định kỳ'),
-                            leading: const Icon(Icons.north_east),
-                            onTap: () => Navigator.pop(context, 1),
-                          ),
-                          ListTile(
-                            title: const Text('Mục tiêu tiết kiệm'),
-                            leading: const Icon(Icons.savings_outlined),
-                            onTap: () => Navigator.pop(context, 2),
-                          ),
-                        ],
+      body: AppRefreshIndicator(
+        onRefresh: () => refreshFromCloud(context, ref),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            FinmiSliverHeader(
+              title: 'Thu chi định kỳ',
+              actions: [
+                FinmiHeaderAction(
+                  icon: Icons.add,
+                  tooltip: 'Thêm khoản định kỳ',
+                  onPressed: () async {
+                    final kind = await showModalBottomSheet<int>(
+                      context: context,
+                      useSafeArea: true,
+                      showDragHandle: true,
+                      builder: (context) => SafeArea(
+                        top: false,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ListTile(
+                              title: const Text('Khoản thu định kỳ'),
+                              leading: const Icon(Icons.south_west),
+                              enabled: incomeCategories.isNotEmpty,
+                              onTap: () => Navigator.pop(context, 0),
+                            ),
+                            ListTile(
+                              title: const Text('Khoản chi định kỳ'),
+                              leading: const Icon(Icons.north_east),
+                              onTap: () => Navigator.pop(context, 1),
+                            ),
+                            ListTile(
+                              title: const Text('Mục tiêu tiết kiệm'),
+                              leading: const Icon(Icons.savings_outlined),
+                              onTap: () => Navigator.pop(context, 2),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    );
+                    if (!context.mounted) return;
+                    if (kind == 0) {
+                      await _editRecurringIncome(
+                        context,
+                        ref,
+                        incomeCategories,
+                      );
+                      return;
+                    }
+                    if (kind == 1) {
+                      await _editBill(context, ref, expenseCategories);
+                      return;
+                    }
+                    if (kind == 2) {
+                      await _editGoal(context, ref);
+                    }
+                  },
+                ),
+              ],
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+              sliver: plans.when(
+                loading: () => const SliverToBoxAdapter(
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (error, _) => SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      Text('Không thể tải kế hoạch: ${friendlyMessage(error)}'),
+                      TextButton(
+                        onPressed: () => ref.invalidate(plansProvider),
+                        child: const Text('Thử lại'),
+                      ),
+                    ],
+                  ),
+                ),
+                data: (items) {
+                  final bills = items.whereType<RecurringBill>().toList()
+                    ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
+                  final incomes = items.whereType<RecurringIncome>().toList()
+                    ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
+                  final goals = items.whereType<SavingsGoal>().toList()
+                    ..sort((a, b) => a.targetDate.compareTo(b.targetDate));
+                  return SliverList.list(
+                    children: [
+                      Text(
+                        'Các khoản thu nhập và chi tiêu cố định lặp lại theo chu kỳ.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        '↓ Khoản thu định kỳ',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: context.finance.income.color,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (incomes.isEmpty)
+                        const Text('Chưa có khoản thu định kỳ.'),
+                      for (final income in incomes)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _RecurringPlanCard(
+                            title: income.title,
+                            amountMinor: income.amountMinor,
+                            income: true,
+                            detail: _categoryName(
+                              income.categoryId,
+                              incomeCategories,
+                            ),
+                            due: 'Nhận ${_dateLabel(income.nextDueDate)}',
+                            onTap: () => _incomeActions(
+                              context,
+                              ref,
+                              income,
+                              incomeCategories,
+                            ),
+                          ),
+                        ),
+
+                      if (incomeCategories.isEmpty)
+                        const _Hint(
+                          'Chưa tải được danh mục thu. Vui lòng thử lại sau.',
+                        ),
+                      const SizedBox(height: 16),
+                      Text(
+                        '↑ Khoản chi định kỳ',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 10),
+                      if (bills.isEmpty)
+                        const Text('Chưa có khoản chi định kỳ.'),
+                      for (final bill in bills)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _RecurringPlanCard(
+                            title: bill.title,
+                            amountMinor: bill.amountMinor,
+                            detail:
+                                '${_categoryName(bill.categoryId ?? '', expenseCategories)} · ${_frequencyLabel(bill.frequency)}',
+                            due:
+                                '${_isOverdue(bill.nextDueDate) ? 'Quá hạn' : 'Đến hạn'} ${_dateLabel(bill.nextDueDate)}',
+                            overdue: _isOverdue(bill.nextDueDate),
+                            onTap: () => _billActions(
+                              context,
+                              ref,
+                              bill,
+                              expenseCategories,
+                            ),
+                          ),
+                        ),
+
+                      const SizedBox(height: 16),
+                      Text(
+                        'Mục tiêu tiết kiệm',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 10),
+                      if (goals.isEmpty)
+                        const Text('Chưa có mục tiêu tiết kiệm.'),
+                      for (final goal in goals)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: AppCard(
+                            onTap: () => _goalActions(context, ref, goal),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  goal.name,
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '${MoneyFormatter.format(goal.savedMinor)} / ${MoneyFormatter.format(goal.targetMinor)}',
+                                ),
+                                const SizedBox(height: 8),
+                                LinearProgressIndicator(
+                                  value: goal.progress.clamp(0, 1),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  goal.remainingMinor == 0
+                                      ? 'Đã đạt mục tiêu'
+                                      : 'Cần dành ${MoneyFormatter.format(goal.monthlyNeeded(DateTime.now()))}/tháng · Hạn ${_dateLabel(goal.targetDate)}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                   );
-                  if (!context.mounted) return;
-                  if (kind == 0) {
-                    await _editRecurringIncome(context, ref, incomeCategories);
-                    return;
-                  }
-                  if (kind == 1) {
-                    await _editBill(context, ref, expenseCategories);
-                    return;
-                  }
-                  if (kind == 2) {
-                    await _editGoal(context, ref);
-                  }
                 },
               ),
-            ],
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
-            sliver: plans.when(
-              loading: () => const SliverToBoxAdapter(
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (error, _) => SliverToBoxAdapter(
-                child: Column(
-                  children: [
-                    Text('Không thể tải kế hoạch: ${friendlyMessage(error)}'),
-                    TextButton(
-                      onPressed: () => ref.invalidate(plansProvider),
-                      child: const Text('Thử lại'),
-                    ),
-                  ],
-                ),
-              ),
-              data: (items) {
-                final bills = items.whereType<RecurringBill>().toList()
-                  ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
-                final incomes = items.whereType<RecurringIncome>().toList()
-                  ..sort((a, b) => a.nextDueDate.compareTo(b.nextDueDate));
-                final goals = items.whereType<SavingsGoal>().toList()
-                  ..sort((a, b) => a.targetDate.compareTo(b.targetDate));
-                return SliverList.list(
-                  children: [
-                    Text(
-                      'Các khoản thu nhập và chi tiêu cố định lặp lại theo chu kỳ.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      '↓ Khoản thu định kỳ',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: context.finance.income.color,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (incomes.isEmpty)
-                      const Text('Chưa có khoản thu định kỳ.'),
-                    for (final income in incomes)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _RecurringPlanCard(
-                          title: income.title,
-                          amountMinor: income.amountMinor,
-                          income: true,
-                          detail: _categoryName(
-                            income.categoryId,
-                            incomeCategories,
-                          ),
-                          due: 'Nhận ${_dateLabel(income.nextDueDate)}',
-                          onTap: () => _incomeActions(
-                            context,
-                            ref,
-                            income,
-                            incomeCategories,
-                          ),
-                        ),
-                      ),
-
-                    if (incomeCategories.isEmpty)
-                      const _Hint(
-                        'Chưa tải được danh mục thu. Vui lòng thử lại sau.',
-                      ),
-                    const SizedBox(height: 16),
-                    Text(
-                      '↑ Khoản chi định kỳ',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 10),
-                    if (bills.isEmpty) const Text('Chưa có khoản chi định kỳ.'),
-                    for (final bill in bills)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _RecurringPlanCard(
-                          title: bill.title,
-                          amountMinor: bill.amountMinor,
-                          detail:
-                              '${_categoryName(bill.categoryId ?? '', expenseCategories)} · ${_frequencyLabel(bill.frequency)}',
-                          due:
-                              '${_isOverdue(bill.nextDueDate) ? 'Quá hạn' : 'Đến hạn'} ${_dateLabel(bill.nextDueDate)}',
-                          overdue: _isOverdue(bill.nextDueDate),
-                          onTap: () => _billActions(
-                            context,
-                            ref,
-                            bill,
-                            expenseCategories,
-                          ),
-                        ),
-                      ),
-
-                    const SizedBox(height: 16),
-                    Text(
-                      'Mục tiêu tiết kiệm',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 10),
-                    if (goals.isEmpty)
-                      const Text('Chưa có mục tiêu tiết kiệm.'),
-                    for (final goal in goals)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: AppCard(
-                          onTap: () => _goalActions(context, ref, goal),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                goal.name,
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '${MoneyFormatter.format(goal.savedMinor)} / ${MoneyFormatter.format(goal.targetMinor)}',
-                              ),
-                              const SizedBox(height: 8),
-                              LinearProgressIndicator(
-                                value: goal.progress.clamp(0, 1),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                goal.remainingMinor == 0
-                                    ? 'Đã đạt mục tiêu'
-                                    : 'Cần dành ${MoneyFormatter.format(goal.monthlyNeeded(DateTime.now()))}/tháng · Hạn ${_dateLabel(goal.targetDate)}',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

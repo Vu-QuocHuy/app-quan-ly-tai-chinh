@@ -1,4 +1,5 @@
 import '../../../shared/widgets/finmi_page_header.dart';
+import '../../../shared/widgets/app_refresh.dart';
 import '../../../shared/widgets/finmi_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,89 +30,98 @@ class BudgetScreen extends ConsumerWidget {
     final monthKey = MonthUtils.key(selectedMonth);
     final dashboardSnapshot = dashboard.asData?.value;
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          FinmiSliverHeader(
-            title: 'Hạn mức ngân sách',
-            actions: [
-              FinmiHeaderAction(
-                tooltip: 'Quản lý danh mục',
-                onPressed: () => context.push('/categories'),
-                icon: Icons.category_outlined,
-              ),
-            ],
-          ),
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(20, 18, 20, 12),
-              child: MonthSelector(),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: _BudgetSummary(
-                snapshot: dashboard,
-                categories: categories.valueOrNull ?? const [],
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-            sliver: switch ((categories, budgets)) {
-              (
-                AsyncData(value: final categoryItems),
-                AsyncData(value: final budgetItems),
-              ) =>
-                SliverList.separated(
-                  itemCount: categoryItems.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final category = categoryItems[index];
-                    final budget = budgetItems
-                        .where((item) => item.categoryId == category.id)
-                        .firstOrNull;
-                    return _BudgetTile(
-                      category: category,
-                      budget: budget,
-                      spentMinor:
-                          dashboardSnapshot?.categoryTotals[category.id] ?? 0,
-                      onEdit: () =>
-                          _editBudget(context, ref, category, budget, monthKey),
-                    );
-                  },
+      body: AppRefreshIndicator(
+        onRefresh: () => refreshFromCloud(context, ref),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            FinmiSliverHeader(
+              title: 'Hạn mức ngân sách',
+              actions: [
+                FinmiHeaderAction(
+                  tooltip: 'Quản lý danh mục',
+                  onPressed: () => context.push('/categories'),
+                  icon: Icons.category_outlined,
                 ),
-              (AsyncError(error: final error), _) ||
-              (_, AsyncError(error: final error)) => SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Không thể tải ngân sách: ${friendlyMessage(error)}',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: () {
-                          ref.invalidate(categoriesProvider);
-                          ref.invalidate(budgetsProvider);
-                        },
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Thử lại'),
-                      ),
-                    ],
+              ],
+            ),
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, 18, 20, 12),
+                child: MonthSelector(),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: _BudgetSummary(
+                  snapshot: dashboard,
+                  categories: categories.valueOrNull ?? const [],
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              sliver: switch ((categories, budgets)) {
+                (
+                  AsyncData(value: final categoryItems),
+                  AsyncData(value: final budgetItems),
+                ) =>
+                  SliverList.separated(
+                    itemCount: categoryItems.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final category = categoryItems[index];
+                      final budget = budgetItems
+                          .where((item) => item.categoryId == category.id)
+                          .firstOrNull;
+                      return _BudgetTile(
+                        category: category,
+                        budget: budget,
+                        spentMinor:
+                            dashboardSnapshot?.categoryTotals[category.id] ?? 0,
+                        onEdit: () => _editBudget(
+                          context,
+                          ref,
+                          category,
+                          budget,
+                          monthKey,
+                        ),
+                      );
+                    },
+                  ),
+                (AsyncError(error: final error), _) ||
+                (_, AsyncError(error: final error)) => SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Không thể tải ngân sách: ${friendlyMessage(error)}',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: () {
+                            ref.invalidate(categoriesProvider);
+                            ref.invalidate(budgetsProvider);
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Thử lại'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              _ => const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            },
-          ),
-        ],
+                _ => const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
