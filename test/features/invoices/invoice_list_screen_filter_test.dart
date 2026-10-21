@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/app/theme/app_theme.dart';
+import 'package:hoadon_insight/core/config/feature_flags.dart';
 import 'package:hoadon_insight/core/providers/app_providers.dart';
 import 'package:hoadon_insight/features/income/data/income_repository.dart';
 import 'package:hoadon_insight/features/invoices/domain/invoice_models.dart';
 import 'package:hoadon_insight/features/invoices/presentation/invoice_list_screen.dart';
+
+import '../../helpers/fake_sync_coordinator.dart';
 
 void main() {
   testWidgets('groups secondary filters and applies or clears them', (
@@ -144,5 +147,43 @@ void main() {
     expect(find.text('Lương'), findsOneWidget);
     expect(find.text('Thưởng'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pulling down syncs with the cloud', (tester) async {
+    tester.view.physicalSize = const Size(700, 960);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final coordinator = FakeSyncCoordinator();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          filteredInvoiceSummariesProvider.overrideWith(
+            (ref, query) => Stream.value(const <InvoiceEntity>[]),
+          ),
+          incomesProvider.overrideWith((ref) => Stream.value(<IncomeEntry>[])),
+          categoriesProvider.overrideWith((ref) => Stream.value(const [])),
+          featureFlagsProvider.overrideWith(
+            (ref) async => FeatureFlags.defaults,
+          ),
+          syncCoordinatorProvider.overrideWithValue(coordinator),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const InvoiceListScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.fling(
+      find.byType(CustomScrollView),
+      const Offset(0, 400),
+      1000,
+    );
+    await tester.pumpAndSettle();
+
+    expect(coordinator.calls, 1);
   });
 }

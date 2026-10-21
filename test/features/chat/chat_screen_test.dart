@@ -134,6 +134,55 @@ void main() {
       expect(saved.last.text, contains('tổng thu 250.000'));
     },
   );
+  testWidgets('quick prompts stay available after the conversation starts', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(900, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const history = ChatHistoryStore();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          localChatAssistantProvider.overrideWithValue(
+            LocalChatAssistant(_InvoiceRepository(), _IncomeRepository()),
+          ),
+          chatHistoryStoreProvider.overrideWithValue(history),
+        ],
+        child: const MaterialApp(home: ChatScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final incomeChip = find.widgetWithText(
+      ActionChip,
+      'Tháng này tôi đã thu bao nhiêu?',
+    );
+    expect(find.byType(ActionChip), findsWidgets);
+    await tester.ensureVisible(incomeChip);
+    await tester.tap(incomeChip);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('tổng thu 250.000'), findsOneWidget);
+    expect(incomeChip, findsOneWidget);
+    expect(find.byType(ActionChip), findsWidgets);
+  });
+}
+
+class _DelayedHistoryStore extends ChatHistoryStore {
+  final gate = Completer<void>();
+  final messages = <ChatMessage>[];
+  @override
+  Future<List<ChatMessage>> load() async => [];
+  @override
+  Future<bool> append(ChatMessage message) async {
+    messages.add(message);
+    if (messages.length == 1) await gate.future;
+    return true;
+  }
 }
 
 class _DelayedHistoryStore extends ChatHistoryStore {

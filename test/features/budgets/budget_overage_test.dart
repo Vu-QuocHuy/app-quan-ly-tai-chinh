@@ -43,6 +43,14 @@ void main() {
                 categoryTotals: {'food': 150000},
                 dailyTotals: {1: 150000},
                 budgetLimitMinor: 100000,
+                categoryBudgets: [
+                  CategoryBudgetStatus(
+                    categoryId: 'food',
+                    categoryName: 'Ăn uống',
+                    limitMinor: 100000,
+                    spentMinor: 150000,
+                  ),
+                ],
               ),
             ),
           ),

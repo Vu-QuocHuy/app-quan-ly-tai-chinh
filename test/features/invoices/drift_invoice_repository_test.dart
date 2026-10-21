@@ -556,6 +556,12 @@ void main() {
     expect(snapshot.categoryTotals['food'], 200000);
     expect(snapshot.dailyTotals, containsPair(5, 120000));
     expect(snapshot.budgetLimitMinor, 400000);
+    expect(snapshot.categoryBudgets, hasLength(1));
+    expect(snapshot.categoryBudgets.single.categoryId, 'food');
+    expect(snapshot.categoryBudgets.single.categoryName, isNotEmpty);
+    expect(snapshot.categoryBudgets.single.limitMinor, 400000);
+    expect(snapshot.categoryBudgets.single.spentMinor, 200000);
+    expect(snapshot.overBudgetCategories, isEmpty);
     expect(restored?.notes, 'Ghi chú');
     expect(restored?.tags, ['team']);
   });

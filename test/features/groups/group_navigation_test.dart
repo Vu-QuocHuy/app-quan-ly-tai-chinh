@@ -94,6 +94,78 @@ void main() {
     expect(find.text('Nhóm của tôi'), findsOneWidget);
     expect(find.text('Chuyến đi Đà Lạt'), findsOneWidget);
   });
+
+  testWidgets('kéo xuống để tải lại danh sách và chi tiết nhóm', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(375, 812);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const group = ExpenseGroup(
+      id: 'group-1',
+      name: 'Chuyến đi Đà Lạt',
+      inviteCode: 'DALAT123',
+      ownerId: 'user-1',
+    );
+    final service = _FakeExpenseGroupService(
+      groups: const [group],
+      details: const GroupDetails(
+        group: group,
+        members: [
+          GroupMember(userId: 'user-1', displayName: 'Huy', role: 'owner'),
+        ],
+        expenses: [],
+        auditEvents: [],
+      ),
+    );
+    final rootKey = GlobalKey<NavigatorState>();
+    final router = GoRouter(
+      navigatorKey: rootKey,
+      initialLocation: '/groups',
+      routes: [
+        GoRoute(
+          path: '/groups',
+          builder: (context, state) => const GroupScreen(),
+          routes: [
+            GoRoute(
+              path: ':groupId',
+              parentNavigatorKey: rootKey,
+              builder: (context, state) =>
+                  GroupDetailScreen(groupId: state.pathParameters['groupId']!),
+            ),
+          ],
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [expenseGroupServiceProvider.overrideWithValue(service)],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(service.listCalls, 1);
+
+    await tester.fling(find.text('Nhóm của tôi'), const Offset(0, 400), 1000);
+    await tester.pumpAndSettle();
+    expect(service.listCalls, 2);
+
+    await tester.tap(find.text('Chuyến đi Đà Lạt'));
+    await tester.pumpAndSettle();
+    final detailsBefore = service.detailCalls;
+
+    await tester.fling(
+      find.text('Mã mời: DALAT123'),
+      const Offset(0, 400),
+      1000,
+    );
+    await tester.pumpAndSettle();
+    expect(service.detailCalls, greaterThan(detailsBefore));
+  });
 }
 
 class _FakeExpenseGroupService implements ExpenseGroupService {
@@ -101,15 +173,23 @@ class _FakeExpenseGroupService implements ExpenseGroupService {
 
   final List<ExpenseGroup> groups;
   final GroupDetails details;
+  int listCalls = 0;
+  int detailCalls = 0;
 
   @override
   String get currentUserId => 'user-1';
 
   @override
-  Future<List<ExpenseGroup>> listGroups() async => groups;
+  Future<List<ExpenseGroup>> listGroups() async {
+    listCalls++;
+    return groups;
+  }
 
   @override
-  Future<GroupDetails> loadDetails(ExpenseGroup group) async => details;
+  Future<GroupDetails> loadDetails(ExpenseGroup group) async {
+    detailCalls++;
+    return details;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

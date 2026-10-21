@@ -67,104 +67,106 @@ class SyncPullCoordinator {
       }
       _validatePage(page, cursor);
 
-      for (final change in page.changes) {
-        if (aggregateType == 'invoice') {
-          if (change.operation == 'delete') {
-            final existing = await _repository.findById(change.id);
-            if (existing == null || change.revision >= existing.revision) {
-              await _repository.deleteRemoteInvoice(
-                change.id,
-                revision: change.revision,
-                updatedAt: change.updatedAt,
-                deletedAt: _optionalDate(change.payload['deletedAt']),
+      await _cursors.transaction(() async {
+        for (final change in page.changes) {
+          if (aggregateType == 'invoice') {
+            if (change.operation == 'delete') {
+              final existing = await _repository.findById(change.id);
+              if (existing == null || change.revision >= existing.revision) {
+                await _repository.deleteRemoteInvoice(
+                  change.id,
+                  revision: change.revision,
+                  updatedAt: change.updatedAt,
+                  deletedAt: _optionalDate(change.payload['deletedAt']),
+                );
+                applied++;
+              } else {
+                skipped++;
+              }
+              cursor = change.cursor;
+              await _cursors.write(
+                userId: userId,
+                aggregateType: aggregateType,
+                cursor: change.cursor,
               );
+              continue;
+            }
+            final incoming = InvoiceSyncCodec.fromPayload({
+              ...change.payload,
+              'id': change.payload['id'] ?? change.id,
+            }, revision: change.revision);
+            if (incoming.id.isEmpty) {
+              throw const FormatException('Invoice delta thiếu id.');
+            }
+            final existing = await _repository.findById(incoming.id);
+            if (existing == null || change.revision > existing.revision) {
+              await _repository.saveRemoteInvoice(incoming);
+              applied++;
+            } else if (change.revision < existing.revision) {
+              skipped++;
+            } else if (_sameContent(existing, incoming)) {
+              await _repository.saveRemoteInvoice(incoming);
               applied++;
             } else {
-              skipped++;
+              await _repository.markInvoiceConflict(
+                incoming.id,
+                remote: incoming,
+              );
+              conflicts++;
             }
-            cursor = change.cursor;
-            await _cursors.write(
-              userId: userId,
-              aggregateType: aggregateType,
-              cursor: cursor,
-            );
-            continue;
-          }
-          final incoming = InvoiceSyncCodec.fromPayload({
-            ...change.payload,
-            'id': change.payload['id'] ?? change.id,
-          }, revision: change.revision);
-          if (incoming.id.isEmpty) {
-            throw const FormatException('Invoice delta thiếu id.');
-          }
-          final existing = await _repository.findById(incoming.id);
-          if (existing == null || change.revision > existing.revision) {
-            await _repository.saveRemoteInvoice(incoming);
-            applied++;
-          } else if (change.revision < existing.revision) {
-            skipped++;
-          } else if (_sameContent(existing, incoming)) {
-            await _repository.saveRemoteInvoice(incoming);
-            applied++;
+          } else if (aggregateType == 'income') {
+            final incomeRepository = _incomeRepository;
+            if (incomeRepository == null) {
+              throw StateError('Kho khoản thu chưa được cấu hình.');
+            }
+            final id = change.payload['id'];
+            if (id is! String || id != change.id) {
+              throw const FormatException('Delta khoản thu sai id.');
+            }
+            if (await incomeRepository.hasPendingChange(change.id)) {
+              skipped++;
+            } else if (change.operation == 'delete') {
+              await incomeRepository.deleteRemote(change.id);
+              applied++;
+            } else {
+              await incomeRepository.saveRemote(
+                IncomeEntry.fromPayload(change.payload),
+              );
+              applied++;
+            }
+          } else if (aggregateType == 'plan') {
+            final planRepository = _planRepository;
+            if (planRepository == null) {
+              throw StateError('Kho kế hoạch chưa được cấu hình.');
+            }
+            final id = change.payload['id'];
+            if (id is! String || id != change.id) {
+              throw const FormatException('Delta kế hoạch sai id.');
+            }
+            if (await planRepository.hasPendingChange(change.id)) {
+              skipped++;
+            } else if (change.operation == 'delete') {
+              await planRepository.deleteRemote(change.id);
+              applied++;
+            } else {
+              await planRepository.saveRemote(
+                PlanItem.fromPayload(change.payload),
+              );
+              applied++;
+            }
           } else {
-            await _repository.markInvoiceConflict(
-              incoming.id,
-              remote: incoming,
-            );
-            conflicts++;
-          }
-        } else if (aggregateType == 'income') {
-          final incomeRepository = _incomeRepository;
-          if (incomeRepository == null) {
-            throw StateError('Kho khoản thu chưa được cấu hình.');
-          }
-          final id = change.payload['id'];
-          if (id is! String || id != change.id) {
-            throw const FormatException('Delta khoản thu sai id.');
-          }
-          if (await incomeRepository.hasPendingChange(change.id)) {
-            skipped++;
-          } else if (change.operation == 'delete') {
-            await incomeRepository.deleteRemote(change.id);
-            applied++;
-          } else {
-            await incomeRepository.saveRemote(
-              IncomeEntry.fromPayload(change.payload),
-            );
+            await _applyReference(change);
             applied++;
           }
-        } else if (aggregateType == 'plan') {
-          final planRepository = _planRepository;
-          if (planRepository == null) {
-            throw StateError('Kho kế hoạch chưa được cấu hình.');
-          }
-          final id = change.payload['id'];
-          if (id is! String || id != change.id) {
-            throw const FormatException('Delta kế hoạch sai id.');
-          }
-          if (await planRepository.hasPendingChange(change.id)) {
-            skipped++;
-          } else if (change.operation == 'delete') {
-            await planRepository.deleteRemote(change.id);
-            applied++;
-          } else {
-            await planRepository.saveRemote(
-              PlanItem.fromPayload(change.payload),
-            );
-            applied++;
-          }
-        } else {
-          await _applyReference(change);
-          applied++;
-        }
 
-        cursor = change.cursor;
-        await _cursors.write(
-          userId: userId,
-          aggregateType: aggregateType,
-          cursor: cursor,
-        );
-      }
+          cursor = change.cursor;
+          await _cursors.write(
+            userId: userId,
+            aggregateType: aggregateType,
+            cursor: change.cursor,
+          );
+        }
+      });
 
       if (!page.hasMore) break;
     }

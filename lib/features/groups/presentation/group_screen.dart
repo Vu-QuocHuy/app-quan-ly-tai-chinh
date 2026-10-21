@@ -13,6 +13,7 @@ import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 import '../../../shared/widgets/app_empty_state.dart';
+import '../../../shared/widgets/app_refresh.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../sharing/domain/shared_bill_models.dart';
 import '../data/group_service.dart';
@@ -35,87 +36,91 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     final service = ref.watch(expenseGroupServiceProvider);
     final groups = ref.watch(expenseGroupsProvider);
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          FinmiSliverHeader(
-            title: 'Nhóm',
-            actions: [
-              FinmiHeaderAction(
-                tooltip: 'Làm mới nhóm',
-                onPressed: _refresh,
-                icon: Icons.refresh,
-              ),
-            ],
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-              child: _buildActions(context, service),
+      body: AppRefreshIndicator(
+        onRefresh: _refresh,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            FinmiSliverHeader(
+              title: 'Nhóm',
+              actions: [
+                FinmiHeaderAction(
+                  tooltip: 'Làm mới nhóm',
+                  onPressed: _refresh,
+                  icon: Icons.refresh,
+                ),
+              ],
             ),
-          ),
-          if (service != null)
-            const SliverToBoxAdapter(child: _DirectShareInbox()),
-          if (service == null)
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: AppEmptyState(
-                icon: Icons.cloud_off_outlined,
-                title: 'Nhóm cần kết nối tài khoản',
-                message: 'Đăng nhập tài khoản để tạo hoặc tham gia nhóm.',
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+                child: _buildActions(context, service),
               ),
-            )
-          else
-            ...switch (groups) {
-              AsyncData(value: final items) when items.isEmpty => [
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: AppEmptyState(
-                    icon: Icons.groups_outlined,
-                    title: 'Chưa có nhóm hoặc quỹ chung',
-                    message:
-                        'Tạo nhóm gia đình, mời mọi người cùng ghi thu chi vào quỹ.',
-                  ),
+            ),
+            if (service != null)
+              const SliverToBoxAdapter(child: _DirectShareInbox()),
+            if (service == null)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: AppEmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Nhóm cần kết nối tài khoản',
+                  message: 'Đăng nhập tài khoản để tạo hoặc tham gia nhóm.',
                 ),
-              ],
-              AsyncData(value: final items) => [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                    child: Text(
-                      'Nhóm của tôi',
-                      style: Theme.of(context).textTheme.titleMedium,
+              )
+            else
+              ...switch (groups) {
+                AsyncData(value: final items) when items.isEmpty => [
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: AppEmptyState(
+                      icon: Icons.groups_outlined,
+                      title: 'Chưa có nhóm hoặc quỹ chung',
+                      message:
+                          'Tạo nhóm gia đình, mời mọi người cùng ghi thu chi vào quỹ.',
                     ),
                   ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  sliver: SliverList.separated(
-                    itemCount: items.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) =>
-                        _buildGroupCard(items[index]),
-                  ),
-                ),
-              ],
-              AsyncError(error: final error) => [
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Text(
-                      'Không thể tải nhóm: ${friendlyMessage(error)}',
+                ],
+                AsyncData(value: final items) => [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                      child: Text(
+                        'Nhóm của tôi',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                     ),
                   ),
-                ),
-              ],
-              _ => [
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-              ],
-            },
-          const SliverToBoxAdapter(child: SizedBox(height: 112)),
-        ],
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    sliver: SliverList.separated(
+                      itemCount: items.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) =>
+                          _buildGroupCard(items[index]),
+                    ),
+                  ),
+                ],
+                AsyncError(error: final error) => [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Text(
+                        'Không thể tải nhóm: ${friendlyMessage(error)}',
+                      ),
+                    ),
+                  ),
+                ],
+                _ => [
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ],
+              },
+            const SliverToBoxAdapter(child: SizedBox(height: 112)),
+          ],
+        ),
       ),
     );
   }
@@ -260,8 +265,14 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     }
   }
 
-  void _refresh() {
-    ref.invalidate(expenseGroupsProvider);
+  Future<void> _refresh() async {
+    ref.invalidate(directBillSharesProvider);
+    try {
+      ref.invalidate(expenseGroupsProvider);
+      await ref.read(expenseGroupsProvider.future);
+    } on Object {
+      // Lỗi đã được hiển thị qua trạng thái lỗi của danh sách nhóm.
+    }
   }
 }
 
@@ -334,31 +345,35 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                     message: 'Đăng nhập để xem chi tiết nhóm.',
                   );
                 }
-                return ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
-                  children: [
-                    _GroupDetails(
-                      details: groupDetails,
-                      currentUserId: currentUserId,
-                      busy: _busy,
-                      onCopyCode: () =>
-                          _copyInviteCode(groupDetails.group.inviteCode),
-                      onAddExpense: () => _addExpense(groupDetails),
-                      onAddReceipt: () => _addReceipt(groupDetails),
-                      onSettle: _settleShare,
-                      onEditExpense: (expense) =>
-                          _editExpense(groupDetails, expense),
-                      onDeleteExpense: _deleteExpense,
-                      onSetMemberRole: (userId, role) =>
-                          _setMemberRole(groupDetails.group.id, userId, role),
-                      onRemoveMember: (userId, displayName) => _removeMember(
-                        groupDetails.group.id,
-                        userId,
-                        displayName,
+                return AppRefreshIndicator(
+                  onRefresh: _refresh,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                    children: [
+                      _GroupDetails(
+                        details: groupDetails,
+                        currentUserId: currentUserId,
+                        busy: _busy,
+                        onCopyCode: () =>
+                            _copyInviteCode(groupDetails.group.inviteCode),
+                        onAddExpense: () => _addExpense(groupDetails),
+                        onAddReceipt: () => _addReceipt(groupDetails),
+                        onSettle: _settleShare,
+                        onEditExpense: (expense) =>
+                            _editExpense(groupDetails, expense),
+                        onDeleteExpense: _deleteExpense,
+                        onSetMemberRole: (userId, role) =>
+                            _setMemberRole(groupDetails.group.id, userId, role),
+                        onRemoveMember: (userId, displayName) => _removeMember(
+                          groupDetails.group.id,
+                          userId,
+                          displayName,
+                        ),
+                        onLeaveGroup: () => _leaveGroup(groupDetails),
                       ),
-                      onLeaveGroup: () => _leaveGroup(groupDetails),
-                    ),
-                  ],
+                    ],
+                  ),
                 );
               },
             ),
@@ -562,9 +577,14 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     ref.invalidate(expenseGroupDetailsProvider(widget.groupId));
   }
 
-  void _refresh() {
+  Future<void> _refresh() async {
     ref.invalidate(expenseGroupsProvider);
-    _reloadDetails();
+    try {
+      _reloadDetails();
+      await ref.read(expenseGroupDetailsProvider(widget.groupId).future);
+    } on Object {
+      // Lỗi đã được hiển thị qua trạng thái lỗi của chi tiết nhóm.
+    }
   }
 
   void _goBack() {

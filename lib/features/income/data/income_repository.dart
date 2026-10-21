@@ -114,9 +114,9 @@ class IncomeRepository {
     int amountMinor, {
     required IncomeSource source,
     String? categoryId,
-    DateTime? receivedAt,
     IncomeEntry? existing,
     String? note,
+    DateTime? receivedAt,
   }) async {
     if (amountMinor <= 0 || amountMinor > 9007199254740991) {
       throw const FormatException('Số tiền thu phải lớn hơn 0.');

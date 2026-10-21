@@ -13,6 +13,21 @@ import '../domain/chat_privacy_policy.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 
+/// Câu hỏi nhanh hiển thị trên ô nhập, xếp theo mức độ hay dùng. Mỗi câu phải
+/// khớp một ý định mà LocalChatAssistant hiểu được để vẫn trả lời khi offline.
+const chatQuickPrompts = [
+  'Tháng này tôi đã chi bao nhiêu?',
+  'Tháng này tôi đã thu bao nhiêu?',
+  'So sánh chi tiêu tháng này với tháng trước',
+  'Danh mục nào chi nhiều nhất?',
+  'Tôi còn bao nhiêu hạn mức ngân sách?',
+  'Dự báo chi tiêu đến cuối tháng',
+  'Hóa đơn gần đây của tôi',
+  'Tôi có khoản chi định kỳ nào không?',
+  'Có khoản chi nào bất thường không?',
+  'Nếu tôi giảm chi 500.000đ mỗi tháng thì tiết kiệm được bao nhiêu?',
+];
+
 Future<void> showFinmiAssistant(BuildContext context) =>
     showModalBottomSheet<void>(
       context: context,
@@ -166,14 +181,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildSuggestions(BuildContext context) {
-    if (_messages.length > 1 || _sending) return const SizedBox.shrink();
-    const suggestions = [
-      'Tháng này tôi đã thu bao nhiêu?',
-      'Tháng này tôi đã chi bao nhiêu?',
-      'Danh mục nào chi nhiều nhất?',
-      'Tôi có khoản chi định kỳ nào không?',
-      'Có khoản chi nào bất thường không?',
-    ];
+    if (_loading || _sending) return const SizedBox.shrink();
+    const suggestions = chatQuickPrompts;
     return SizedBox(
       height: 48 * (MediaQuery.textScalerOf(context).scale(14) / 14),
       child: ListView.separated(

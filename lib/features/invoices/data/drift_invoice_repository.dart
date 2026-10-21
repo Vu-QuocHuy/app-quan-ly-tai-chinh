@@ -145,7 +145,7 @@ class DriftInvoiceRepository implements InvoiceRepository {
   Stream<DashboardSnapshot> watchDashboard(String monthKey) {
     final trigger = _db.customSelect(
       'SELECT 1 AS tick',
-      readsFrom: {_db.invoices, _db.budgets},
+      readsFrom: {_db.invoices, _db.budgets, _db.categories},
     );
     return trigger.watch().asyncMap((_) => _loadDashboard(monthKey));
   }
@@ -1088,20 +1088,45 @@ class DriftInvoiceRepository implements InvoiceRepository {
         )
         .getSingle();
 
+    final categoryBudgetRows = await _db
+        .customSelect(
+          '''
+        SELECT b.category_id AS category_id,
+               b.limit_minor AS limit_minor,
+               COALESCE(c.name, b.category_id) AS name
+        FROM budgets b
+        LEFT JOIN categories c ON c.id = b.category_id
+        WHERE b.month_key = ? AND b.limit_minor > 0
+      ''',
+          variables: [Variable<String>(monthKey)],
+          readsFrom: {_db.budgets, _db.categories},
+        )
+        .get();
+    final categoryTotals = {
+      for (final row in categoryRows)
+        row.read<String>('category_id'): row.read<int>('total'),
+    };
+
     return DashboardSnapshot(
       monthKey: monthKey,
       totalMinor: summary.read<int>('total'),
       invoiceCount: summary.read<int>('invoice_count'),
       previousMonthTotalMinor: previousSummary.read<int>('total'),
-      categoryTotals: {
-        for (final row in categoryRows)
-          row.read<String>('category_id'): row.read<int>('total'),
-      },
+      categoryTotals: categoryTotals,
       dailyTotals: {
         for (final row in dailyRows)
           row.read<int>('day'): row.read<int>('total'),
       },
       budgetLimitMinor: budget.read<int>('total'),
+      categoryBudgets: [
+        for (final row in categoryBudgetRows)
+          CategoryBudgetStatus(
+            categoryId: row.read<String>('category_id'),
+            categoryName: row.read<String>('name'),
+            limitMinor: row.read<int>('limit_minor'),
+            spentMinor: categoryTotals[row.read<String>('category_id')] ?? 0,
+          ),
+      ],
     );
   }
 

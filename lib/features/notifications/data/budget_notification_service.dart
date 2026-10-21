@@ -33,7 +33,7 @@ class BudgetNotificationService {
   static const _channelId = 'budget_alerts';
   static const _channelName = 'Cảnh báo ngân sách';
   static const _channelDescription =
-      'Thông báo khi chi tiêu chạm hoặc vượt ngân sách tháng.';
+      'Thông báo khi chi tiêu của danh mục chạm hoặc vượt hạn mức.';
   static const _payload = '/budgets';
 
   final FlutterLocalNotificationsPlugin _plugin;
@@ -203,17 +203,21 @@ class BudgetNotificationService {
 
     final exceeded = decision.level == BudgetAlertLevel.exceeded;
     final title = exceeded
-        ? 'Đã vượt ngân sách tháng'
-        : 'Ngân sách sắp chạm hạn mức';
-    final body = exceeded
-        ? '${MonthUtils.label(_monthFromKey(decision.monthKey))}: đã vượt '
-              '${MoneyFormatter.format(decision.spentMinor - decision.limitMinor)}. '
-              '${MoneyFormatter.format(decision.spentMinor)} / '
-              '${MoneyFormatter.format(decision.limitMinor)}.'
-        : '${MonthUtils.label(_monthFromKey(decision.monthKey))}: đã dùng '
-              '${(decision.spentMinor / decision.limitMinor * 100).round()}% '
-              '(${MoneyFormatter.format(decision.spentMinor)} / '
-              '${MoneyFormatter.format(decision.limitMinor)}).';
+        ? 'Danh mục vượt hạn mức'
+        : 'Danh mục sắp chạm hạn mức';
+    const shown = 3;
+    final details = decision.categories
+        .take(shown)
+        .map(
+          (item) => exceeded
+              ? '${item.categoryName} vượt ${MoneyFormatter.format(item.overMinor)}'
+              : '${item.categoryName} đã dùng ${(item.progress * 100).round()}%',
+        )
+        .join(', ');
+    final more = decision.categories.length - shown;
+    final body =
+        '${MonthUtils.label(_monthFromKey(decision.monthKey))}: $details'
+        '${more > 0 ? ' và $more mục khác' : ''}.';
 
     const androidDetails = AndroidNotificationDetails(
       _channelId,
