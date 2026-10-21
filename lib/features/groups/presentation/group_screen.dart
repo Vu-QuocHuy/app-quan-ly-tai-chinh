@@ -209,33 +209,51 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       ),
     );
     if (method == null || !mounted) return;
-    final String? code;
+    final InviteLink? link;
     switch (method) {
       case _JoinMethod.scan:
         final raw = await Navigator.of(context).push<String>(
           MaterialPageRoute(
             builder: (_) => QrScanScreen(
-              title: 'Quét mã mời nhóm',
-              validate: (raw) => InviteLink.parse(raw) is GroupInviteLink
-                  ? null
-                  : 'Mã QR này không phải mã mời nhóm.',
+              title: 'Quét mã mời',
+              validate: (raw) => InviteLink.parse(raw) == null
+                  ? 'Mã QR này không phải mã mời nhóm hoặc bill.'
+                  : null,
             ),
           ),
         );
-        code = switch (raw == null ? null : InviteLink.parse(raw)) {
-          GroupInviteLink(code: final value) => value,
-          _ => null,
-        };
+        link = raw == null ? null : InviteLink.parse(raw);
       case _JoinMethod.type:
-        code = await _askText(
-          title: 'Tham gia nhóm',
+        final text = await _askText(
+          title: 'Tham gia nhóm hoặc bill',
           label: 'Mã mời',
-          hint: 'Nhập mã 8 ký tự',
+          hint: 'Mã nhóm 8 ký tự hoặc mã bill 10 ký tự',
           confirmLabel: 'Tham gia',
         );
+        if (text == null) return;
+        link = InviteLink.parse(text);
+        if (link == null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Mã mời phải có 8 ký tự (nhóm) hoặc 10 ký tự (bill), '
+                'gồm 0-9 và A-F.',
+              ),
+            ),
+          );
+        }
     }
-    if (code == null) return;
-    final inviteCode = code;
+    switch (link) {
+      case GroupInviteLink(:final code):
+        await _joinGroupByCode(code);
+      case BillInviteLink(:final code):
+        await _joinBill(code);
+      case null:
+        return;
+    }
+  }
+
+  Future<void> _joinGroupByCode(String inviteCode) async {
     ExpenseGroup? joinedGroup;
     await _runGroupAction(() async {
       joinedGroup = await ref
@@ -247,12 +265,48 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     await context.push('/groups/${group.id}');
   }
 
+  /// Vào bill: thành viên nhóm thì mở màn nhóm, người ngoài thì cuộn tới
+  /// mục "Bill bạn tham gia".
+  Future<void> _joinBill(String code) async {
+    var joined = false;
+    String? groupId;
+    await _runGroupAction(() async {
+      final service = ref.read(expenseGroupServiceProvider)!;
+      final expenseId = await service.joinBill(code);
+      groupId = await service.expenseGroupIdOf(expenseId);
+      joined = true;
+    });
+    if (!joined || !mounted) return;
+    ref.invalidate(externalBillsProvider);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Đã vào bill')));
+    final id = groupId;
+    if (id != null) {
+      await context.push('/groups/$id');
+      return;
+    }
+    try {
+      await ref.read(externalBillsProvider.future);
+    } on Object catch (_) {
+      // Lỗi tải đã hiện ngay trong mục "Bill bạn tham gia".
+    }
+    final section = _externalBillsKey.currentContext;
+    if (section == null || !section.mounted) return;
+    await Scrollable.ensureVisible(
+      section,
+      duration: const Duration(milliseconds: 300),
+    );
+  }
+
   Future<String?> _askText({
     required String title,
     required String label,
     required String hint,
     required String confirmLabel,
   }) {
+    // Không dispose khi dialog trả kết quả: TextField còn dùng controller
+    // trong animation đóng dialog. Controller không còn ai giữ sẽ được GC thu.
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
@@ -285,7 +339,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           ),
         ],
       ),
-    ).whenComplete(controller.dispose);
+    );
   }
 
   Future<void> _runGroupAction(Future<void> Function() action) async {
