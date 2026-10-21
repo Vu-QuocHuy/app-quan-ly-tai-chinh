@@ -4,9 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:hoadon_insight/app/theme/app_theme.dart';
+import 'package:hoadon_insight/core/config/feature_flags.dart';
 import 'package:hoadon_insight/core/providers/app_providers.dart';
 import 'package:hoadon_insight/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:hoadon_insight/features/invoices/domain/invoice_models.dart';
+
+import '../../helpers/fake_sync_coordinator.dart';
 
 void main() {
   CategoryBudgetStatus budget(String id, int spent) => CategoryBudgetStatus(
@@ -18,8 +21,9 @@ void main() {
 
   Future<void> pumpOverview(
     WidgetTester tester,
-    List<CategoryBudgetStatus> budgets,
-  ) async {
+    List<CategoryBudgetStatus> budgets, {
+    FakeSyncCoordinator? coordinator,
+  }) async {
     SharedPreferences.setMockInitialValues({});
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 2000);
@@ -47,6 +51,12 @@ void main() {
             (ref, query) => Stream.value(const []),
           ),
           budgetAlertsEnabledProvider.overrideWith((ref) async => false),
+          featureFlagsProvider.overrideWith(
+            (ref) async => FeatureFlags.defaults,
+          ),
+          syncCoordinatorProvider.overrideWithValue(
+            coordinator ?? FakeSyncCoordinator(),
+          ),
         ],
         child: MaterialApp(
           theme: AppTheme.light(),
@@ -90,5 +100,16 @@ void main() {
 
     expect(find.byKey(const ValueKey('budget-warning-card')), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pulling down syncs with the cloud', (tester) async {
+    final coordinator = FakeSyncCoordinator();
+    await pumpOverview(tester, const [], coordinator: coordinator);
+
+    // Màn test cao 2000px; RefreshIndicator cần kéo ~25% chiều cao mới kích hoạt.
+    await tester.flingFrom(const Offset(195, 80), const Offset(0, 800), 1000);
+    await tester.pumpAndSettle();
+
+    expect(coordinator.calls, 1);
   });
 }

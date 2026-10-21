@@ -11,6 +11,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_refresh.dart';
 import '../../../shared/widgets/app_empty_state.dart';
 import '../../../shared/widgets/app_error_state.dart';
 import '../../../shared/widgets/app_skeleton.dart';
@@ -92,174 +93,184 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     final error = invoices.error ?? incomes.error;
     final loading = !invoices.hasValue || !incomes.hasValue;
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          FinmiSliverHeader(
-            title: 'Thống kê thu chi',
-            actions: [
-              FinmiHeaderAction(
-                tooltip: 'Xuất báo cáo',
-                icon: Icons.file_download_outlined,
-                onPressed: () => showReportExportSheet(context),
-              ),
-            ],
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
-            sliver: error != null
-                ? SliverToBoxAdapter(
-                    child: AppErrorState(
-                      error: error,
-                      onRetry: () {
-                        ref.invalidate(invoiceSummariesProvider);
-                        ref.invalidate(incomesProvider);
-                      },
-                    ),
-                  )
-                : loading
-                ? const SliverToBoxAdapter(child: SkeletonHero())
-                : SliverList.list(
-                    children: [
-                      SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(
-                            value: false,
-                            label: Text('Theo tháng'),
-                          ),
-                          ButtonSegment(value: true, label: Text('Theo năm')),
-                        ],
-                        selected: {_yearMode},
-                        showSelectedIcon: false,
-                        onSelectionChanged: (value) => setState(() {
-                          _yearMode = value.single;
-                          _day = null;
-                          _month = null;
-                        }),
+      body: AppRefreshIndicator(
+        onRefresh: () => refreshFromCloud(context, ref),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            FinmiSliverHeader(
+              title: 'Thống kê thu chi',
+              actions: [
+                FinmiHeaderAction(
+                  tooltip: 'Xuất báo cáo',
+                  icon: Icons.file_download_outlined,
+                  onPressed: () => showReportExportSheet(context),
+                ),
+              ],
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 112),
+              sliver: error != null
+                  ? SliverToBoxAdapter(
+                      child: AppErrorState(
+                        error: error,
+                        onRetry: () {
+                          ref.invalidate(invoiceSummariesProvider);
+                          ref.invalidate(incomesProvider);
+                        },
                       ),
-                      const SizedBox(height: 12),
-                      if (!_yearMode)
-                        const MonthSelector()
-                      else
-                        AppCard(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                tooltip: 'Năm trước',
-                                onPressed: () => _setYear(month.year - 1),
-                                icon: const Icon(Icons.chevron_left),
-                              ),
-                              Expanded(
-                                child: TextButton(
-                                  onPressed: () => _pickYear(month.year),
-                                  child: Text(
-                                    'Năm ${month.year}',
-                                    textAlign: TextAlign.center,
+                    )
+                  : loading
+                  ? const SliverToBoxAdapter(child: SkeletonHero())
+                  : SliverList.list(
+                      children: [
+                        SegmentedButton<bool>(
+                          segments: const [
+                            ButtonSegment(
+                              value: false,
+                              label: Text('Theo tháng'),
+                            ),
+                            ButtonSegment(value: true, label: Text('Theo năm')),
+                          ],
+                          selected: {_yearMode},
+                          showSelectedIcon: false,
+                          onSelectionChanged: (value) => setState(() {
+                            _yearMode = value.single;
+                            _day = null;
+                            _month = null;
+                          }),
+                        ),
+                        const SizedBox(height: 12),
+                        if (!_yearMode)
+                          const MonthSelector()
+                        else
+                          AppCard(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Row(
+                              children: [
+                                IconButton(
+                                  tooltip: 'Năm trước',
+                                  onPressed: () => _setYear(month.year - 1),
+                                  icon: const Icon(Icons.chevron_left),
+                                ),
+                                Expanded(
+                                  child: TextButton(
+                                    onPressed: () => _pickYear(month.year),
+                                    child: Text(
+                                      'Năm ${month.year}',
+                                      textAlign: TextAlign.center,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              IconButton(
-                                tooltip: 'Năm sau',
-                                onPressed: () => _setYear(month.year + 1),
-                                icon: const Icon(Icons.chevron_right),
-                              ),
-                            ],
-                          ),
-                        ),
-                      const SizedBox(height: 12),
-                      _PeriodSummary(data: data, label: label),
-                      const SizedBox(height: 16),
-                      if (_yearMode)
-                        _YearGrid(
-                          year: month.year,
-                          selected: _month,
-                          invoices: invoices.valueOrNull ?? [],
-                          incomes: incomes.valueOrNull ?? [],
-                          onSelect: (value) => setState(() => _month = value),
-                        )
-                      else
-                        MonthlyTransactionCalendar(
-                          month: month,
-                          snapshot: snapshot,
-                          incomes: incomes.valueOrNull ?? [],
-                          selectedDay: _day,
-                          onSelectDay: (value) => setState(() => _day = value),
-                        ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: () => setState(() {
-                              _day = null;
-                              _month = null;
-                            }),
-                            icon: const Icon(Icons.date_range_outlined),
-                            label: Text(
-                              _yearMode ? 'Xem toàn năm' : 'Xem toàn tháng',
+                                IconButton(
+                                  tooltip: 'Năm sau',
+                                  onPressed: () => _setYear(month.year + 1),
+                                  icon: const Icon(Icons.chevron_right),
+                                ),
+                              ],
                             ),
                           ),
-                          if (_yearMode && _month != null)
-                            TextButton.icon(
-                              onPressed: () {
-                                final selected = DateTime(month.year, _month!);
-                                ref.read(selectedMonthProvider.notifier).state =
-                                    selected;
-                                setState(() {
-                                  _yearMode = false;
-                                  _day = null;
-                                  _month = null;
-                                });
-                              },
-                              icon: const Icon(Icons.calendar_month_outlined),
-                              label: const Text('Xem các ngày trong tháng'),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Biểu đồ · $label',
-                        key: const ValueKey('statistics-period'),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      _PeriodFlowChart(
-                        data: data,
-                        yearly: _yearMode && _month == null,
-                        daily: !_yearMode && _day != null,
-                      ),
-                      const SizedBox(height: 16),
-                      _PeriodPie(
-                        data: data,
-                        categories: categories,
-                        incomeCategories: incomeCategories,
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Giao dịch · $label',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      if (data.incomes.isEmpty && data.expenses.isEmpty)
-                        const AppCard(
-                          child: AppEmptyState(
-                            icon: Icons.receipt_long_outlined,
-                            title: 'Chưa có giao dịch',
-                            message:
-                                'Không có khoản thu hoặc chi đã lưu trong khoảng này.',
+                        const SizedBox(height: 12),
+                        _PeriodSummary(data: data, label: label),
+                        const SizedBox(height: 16),
+                        if (_yearMode)
+                          _YearGrid(
+                            year: month.year,
+                            selected: _month,
+                            invoices: invoices.valueOrNull ?? [],
+                            incomes: incomes.valueOrNull ?? [],
+                            onSelect: (value) => setState(() => _month = value),
+                          )
+                        else
+                          MonthlyTransactionCalendar(
+                            month: month,
+                            snapshot: snapshot,
+                            incomes: incomes.valueOrNull ?? [],
+                            selectedDay: _day,
+                            onSelectDay: (value) =>
+                                setState(() => _day = value),
                           ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () => setState(() {
+                                _day = null;
+                                _month = null;
+                              }),
+                              icon: const Icon(Icons.date_range_outlined),
+                              label: Text(
+                                _yearMode ? 'Xem toàn năm' : 'Xem toàn tháng',
+                              ),
+                            ),
+                            if (_yearMode && _month != null)
+                              TextButton.icon(
+                                onPressed: () {
+                                  final selected = DateTime(
+                                    month.year,
+                                    _month!,
+                                  );
+                                  ref
+                                          .read(selectedMonthProvider.notifier)
+                                          .state =
+                                      selected;
+                                  setState(() {
+                                    _yearMode = false;
+                                    _day = null;
+                                    _month = null;
+                                  });
+                                },
+                                icon: const Icon(Icons.calendar_month_outlined),
+                                label: const Text('Xem các ngày trong tháng'),
+                              ),
+                          ],
                         ),
-                      ..._transactionRows(
-                        context,
-                        data,
-                        categories,
-                        incomeCategories,
-                      ),
-                    ],
-                  ),
-          ),
-        ],
+                        const SizedBox(height: 16),
+                        Text(
+                          'Biểu đồ · $label',
+                          key: const ValueKey('statistics-period'),
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 12),
+                        _PeriodFlowChart(
+                          data: data,
+                          yearly: _yearMode && _month == null,
+                          daily: !_yearMode && _day != null,
+                        ),
+                        const SizedBox(height: 16),
+                        _PeriodPie(
+                          data: data,
+                          categories: categories,
+                          incomeCategories: incomeCategories,
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Giao dịch · $label',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 12),
+                        if (data.incomes.isEmpty && data.expenses.isEmpty)
+                          const AppCard(
+                            child: AppEmptyState(
+                              icon: Icons.receipt_long_outlined,
+                              title: 'Chưa có giao dịch',
+                              message:
+                                  'Không có khoản thu hoặc chi đã lưu trong khoảng này.',
+                            ),
+                          ),
+                        ..._transactionRows(
+                          context,
+                          data,
+                          categories,
+                          incomeCategories,
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
