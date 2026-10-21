@@ -19,6 +19,7 @@ import '../domain/group_balance_calculator.dart';
 import '../domain/group_models.dart';
 import '../domain/invite_link.dart';
 import 'bill_invite_qr_sheet.dart';
+import 'external_bills_section.dart';
 import 'group_expense_dialog.dart';
 import 'group_invite_qr_sheet.dart';
 import 'group_split_dialog.dart';
@@ -31,6 +32,7 @@ class GroupScreen extends ConsumerStatefulWidget {
 }
 
 class _GroupScreenState extends ConsumerState<GroupScreen> {
+  final _externalBillsKey = GlobalKey();
   bool _busy = false;
 
   @override
@@ -38,88 +40,96 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     final service = ref.watch(expenseGroupServiceProvider);
     final groups = ref.watch(expenseGroupsProvider);
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            title: const Text('Nhóm và quỹ chung'),
-            actions: [
-              IconButton(
-                tooltip: 'Làm mới nhóm',
-                onPressed: _refresh,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-              child: _buildActions(context, service),
+      body: RefreshIndicator(
+        onRefresh: _pullToRefresh,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverAppBar(
+              pinned: true,
+              title: const Text('Nhóm và quỹ chung'),
+              actions: [
+                IconButton(
+                  tooltip: 'Làm mới nhóm',
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
             ),
-          ),
-          if (service != null)
-            const SliverToBoxAdapter(child: _DirectShareInbox()),
-          if (service == null)
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: AppEmptyState(
-                icon: Icons.cloud_off_outlined,
-                title: 'Nhóm cần kết nối tài khoản',
-                message: 'Đăng nhập Supabase để tạo hoặc tham gia nhóm.',
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+                child: _buildActions(context, service),
               ),
-            )
-          else
-            ...switch (groups) {
-              AsyncData(value: final items) when items.isEmpty => [
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: AppEmptyState(
-                    icon: Icons.groups_outlined,
-                    title: 'Chưa có nhóm hoặc quỹ chung',
-                    message:
-                        'Tạo nhóm gia đình, mời mọi người cùng ghi thu chi vào quỹ.',
-                  ),
+            ),
+            if (service != null)
+              const SliverToBoxAdapter(child: _DirectShareInbox()),
+            if (service != null)
+              SliverToBoxAdapter(
+                child: ExternalBillsSection(key: _externalBillsKey),
+              ),
+            if (service == null)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: AppEmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Nhóm cần kết nối tài khoản',
+                  message: 'Đăng nhập Supabase để tạo hoặc tham gia nhóm.',
                 ),
-              ],
-              AsyncData(value: final items) => [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: Text(
-                      'Nhóm của tôi',
-                      style: Theme.of(context).textTheme.titleMedium,
+              )
+            else
+              ...switch (groups) {
+                AsyncData(value: final items) when items.isEmpty => [
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: AppEmptyState(
+                      icon: Icons.groups_outlined,
+                      title: 'Chưa có nhóm hoặc quỹ chung',
+                      message:
+                          'Tạo nhóm gia đình, mời mọi người cùng ghi thu chi vào quỹ.',
                     ),
                   ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverList.separated(
-                    itemCount: items.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) =>
-                        _buildGroupCard(items[index]),
-                  ),
-                ),
-              ],
-              AsyncError(error: final error) => [
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Text(
-                      'Không thể tải nhóm: ${friendlyMessage(error)}',
+                ],
+                AsyncData(value: final items) => [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: Text(
+                        'Nhóm của tôi',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                     ),
                   ),
-                ),
-              ],
-              _ => [
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-              ],
-            },
-          const SliverToBoxAdapter(child: SizedBox(height: 112)),
-        ],
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    sliver: SliverList.separated(
+                      itemCount: items.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) =>
+                          _buildGroupCard(items[index]),
+                    ),
+                  ),
+                ],
+                AsyncError(error: final error) => [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Text(
+                        'Không thể tải nhóm: ${friendlyMessage(error)}',
+                      ),
+                    ),
+                  ),
+                ],
+                _ => [
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ],
+              },
+            const SliverToBoxAdapter(child: SizedBox(height: 112)),
+          ],
+        ),
       ),
     );
   }
@@ -296,6 +306,16 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
 
   void _refresh() {
     ref.invalidate(expenseGroupsProvider);
+    ref.invalidate(externalBillsProvider);
+  }
+
+  Future<void> _pullToRefresh() async {
+    _refresh();
+    try {
+      await ref.read(externalBillsProvider.future);
+    } on Object catch (_) {
+      // Lỗi tải đã hiện ngay trong mục "Bill bạn tham gia".
+    }
   }
 }
 

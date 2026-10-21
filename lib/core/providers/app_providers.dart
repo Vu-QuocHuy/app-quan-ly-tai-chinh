@@ -5,6 +5,7 @@ import '../../features/auth/data/supabase_auth_service.dart';
 import '../../features/chat/data/chat_history_store.dart';
 import '../../features/chat/domain/local_chat_assistant.dart';
 import '../../features/groups/data/group_service.dart';
+import '../../features/groups/domain/external_bill.dart';
 import '../../features/groups/domain/group_models.dart';
 import '../../features/income/data/income_repository.dart';
 import '../../features/planning/data/plan_repository.dart';
@@ -180,6 +181,13 @@ final expenseGroupsProvider = FutureProvider.autoDispose<List<ExpenseGroup>>((
 ) {
   final service = ref.watch(expenseGroupServiceProvider);
   return service?.listGroups() ?? const [];
+});
+
+final externalBillsProvider = FutureProvider.autoDispose<List<ExternalBill>>((
+  ref,
+) {
+  final service = ref.watch(expenseGroupServiceProvider);
+  return service?.listExternalBills() ?? const [];
 });
 
 final expenseGroupDetailsProvider = FutureProvider.autoDispose

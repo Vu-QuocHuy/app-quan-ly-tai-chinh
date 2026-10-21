@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hoadon_insight/core/providers/app_providers.dart';
 import 'package:hoadon_insight/features/groups/data/group_service.dart';
+import 'package:hoadon_insight/features/groups/domain/external_bill.dart';
 import 'package:hoadon_insight/features/groups/domain/group_models.dart';
 import 'package:hoadon_insight/features/groups/presentation/group_screen.dart';
 
@@ -110,6 +111,9 @@ class _FakeExpenseGroupService implements ExpenseGroupService {
 
   @override
   Future<GroupDetails> loadDetails(ExpenseGroup group) async => details;
+
+  @override
+  Future<List<ExternalBill>> listExternalBills() async => const [];
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
