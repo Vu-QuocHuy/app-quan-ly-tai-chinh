@@ -11,6 +11,7 @@ import '../../../shared/formatting/category_lookup.dart';
 import '../../../shared/widgets/app_empty_state.dart';
 import '../../../shared/widgets/app_error_state.dart';
 import '../../../shared/widgets/app_list_section.dart';
+import '../../../shared/widgets/app_refresh.dart';
 import '../../../shared/widgets/app_skeleton.dart';
 import '../../../shared/widgets/category_avatar.dart';
 import '../../../shared/widgets/entity_list_row.dart';
@@ -55,7 +56,7 @@ class QrPaymentHistoryScreen extends ConsumerWidget {
     final categories = ref.watch(categoriesProvider).value ?? const [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Lịch sử thanh toán QR')),
+      appBar: AppBar(title: const Text('Lịch sử thanh toán QR', maxLines: 3)),
       body: history.when(
         loading: () => const Padding(
           padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -69,15 +70,26 @@ class QrPaymentHistoryScreen extends ConsumerWidget {
         ),
         data: (payments) {
           if (payments.isEmpty) {
-            return AppEmptyState(
-              icon: Icons.qr_code_2_outlined,
-              title: 'Chưa có thanh toán QR',
-              message:
-                  'Khoản chi sẽ xuất hiện ở đây sau khi bạn xác nhận đã thanh toán.',
-              action: FilledButton.icon(
-                onPressed: () => context.go('/qr-payment'),
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('Quét mã QR'),
+            return AppRefreshIndicator(
+              onRefresh: () => refreshFromCloud(context, ref),
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: AppEmptyState(
+                      icon: Icons.qr_code_2_outlined,
+                      title: 'Chưa có thanh toán QR',
+                      message:
+                          'Khoản chi sẽ xuất hiện ở đây sau khi bạn xác nhận đã thanh toán.',
+                      action: FilledButton.icon(
+                        onPressed: () => context.go('/qr-payment'),
+                        icon: const Icon(Icons.qr_code_scanner),
+                        label: const Text('Quét mã QR'),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             );
           }
@@ -86,50 +98,60 @@ class QrPaymentHistoryScreen extends ConsumerWidget {
             0,
             (total, payment) => total + payment.totalMinor,
           );
-          return CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${payments.length} khoản đã xác nhận',
-                              style: Theme.of(context).textTheme.titleMedium,
+          return AppRefreshIndicator(
+            onRefresh: () => refreshFromCloud(context, ref),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${payments.length} khoản đã xác nhận',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
                             ),
-                          ),
-                          MoneyText(totalMinor, emphasis: MoneyEmphasis.title),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Được ghi nhận sau khi bạn xác nhận đã thanh toán trong app.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            MoneyText(
+                              totalMinor,
+                              emphasis: MoneyEmphasis.title,
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                sliver: SliverAppListSection(
-                  itemCount: payments.length,
-                  itemBuilder: (context, index) => _QrPaymentRow(
-                    invoice: payments[index],
-                    category: findCategory(
-                      categories,
-                      payments[index].categoryId,
+                        const SizedBox(height: 4),
+                        Text(
+                          'Được ghi nhận sau khi bạn xác nhận đã thanh toán trong app.',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-            ],
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                  sliver: SliverAppListSection(
+                    itemCount: payments.length,
+                    itemBuilder: (context, index) => _QrPaymentRow(
+                      invoice: payments[index],
+                      category: findCategory(
+                        categories,
+                        payments[index].categoryId,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),

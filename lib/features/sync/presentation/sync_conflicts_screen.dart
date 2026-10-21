@@ -8,6 +8,7 @@ import '../../../core/utils/money_formatter.dart';
 import '../../../shared/formatting/app_date_format.dart';
 import '../../../shared/widgets/app_empty_state.dart';
 import '../../../shared/widgets/app_error_state.dart';
+import '../../../shared/widgets/app_refresh.dart';
 import '../../../shared/widgets/labelled_row.dart';
 
 class SyncConflictsScreen extends ConsumerWidget {
@@ -17,37 +18,49 @@ class SyncConflictsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final conflicts = ref.watch(invoiceConflictsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Xung đột đồng bộ')),
+      appBar: AppBar(title: const Text('Xung đột đồng bộ', maxLines: 3)),
       body: SafeArea(
         child: conflicts.when(
-          data: (items) => items.isEmpty
-              ? const AppEmptyState(
-                  icon: Icons.cloud_done_outlined,
-                  title: 'Dữ liệu đã nhất quán',
-                  message:
-                      'Khi hai thiết bị cùng sửa một hóa đơn, bạn có thể chọn '
-                      'bản muốn giữ tại đây.',
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
-                  itemCount: items.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) => _ConflictCard(
-                    conflict: items[index],
-                    onKeepLocal: () => _resolve(
-                      context,
-                      ref,
-                      items[index].local.id,
-                      keepLocal: true,
-                    ),
-                    onUseCloud: () => _resolve(
-                      context,
-                      ref,
-                      items[index].local.id,
-                      keepLocal: false,
+          data: (items) => AppRefreshIndicator(
+            onRefresh: () => refreshFromCloud(context, ref),
+            child: items.isEmpty
+                ? const CustomScrollView(
+                    physics: AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: AppEmptyState(
+                          icon: Icons.cloud_done_outlined,
+                          title: 'Dữ liệu đã nhất quán',
+                          message:
+                              'Khi hai thiết bị cùng sửa một hóa đơn, bạn có thể chọn '
+                              'bản muốn giữ tại đây.',
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                    itemCount: items.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) => _ConflictCard(
+                      conflict: items[index],
+                      onKeepLocal: () => _resolve(
+                        context,
+                        ref,
+                        items[index].local.id,
+                        keepLocal: true,
+                      ),
+                      onUseCloud: () => _resolve(
+                        context,
+                        ref,
+                        items[index].local.id,
+                        keepLocal: false,
+                      ),
                     ),
                   ),
-                ),
+          ),
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, stack) => AppErrorState(
             error: error,

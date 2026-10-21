@@ -249,6 +249,25 @@ class BudgetEntity {
 }
 
 @immutable
+class CategoryBudgetStatus {
+  const CategoryBudgetStatus({
+    required this.categoryId,
+    required this.categoryName,
+    required this.limitMinor,
+    required this.spentMinor,
+  });
+
+  final String categoryId;
+  final String categoryName;
+  final int limitMinor;
+  final int spentMinor;
+
+  bool get isOver => limitMinor > 0 && spentMinor > limitMinor;
+  int get overMinor => isOver ? spentMinor - limitMinor : 0;
+  double get progress => limitMinor <= 0 ? 0 : spentMinor / limitMinor;
+}
+
+@immutable
 class DashboardSnapshot {
   const DashboardSnapshot({
     required this.monthKey,
@@ -258,6 +277,7 @@ class DashboardSnapshot {
     required this.dailyTotals,
     required this.budgetLimitMinor,
     this.previousMonthTotalMinor = 0,
+    this.categoryBudgets = const [],
   });
 
   final String monthKey;
@@ -268,8 +288,17 @@ class DashboardSnapshot {
   final int budgetLimitMinor;
   final int previousMonthTotalMinor;
 
+  /// Danh mục có hạn mức > 0 trong tháng; danh mục không có ở đây là không
+  /// giới hạn.
+  final List<CategoryBudgetStatus> categoryBudgets;
+
   double get budgetProgress =>
       budgetLimitMinor <= 0 ? 0 : totalMinor / budgetLimitMinor;
+
+  /// Danh mục vượt hạn mức, vượt nhiều nhất trước.
+  List<CategoryBudgetStatus> get overBudgetCategories =>
+      categoryBudgets.where((item) => item.isOver).toList()
+        ..sort((a, b) => b.overMinor.compareTo(a.overMinor));
 
   double? get monthOverMonthChange => previousMonthTotalMinor <= 0
       ? null

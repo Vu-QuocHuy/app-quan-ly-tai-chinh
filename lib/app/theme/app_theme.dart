@@ -4,33 +4,57 @@ import 'package:flutter/material.dart';
 import 'app_color_schemes.dart';
 import 'app_tokens.dart';
 import 'finance_colors.dart';
+import 'finmi_appearance.dart';
 
 abstract final class AppTheme {
-  // Hoist ra `static final`: trước đây `app.dart` gọi AppTheme.light() và
-  // AppTheme.dark() trong build() của widget gốc, chạy lại toàn bộ việc dựng
-  // ThemeData mỗi lần root rebuild.
-  static final ThemeData _light = _build(
-    AppColorSchemes.light,
-    AppFinanceColors.light,
-  );
-  static final ThemeData _dark = _build(
-    AppColorSchemes.dark,
-    AppFinanceColors.dark,
-  );
+  static final Map<String, ThemeData> _cache = {};
+  static ThemeData light() => forAppearance(FinmiAppearance.fromId('white'));
+  static ThemeData dark() => forAppearance(FinmiAppearance.fromId('midnight'));
+  static ThemeData forAppearance(FinmiAppearance appearance) =>
+      _cache.putIfAbsent(appearance.id, () => _build(appearance));
 
-  static ThemeData light() => _light;
-  static ThemeData dark() => _dark;
-
-  static ThemeData _build(ColorScheme scheme, AppFinanceColors finance) {
+  static ThemeData _build(FinmiAppearance appearance) {
+    final dark = appearance.isDark;
+    final foundation = dark ? AppColorSchemes.dark : AppColorSchemes.light;
+    final scheme = foundation.copyWith(
+      primary: appearance.primary,
+      onPrimary: dark ? const Color(0xFF10261A) : Colors.white,
+      surface: appearance.background,
+      surfaceContainerLowest: appearance.surface,
+      surfaceContainerLow: appearance.surface,
+      surfaceContainer: appearance.surface,
+      surfaceContainerHigh: Color.alphaBlend(
+        appearance.primary.withValues(alpha: 0.06),
+        appearance.surface,
+      ),
+      surfaceContainerHighest: Color.alphaBlend(
+        appearance.primary.withValues(alpha: 0.10),
+        appearance.surface,
+      ),
+      onSurface: appearance.text,
+      onSurfaceVariant: appearance.muted,
+      outlineVariant: appearance.tokens.border,
+      // Stronger control boundary; card boundaries use the reference token.
+      outline: dark ? const Color(0xFF8FA595) : const Color(0xFF6E8476),
+      surfaceTint: Colors.transparent,
+    );
+    final finance = dark ? AppFinanceColors.dark : AppFinanceColors.light;
+    final tokens = appearance.tokens;
+    final cardShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(tokens.cardRadius),
+      side: BorderSide(color: tokens.border, width: tokens.outlineWidth),
+    );
     final base = ThemeData(
+      fontFamily: 'Be Vietnam Pro',
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.surface, // L0
       // Từ `.standard` cố định -> theo nền tảng. App có target web và dùng
       // NavigationRail trên 840dp, nên mật độ nên theo platform.
-      visualDensity: VisualDensity.adaptivePlatformDensity,
+      visualDensity: VisualDensity.standard,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
       splashFactory: InkRipple.splashFactory,
-      extensions: <ThemeExtension<dynamic>>[finance],
+      extensions: <ThemeExtension<dynamic>>[finance, tokens],
       // Đặt một lần ở đây thay vì per-route: biến thể reduced-motion sau này
       // chỉ là một dòng swap.
       pageTransitionsTheme: const PageTransitionsTheme(
@@ -51,10 +75,9 @@ abstract final class AppTheme {
       cardTheme: CardThemeData(
         elevation: AppElevations.none,
         margin: EdgeInsets.zero,
-        color: scheme.cardSurface, // L1 — 1.21:1 / 1.17:1 so với L0
-        // KHÔNG có `side`. Thẻ tĩnh là borderless; thẻ chạm được nhận viền
-        // `outline` từ `AppCard(onTap:)`.
-        shape: AppShapes.card,
+        color: scheme.cardSurface,
+        // Thẻ tĩnh và thẻ tương tác dùng chung viền Finmi.
+        shape: cardShape,
         clipBehavior: Clip.antiAlias,
       ),
       dividerTheme: DividerThemeData(
@@ -69,11 +92,11 @@ abstract final class AppTheme {
       // ---------- Chrome điều hướng ----------
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.surfaceContainerLow,
-        surfaceTintColor: scheme.surfaceTint,
+        surfaceTintColor: Colors.transparent,
         shape: Border(bottom: BorderSide(color: scheme.outlineVariant)),
-        scrolledUnderElevation: AppElevations.raised,
+        scrolledUnderElevation: 0,
         elevation: AppElevations.none,
-        centerTitle: false,
+        centerTitle: true,
         titleTextStyle: text.titleLarge?.copyWith(color: scheme.onSurface),
         iconTheme: IconThemeData(
           color: scheme.onSurface,
@@ -83,9 +106,9 @@ abstract final class AppTheme {
       navigationBarTheme: NavigationBarThemeData(
         // `height: 72` bị XOÁ. Mặc định M3 là 80dp và 8dp chênh lệch đó chính
         // là khoảng dư mà bộ kẹp nhãn của Flutter cần cho "Tổng quan".
-        elevation: AppElevations.raised,
+        elevation: 0,
         backgroundColor: scheme.surfaceContainerLow,
-        surfaceTintColor: scheme.surfaceTint,
+        surfaceTintColor: Colors.transparent,
         // Pill thương hiệu đặc: 8.00:1 sáng / 8.85:1 tối.
         indicatorColor: scheme.primary,
         indicatorShape: AppShapes.pill,
@@ -128,7 +151,7 @@ abstract final class AppTheme {
         // mặc định của M3 = 1.23:1 so với nền. Nó là CTA toàn cục duy nhất.
         backgroundColor: scheme.primary,
         foregroundColor: scheme.onPrimary, // 8.00:1 / 8.85:1
-        elevation: AppElevations.raised,
+        elevation: 0,
         hoverElevation: AppElevations.raisedHover,
         focusElevation: AppElevations.raisedHover,
         extendedTextStyle: text.labelLarge?.copyWith(
@@ -154,7 +177,10 @@ abstract final class AppTheme {
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(48, 48),
           shape: AppShapes.control,
-          side: BorderSide(color: scheme.outline), // 3.68:1 / 6.08:1
+          side: BorderSide(
+            color: scheme.outline,
+            width: 1.25,
+          ), // 3.68:1 / 6.08:1
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
         ).copyWith(overlayColor: _stateLayer(scheme.primary)),
       ),
@@ -178,20 +204,20 @@ abstract final class AppTheme {
         style: SegmentedButton.styleFrom(
           selectedBackgroundColor: scheme.secondaryContainer,
           selectedForegroundColor: scheme.onSecondaryContainer,
-          side: BorderSide(color: scheme.outline),
+          side: BorderSide(color: scheme.outline, width: 1.25),
         ),
       ),
 
       // ---------- Nhập liệu ----------
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surfaceContainerLow,
+        fillColor: appearance.surface,
         border: const OutlineInputBorder(borderRadius: AppShapes.controlRadius),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppShapes.controlRadius,
           // `outline` chứ không phải `outlineVariant`: 4.12:1 / 5.56:1 so với
           // nền input, vượt ngưỡng 3:1 của WCAG 1.4.11 cho biên control.
-          borderSide: BorderSide(color: scheme.outline),
+          borderSide: BorderSide(color: scheme.outline, width: 1.25),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppShapes.controlRadius,
@@ -208,9 +234,9 @@ abstract final class AppTheme {
         labelStyle: text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
         floatingLabelStyle: text.bodyMedium?.copyWith(color: scheme.primary),
         helperStyle: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-        helperMaxLines: 2,
+        helperMaxLines: 4,
         errorStyle: text.bodySmall?.copyWith(color: scheme.error),
-        errorMaxLines: 3,
+        errorMaxLines: 5,
         alignLabelWithHint: true,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.lg,
@@ -248,7 +274,7 @@ abstract final class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: scheme.cardSurface,
         selectedColor: scheme.secondaryContainer,
-        side: BorderSide(color: scheme.outline),
+        side: BorderSide(color: scheme.outline, width: 1.25),
         shape: AppShapes.control,
         labelStyle: text.labelLarge?.copyWith(color: scheme.onSurface),
         secondaryLabelStyle: text.labelLarge?.copyWith(
@@ -265,7 +291,7 @@ abstract final class AppTheme {
         backgroundColor: scheme.liftedSurface, // L3
         surfaceTintColor: Colors.transparent,
         elevation: AppElevations.none,
-        shape: AppShapes.card,
+        shape: cardShape,
         titleTextStyle: text.headlineSmall?.copyWith(color: scheme.onSurface),
         contentTextStyle: text.bodyLarge?.copyWith(
           color: scheme.onSurfaceVariant,
@@ -297,7 +323,7 @@ abstract final class AppTheme {
         actionTextColor: scheme.inversePrimary, // 7.65:1 / 6.81:1
         shape: AppShapes.control,
         insetPadding: const EdgeInsets.all(AppSpacing.lg),
-        elevation: AppElevations.raised,
+        elevation: 0,
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
@@ -314,8 +340,8 @@ abstract final class AppTheme {
       popupMenuTheme: PopupMenuThemeData(
         color: scheme.liftedSurface,
         surfaceTintColor: Colors.transparent,
-        elevation: AppElevations.raised,
-        shape: AppShapes.card,
+        elevation: 0,
+        shape: cardShape,
         textStyle: text.bodyLarge?.copyWith(color: scheme.onSurface),
       ),
 
@@ -366,56 +392,95 @@ abstract final class AppTheme {
   static TextTheme _textTheme(TextTheme base) => base
       .copyWith(
         displayLarge: base.displayLarge!.copyWith(
-          height: 1.20,
+          fontSize: 34,
+          height: 1.30,
           fontWeight: FontWeight.w700,
           letterSpacing: 0,
         ),
         displayMedium: base.displayMedium!.copyWith(
+          fontSize: 28,
           height: 1.22,
           fontWeight: FontWeight.w700,
           letterSpacing: 0,
         ),
         displaySmall: base.displaySmall!.copyWith(
+          fontSize: 24,
           height: 1.28,
           fontWeight: FontWeight.w700,
           letterSpacing: 0,
         ),
         headlineLarge: base.headlineLarge!.copyWith(
+          fontSize: 24,
           height: 1.32,
           fontWeight: FontWeight.w700,
           letterSpacing: 0,
         ),
         headlineMedium: base.headlineMedium!.copyWith(
+          fontSize: 22,
           height: 1.34,
           fontWeight: FontWeight.w700,
           letterSpacing: 0,
         ),
         headlineSmall: base.headlineSmall!.copyWith(
+          fontSize: 20,
           height: 1.36,
           fontWeight: FontWeight.w700,
           letterSpacing: 0,
         ),
         titleLarge: base.titleLarge!.copyWith(
+          fontSize: 20,
           height: 1.34,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
         ),
         titleMedium: base.titleMedium!.copyWith(
+          fontSize: 16,
           height: 1.40,
           fontWeight: FontWeight.w600,
         ),
         // titleSmall trước đây bị bỏ quên ở w500 mặc định trong khi titleLarge
         // là w700 -> thang trọng lượng gãy ngay trong một thẻ.
         titleSmall: base.titleSmall!.copyWith(
+          fontSize: 14,
           height: 1.40,
           fontWeight: FontWeight.w600,
         ),
-        bodyLarge: base.bodyLarge!.copyWith(height: 1.50),
-        bodyMedium: base.bodyMedium!.copyWith(height: 1.50),
-        bodySmall: base.bodySmall!.copyWith(height: 1.45),
-        labelLarge: base.labelLarge!.copyWith(fontWeight: FontWeight.w600),
-        labelMedium: base.labelMedium!.copyWith(fontWeight: FontWeight.w600),
-        labelSmall: base.labelSmall!.copyWith(fontWeight: FontWeight.w600),
+        bodyLarge: base.bodyLarge!.copyWith(
+          fontSize: 16,
+          height: 1.50,
+          letterSpacing: 0,
+        ),
+        bodyMedium: base.bodyMedium!.copyWith(
+          fontSize: 14,
+          height: 1.50,
+          letterSpacing: 0,
+        ),
+        bodySmall: base.bodySmall!.copyWith(
+          fontSize: 12,
+          height: 1.45,
+          letterSpacing: 0,
+        ),
+        labelLarge: base.labelLarge!.copyWith(
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0,
+        ),
+        labelMedium: base.labelMedium!.copyWith(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0,
+        ),
+        labelSmall: base.labelSmall!.copyWith(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0,
+        ),
       )
       // Phòng thủ cho ROM Android bị lược bớt font.
-      .apply(fontFamilyFallback: const ['Roboto', 'Noto Sans']);
+      .apply(
+        fontFamilyFallback: const [
+          'Be Vietnam Pro',
+          'Segoe UI',
+          'Roboto',
+          'Noto Sans',
+        ],
+      );
 }

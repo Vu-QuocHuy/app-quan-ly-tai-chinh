@@ -70,3 +70,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local design references and generated UI verification output
+/Finmi-App-Kit/
+/artifacts/
+/preview_redesign*.html
+/image*.png
+/finmi.png

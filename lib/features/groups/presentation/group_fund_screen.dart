@@ -8,6 +8,7 @@ import '../../../core/utils/money_formatter.dart';
 import '../../../app/theme/finance_colors.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/errors/error_presenter.dart';
+import '../../../shared/widgets/app_refresh.dart';
 import '../domain/group_models.dart';
 import 'fund_progress_card.dart';
 
@@ -61,6 +62,15 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
   void _refresh({bool force = false}) {
     if (!mounted || _fetching || (_busy && !force)) return;
     setState(() => _future = _load());
+  }
+
+  Future<void> _pullToRefresh() async {
+    _refresh();
+    try {
+      await _future;
+    } on Object {
+      // Lỗi đã được hiển thị trong FutureBuilder.
+    }
   }
 
   Future<void> _add(String kind) async {
@@ -209,7 +219,7 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Quỹ chung'),
+      title: const Text('Quỹ chung', maxLines: 3),
       actions: [
         IconButton(
           onPressed: _refresh,
@@ -251,120 +261,128 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
                   ? entry.amountMinor
                   : -entry.amountMinor),
         );
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
-          children: [
-            if (_busy) const LinearProgressIndicator(),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      data.details.group.name,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Số dư quỹ',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    Text(
-                      MoneyFormatter.format(balance),
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Mọi thành viên có thể ghi thu và chi. Quỹ được theo dõi riêng với khoản chia tiền trong nhóm.',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            FundProgressCard(
-              balanceMinor: balance,
-              goalMinor: data.details.group.fundGoalMinor,
-              deadline: data.details.group.fundDeadline,
-              isOwner: data.details.group.ownerId == currentUserId,
-              onEditGoal: () => _editGoal(data.details.group),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _busy ? null : () => _add('deposit'),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Thu vào quỹ'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _busy || balance <= 0
-                        ? null
-                        : () => _add('expense'),
-                    icon: const Icon(Icons.remove),
-                    label: const Text('Chi từ quỹ'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Text('Lịch sử quỹ', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            if (data.entries.isEmpty)
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Text('Chưa có giao dịch quỹ.'),
-                ),
-              ),
-            for (final entry in data.entries)
+        return AppRefreshIndicator(
+          onRefresh: _pullToRefresh,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+            children: [
+              if (_busy) const LinearProgressIndicator(),
               Card(
-                child: ListTile(
-                  leading: CircleAvatar(
-                    child: Icon(
-                      entry.kind == 'deposit'
-                          ? Icons.south_west
-                          : Icons.north_east,
-                    ),
-                  ),
-                  title: Text(
-                    entry.kind == 'deposit' ? 'Thu vào quỹ' : entry.note,
-                  ),
-                  subtitle: Text(
-                    '${names[entry.actorId] ?? (entry.actorId == null ? 'Tài khoản đã xóa' : 'Thành viên')} · ${entry.createdAt.day}/${entry.createdAt.month}/${entry.createdAt.year}',
-                  ),
-                  trailing: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${entry.kind == 'deposit' ? '+' : '−'}${MoneyFormatter.format(entry.amountMinor)}',
-                        style: TextStyle(
-                          color: entry.kind == 'deposit'
-                              ? Theme.of(
-                                  context,
-                                ).extension<AppFinanceColors>()!.income.color
-                              : Theme.of(
-                                  context,
-                                ).extension<AppFinanceColors>()!.expense.color,
-                        ),
+                        data.details.group.name,
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      if (entry.actorId == currentUserId ||
-                          data.details.group.ownerId == currentUserId)
-                        InkWell(
-                          onTap: _busy ? null : () => _delete(entry),
-                          child: const Text('Xóa'),
-                        ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Số dư quỹ',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      Text(
+                        MoneyFormatter.format(balance),
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Mọi thành viên có thể ghi thu và chi. Quỹ được theo dõi riêng với khoản chia tiền trong nhóm.',
+                      ),
                     ],
                   ),
                 ),
               ),
-          ],
+              const SizedBox(height: 12),
+              FundProgressCard(
+                balanceMinor: balance,
+                goalMinor: data.details.group.fundGoalMinor,
+                deadline: data.details.group.fundDeadline,
+                isOwner: data.details.group.ownerId == currentUserId,
+                onEditGoal: () => _editGoal(data.details.group),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : () => _add('deposit'),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Thu vào quỹ'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _busy || balance <= 0
+                          ? null
+                          : () => _add('expense'),
+                      icon: const Icon(Icons.remove),
+                      label: const Text('Chi từ quỹ'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Lịch sử quỹ',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              if (data.entries.isEmpty)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text('Chưa có giao dịch quỹ.'),
+                  ),
+                ),
+              for (final entry in data.entries)
+                Card(
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      child: Icon(
+                        entry.kind == 'deposit'
+                            ? Icons.south_west
+                            : Icons.north_east,
+                      ),
+                    ),
+                    title: Text(
+                      entry.kind == 'deposit' ? 'Thu vào quỹ' : entry.note,
+                    ),
+                    subtitle: Text(
+                      '${names[entry.actorId] ?? (entry.actorId == null ? 'Tài khoản đã xóa' : 'Thành viên')} · ${entry.createdAt.day}/${entry.createdAt.month}/${entry.createdAt.year}',
+                    ),
+                    trailing: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${entry.kind == 'deposit' ? '+' : '−'}${MoneyFormatter.format(entry.amountMinor)}',
+                          style: TextStyle(
+                            color: entry.kind == 'deposit'
+                                ? Theme.of(
+                                    context,
+                                  ).extension<AppFinanceColors>()!.income.color
+                                : Theme.of(context)
+                                      .extension<AppFinanceColors>()!
+                                      .expense
+                                      .color,
+                          ),
+                        ),
+                        if (entry.actorId == currentUserId ||
+                            data.details.group.ownerId == currentUserId)
+                          InkWell(
+                            onTap: _busy ? null : () => _delete(entry),
+                            child: const Text('Xóa'),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     ),

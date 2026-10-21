@@ -1,3 +1,6 @@
+import '../../../shared/widgets/finmi_page_header.dart';
+import '../../../shared/widgets/app_refresh.dart';
+import '../../../shared/widgets/finmi_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,11 +11,9 @@ import '../../../core/utils/month_utils.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../app/theme/finance_colors.dart';
 import '../../../shared/widgets/app_card.dart';
-import '../../../shared/widgets/budget_meter.dart';
 import '../../../shared/widgets/category_avatar.dart';
 import '../../../shared/widgets/month_selector.dart';
 import '../../../shared/widgets/money_text.dart';
-import '../../../shared/widgets/section_header.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../../shared/errors/error_presenter.dart';
@@ -29,101 +30,98 @@ class BudgetScreen extends ConsumerWidget {
     final monthKey = MonthUtils.key(selectedMonth);
     final dashboardSnapshot = dashboard.asData?.value;
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            title: const Text('Ngân sách'),
-            actions: [
-              IconButton(
-                tooltip: 'Quản lý danh mục',
-                onPressed: () => context.push('/categories'),
-                icon: const Icon(Icons.category_outlined),
-              ),
-            ],
-          ),
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(16, 24, 16, 12),
-              child: MonthSelector(),
+      body: AppRefreshIndicator(
+        onRefresh: () => refreshFromCloud(context, ref),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            FinmiSliverHeader(
+              title: 'Hạn mức ngân sách',
+              actions: [
+                FinmiHeaderAction(
+                  tooltip: 'Quản lý danh mục',
+                  onPressed: () => context.push('/categories'),
+                  icon: Icons.category_outlined,
+                ),
+              ],
             ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: AppCard(
-                padding: EdgeInsets.zero,
-                onTap: () => context.push('/plans'),
-                child: const ListTile(
-                  leading: Icon(Icons.event_repeat),
-                  title: Text('Khoản chi cố định'),
-                  trailing: Icon(Icons.chevron_right),
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, 18, 20, 12),
+                child: MonthSelector(),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: _BudgetSummary(
+                  snapshot: dashboard,
+                  categories: categories.valueOrNull ?? const [],
                 ),
               ),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: _BudgetSummary(snapshot: dashboard),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            sliver: switch ((categories, budgets)) {
-              (
-                AsyncData(value: final categoryItems),
-                AsyncData(value: final budgetItems),
-              ) =>
-                SliverList.separated(
-                  itemCount: categoryItems.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final category = categoryItems[index];
-                    final budget = budgetItems
-                        .where((item) => item.categoryId == category.id)
-                        .firstOrNull;
-                    return _BudgetTile(
-                      category: category,
-                      budget: budget,
-                      spentMinor:
-                          dashboardSnapshot?.categoryTotals[category.id] ?? 0,
-                      onEdit: () =>
-                          _editBudget(context, ref, category, budget, monthKey),
-                    );
-                  },
-                ),
-              (AsyncError(error: final error), _) ||
-              (_, AsyncError(error: final error)) => SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Không thể tải ngân sách: ${friendlyMessage(error)}',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: () {
-                          ref.invalidate(categoriesProvider);
-                          ref.invalidate(budgetsProvider);
-                        },
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Thử lại'),
-                      ),
-                    ],
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              sliver: switch ((categories, budgets)) {
+                (
+                  AsyncData(value: final categoryItems),
+                  AsyncData(value: final budgetItems),
+                ) =>
+                  SliverList.separated(
+                    itemCount: categoryItems.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final category = categoryItems[index];
+                      final budget = budgetItems
+                          .where((item) => item.categoryId == category.id)
+                          .firstOrNull;
+                      return _BudgetTile(
+                        category: category,
+                        budget: budget,
+                        spentMinor:
+                            dashboardSnapshot?.categoryTotals[category.id] ?? 0,
+                        onEdit: () => _editBudget(
+                          context,
+                          ref,
+                          category,
+                          budget,
+                          monthKey,
+                        ),
+                      );
+                    },
+                  ),
+                (AsyncError(error: final error), _) ||
+                (_, AsyncError(error: final error)) => SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Không thể tải ngân sách: ${friendlyMessage(error)}',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: () {
+                            ref.invalidate(categoriesProvider);
+                            ref.invalidate(budgetsProvider);
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Thử lại'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              _ => const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            },
-          ),
-        ],
+                _ => const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -140,8 +138,8 @@ class BudgetScreen extends ConsumerWidget {
     final result = await showDialog<_BudgetDialogResult>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Ngân sách ${category.name}'),
-        content: TextFormField(
+        title: Text('Ngân sách ${category.name}', maxLines: 3),
+        content: FinmiTextField(
           initialValue: initialValue,
           onChanged: (text) => inputValue = text,
           autofocus: true,
@@ -149,7 +147,7 @@ class BudgetScreen extends ConsumerWidget {
           decoration: const InputDecoration(
             labelText: 'Hạn mức tháng',
             suffixText: '₫',
-            helperText: 'Nhập số tiền không có phần thập phân.',
+            helperText: 'Để trống hoặc nhập 0 để không giới hạn.',
           ),
         ),
         actions: [
@@ -159,7 +157,8 @@ class BudgetScreen extends ConsumerWidget {
                 final confirmed = await showConfirmDialog(
                   context,
                   title: 'Xóa hạn mức ngân sách?',
-                  message: 'Hạn mức cho danh mục “${category.name}” sẽ bị xóa.',
+                  message:
+                      'Danh mục “${category.name}” sẽ trở về không giới hạn.',
                   confirmLabel: 'Xóa hạn mức',
                   destructive: true,
                 );
@@ -184,9 +183,18 @@ class BudgetScreen extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () {
+              if (inputValue.trim().isEmpty) {
+                Navigator.pop(context, const _BudgetDialogResult.delete());
+                return;
+              }
               final parsed = MoneyFormatter.tryParse(inputValue);
               if (parsed == null || parsed < 0) return;
-              Navigator.pop(context, _BudgetDialogResult.value(parsed));
+              Navigator.pop(
+                context,
+                parsed == 0
+                    ? const _BudgetDialogResult.delete()
+                    : _BudgetDialogResult.value(parsed),
+              );
             },
             child: const Text('Lưu'),
           ),
@@ -194,8 +202,10 @@ class BudgetScreen extends ConsumerWidget {
       ),
     );
     if (result == null) return;
-    if (result.delete && current != null) {
-      await ref.read(invoiceRepositoryProvider).deleteBudget(current.id);
+    if (result.delete) {
+      if (current != null) {
+        await ref.read(invoiceRepositoryProvider).deleteBudget(current.id);
+      }
       return;
     }
     final value = result.value;
@@ -238,9 +248,12 @@ class _BudgetTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final finance = context.finance;
+    // Danh mục chưa đặt hạn mức (hoặc hạn mức 0) mặc định là không giới hạn.
     final limit = budget?.limitMinor ?? 0;
-    final ratio = limit <= 0 ? 0.0 : spentMinor / limit;
-    final progressColor = ratio >= 1
+    final unlimited = limit <= 0;
+    final ratio = unlimited ? 0.0 : spentMinor / limit;
+    final isOver = !unlimited && spentMinor > limit;
+    final progressColor = isOver
         ? finance.budgetOver.color
         : ratio >= 0.8
         ? finance.budgetWarn.color
@@ -248,17 +261,12 @@ class _BudgetTile extends StatelessWidget {
     final remaining = limit - spentMinor;
 
     return AppCard(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        AppSpacing.md,
-        AppSpacing.sm,
-        AppSpacing.md,
-      ),
+      onTap: onEdit,
+      padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          CategoryAvatar(category: category),
-          const SizedBox(width: AppSpacing.md),
+          CategoryAvatar(category: category, radius: 18),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -268,57 +276,57 @@ class _BudgetTile extends StatelessWidget {
                     Expanded(
                       child: Text(
                         category.name,
-                        style: Theme.of(context).textTheme.titleMedium,
+                        style: Theme.of(context).textTheme.titleSmall,
                       ),
                     ),
-                    IconButton(
-                      tooltip: 'Sửa ngân sách ${category.name}',
-                      onPressed: onEdit,
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                  ],
-                ),
-                if (budget == null)
-                  Text(
-                    'Chưa đặt hạn mức · Đã chi ${MoneyFormatter.format(spentMinor)}',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  )
-                else ...[
-                  Row(
-                    children: [
-                      Expanded(child: MoneyText(spentMinor)),
-                      Text(
-                        ' / ${MoneyFormatter.format(limit)}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
+                    if (isOver)
+                      Tooltip(
+                        message: 'Vượt hạn mức',
+                        child: Icon(
+                          Icons.warning_amber_rounded,
+                          size: 18,
+                          color: finance.budgetOver.color,
                         ),
                       ),
-                    ],
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  unlimited
+                      ? 'Không giới hạn · Đã chi ${MoneyFormatter.format(spentMinor)}'
+                      : 'Hạn mức: ${MoneyFormatter.format(limit)} · Đã chi ${MoneyFormatter.format(spentMinor)} (${(ratio * 100).round()}%)',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
                   ),
-                  const SizedBox(height: AppSpacing.sm),
+                ),
+                if (!unlimited) ...[
+                  const SizedBox(height: 8),
                   LinearProgressIndicator(
-                    value: ratio.clamp(0.0, 1.0),
-                    minHeight: 10,
+                    value: ratio.clamp(0, 1),
+                    minHeight: 5,
                     color: progressColor,
                     backgroundColor: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(AppSpacing.sm),
                   ),
-                  const SizedBox(height: AppSpacing.xs),
+                  const SizedBox(height: 4),
                   Text(
-                    remaining >= 0
-                        ? 'Còn lại ${MoneyFormatter.format(remaining)}'
-                        : 'Vượt ${MoneyFormatter.format(-remaining)}',
+                    isOver
+                        ? 'Vượt hạn mức ${MoneyFormatter.format(-remaining)}'
+                        : 'Còn lại ${MoneyFormatter.format(remaining)}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: remaining < 0
+                      color: isOver
                           ? finance.budgetOver.color
                           : scheme.onSurfaceVariant,
+                      fontWeight: isOver ? FontWeight.w600 : null,
                     ),
                   ),
                 ],
               ],
             ),
+          ),
+          IconButton(
+            tooltip: 'Sửa ngân sách ${category.name}',
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_outlined, size: 18),
           ),
         ],
       ),
@@ -326,18 +334,27 @@ class _BudgetTile extends StatelessWidget {
   }
 }
 
-class _BudgetSummary extends StatelessWidget {
-  const _BudgetSummary({required this.snapshot});
+class _BudgetSummary extends StatefulWidget {
+  const _BudgetSummary({required this.snapshot, required this.categories});
 
   final AsyncValue<DashboardSnapshot> snapshot;
+  final List<CategoryEntity> categories;
+
+  @override
+  State<_BudgetSummary> createState() => _BudgetSummaryState();
+}
+
+class _BudgetSummaryState extends State<_BudgetSummary> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Card(
+      color: scheme.surfaceContainerHigh,
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
-        child: snapshot.when(
+        child: widget.snapshot.when(
           loading: () => const SizedBox(
             height: 76,
             child: Center(child: CircularProgressIndicator()),
@@ -356,40 +373,87 @@ class _BudgetSummary extends StatelessWidget {
               ),
             ],
           ),
+          // Không cảnh báo theo tổng; chỉ liệt kê danh mục vượt hạn mức riêng.
           data: (data) {
-            final hasBudget = data.budgetLimitMinor > 0;
-            final remaining = data.budgetLimitMinor - data.totalMinor;
-            final isOver = hasBudget && remaining < 0;
+            final overBudget = data.overBudgetCategories;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SectionHeader(
-                  title: 'Đã chi tháng này',
-                  subtitle: '${data.invoiceCount} giao dịch đã ghi nhận',
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Chi tiêu tháng này',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: _expanded
+                          ? 'Ẩn danh mục vượt hạn mức'
+                          : 'Xem danh mục vượt hạn mức',
+                      onPressed: () => setState(() => _expanded = !_expanded),
+                      icon: Icon(
+                        _expanded ? Icons.expand_less : Icons.expand_more,
+                      ),
+                      isSelected: _expanded,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: 6),
                 MoneyText(
                   data.totalMinor,
                   emphasis: MoneyEmphasis.title,
-                  tone: isOver ? context.finance.budgetOver : null,
+                  tone: context.finance.expense,
                 ),
+                const SizedBox(height: 6),
                 Text(
-                  hasBudget
-                      ? isOver
-                            ? 'Vượt ngân sách ${MoneyFormatter.format(-remaining)}'
-                            : 'Còn lại ${MoneyFormatter.format(remaining)}'
-                      : 'Chưa đặt tổng hạn mức cho tháng này',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isOver ? scheme.error : scheme.onSurfaceVariant,
+                  overBudget.isEmpty
+                      ? 'Danh mục chưa đặt hạn mức được tính là không giới hạn.'
+                      : '${overBudget.length} danh mục vượt hạn mức',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: overBudget.isEmpty
+                        ? scheme.onSurfaceVariant
+                        : context.finance.budgetOver.color,
                   ),
                 ),
-                if (hasBudget) ...[
-                  const SizedBox(height: AppSpacing.lg),
-                  BudgetMeter(
-                    spentMinor: data.totalMinor,
-                    limitMinor: data.budgetLimitMinor,
-                    animate: false,
+                if (_expanded) ...[
+                  const Divider(height: 24),
+                  Text(
+                    'Danh mục vượt hạn mức',
+                    style: Theme.of(context).textTheme.titleSmall,
                   ),
+                  const SizedBox(height: 8),
+                  if (overBudget.isEmpty)
+                    const Text('Chưa có danh mục nào vượt hạn mức.'),
+                  for (final item in overBudget)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CategoryAvatar(
+                            category: widget.categories
+                                .where((c) => c.id == item.categoryId)
+                                .firstOrNull,
+                            radius: 16,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item.categoryName),
+                                Text(
+                                  'Vượt ${MoneyFormatter.format(item.overMinor)}',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: scheme.error),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ],
             );

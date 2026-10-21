@@ -1,3 +1,6 @@
+import '../../../shared/widgets/finmi_page_header.dart';
+import '../../../shared/widgets/finmi_text_field.dart';
+import '../../../shared/widgets/category_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -6,7 +9,6 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
 import '../../../shared/formatting/category_icons.dart';
-import '../../../shared/widgets/category_avatar.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
@@ -34,10 +36,10 @@ class _CategoryManagementScreenState
     final monthKey = MonthUtils.key(selectedMonth);
     final monthLabel = MonthUtils.label(selectedMonth);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Danh mục'),
+      appBar: FinmiPageHeader(
+        title: 'Quản lý danh mục',
         actions: [
-          IconButton(
+          FinmiHeaderAction(
             tooltip: 'Thêm danh mục',
             onPressed: categories == null
                 ? null
@@ -49,23 +51,23 @@ class _CategoryManagementScreenState
                     monthKey,
                     monthLabel,
                   ),
-            icon: const Icon(Icons.add),
+            icon: Icons.add,
           ),
         ],
       ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
             child: SegmentedButton<CategoryKind>(
               segments: const [
                 ButtonSegment(
                   value: CategoryKind.expense,
-                  label: Text('Chi tiêu'),
+                  label: Text('Khoản chi'),
                 ),
                 ButtonSegment(
                   value: CategoryKind.income,
-                  label: Text('Thu nhập'),
+                  label: Text('Khoản thu'),
                 ),
               ],
               selected: {_kind},
@@ -268,7 +270,7 @@ class _CategoryList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
         if (categories.isEmpty)
           const Padding(
@@ -282,7 +284,7 @@ class _CategoryList extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 minTileHeight: 64,
-                leading: CategoryAvatar(category: category),
+                leading: CategoryAvatar(category: category, radius: 18),
                 title: Text(category.name),
                 subtitle: Text(
                   category.isSystem
@@ -400,7 +402,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextFormField(
+              FinmiTextField(
                 key: const ValueKey('category-name-field'),
                 controller: _nameController,
                 autofocus: true,
@@ -424,7 +426,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
               if (widget.kind == CategoryKind.expense &&
                   widget.editing == null) ...[
                 const SizedBox(height: 16),
-                TextFormField(
+                FinmiTextField(
                   key: const ValueKey('category-budget-field'),
                   controller: _budgetController,
                   keyboardType: TextInputType.number,

@@ -1,3 +1,4 @@
+import '../../../shared/widgets/finmi_page_header.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 import '../../../shared/widgets/app_empty_state.dart';
 import '../../../shared/widgets/qr_scan_screen.dart';
+import '../../../shared/widgets/app_refresh.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../sharing/domain/shared_bill_models.dart';
 import '../data/group_service.dart';
@@ -40,25 +42,24 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     final service = ref.watch(expenseGroupServiceProvider);
     final groups = ref.watch(expenseGroupsProvider);
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: _pullToRefresh,
+      body: AppRefreshIndicator(
+        onRefresh: _refresh,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            SliverAppBar(
-              pinned: true,
-              title: const Text('Nhóm và quỹ chung'),
+            FinmiSliverHeader(
+              title: 'Nhóm',
               actions: [
-                IconButton(
+                FinmiHeaderAction(
                   tooltip: 'Làm mới nhóm',
                   onPressed: _refresh,
-                  icon: const Icon(Icons.refresh),
+                  icon: Icons.refresh,
                 ),
               ],
             ),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
                 child: _buildActions(context, service),
               ),
             ),
@@ -74,7 +75,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                 child: AppEmptyState(
                   icon: Icons.cloud_off_outlined,
                   title: 'Nhóm cần kết nối tài khoản',
-                  message: 'Đăng nhập Supabase để tạo hoặc tham gia nhóm.',
+                  message: 'Đăng nhập tài khoản để tạo hoặc tham gia nhóm.',
                 ),
               )
             else
@@ -93,7 +94,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                 AsyncData(value: final items) => [
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                       child: Text(
                         'Nhóm của tôi',
                         style: Theme.of(context).textTheme.titleMedium,
@@ -101,7 +102,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                     ),
                   ),
                   SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     sliver: SliverList.separated(
                       itemCount: items.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 10),
@@ -159,7 +160,19 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   Widget _buildGroupCard(ExpenseGroup group) {
     return Card(
       child: ListTile(
-        leading: const CircleAvatar(child: Icon(Icons.groups_outlined)),
+        leading: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(
+            Icons.groups_outlined,
+            size: 20,
+            color: Theme.of(context).colorScheme.onPrimary,
+          ),
+        ),
         title: Text(group.name),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => context.push('/groups/${group.id}'),
@@ -358,17 +371,18 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     }
   }
 
-  void _refresh() {
-    ref.invalidate(expenseGroupsProvider);
+  Future<void> _refresh() async {
+    ref.invalidate(directBillSharesProvider);
     ref.invalidate(externalBillsProvider);
-  }
-
-  Future<void> _pullToRefresh() async {
-    _refresh();
+    ref.invalidate(expenseGroupsProvider);
     try {
-      await ref.read(externalBillsProvider.future);
-    } on Object catch (_) {
-      // Lỗi tải đã hiện ngay trong mục "Bill bạn tham gia".
+      await Future.wait([
+        ref.read(expenseGroupsProvider.future),
+        ref.read(externalBillsProvider.future),
+      ]);
+    } on Object {
+      // Lỗi đã được hiển thị qua trạng thái lỗi của danh sách nhóm và mục
+      // "Bill bạn tham gia".
     }
   }
 }
@@ -442,34 +456,38 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                     message: 'Đăng nhập để xem chi tiết nhóm.',
                   );
                 }
-                return ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
-                  children: [
-                    _GroupDetails(
-                      details: groupDetails,
-                      currentUserId: currentUserId,
-                      busy: _busy,
-                      onShowInviteQr: () => showGroupInviteQrSheet(
-                        context,
-                        groupName: groupDetails.group.name,
-                        inviteCode: groupDetails.group.inviteCode,
+                return AppRefreshIndicator(
+                  onRefresh: _refresh,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                    children: [
+                      _GroupDetails(
+                        details: groupDetails,
+                        currentUserId: currentUserId,
+                        busy: _busy,
+                        onShowInviteQr: () => showGroupInviteQrSheet(
+                          context,
+                          groupName: groupDetails.group.name,
+                          inviteCode: groupDetails.group.inviteCode,
+                        ),
+                        onSplitMoney: () => _splitMoney(groupDetails),
+                        onSettle: _settleShare,
+                        onShowBillQr: _showBillQr,
+                        onEditExpense: (expense) =>
+                            _editExpense(groupDetails, expense),
+                        onDeleteExpense: _deleteExpense,
+                        onSetMemberRole: (userId, role) =>
+                            _setMemberRole(groupDetails.group.id, userId, role),
+                        onRemoveMember: (userId, displayName) => _removeMember(
+                          groupDetails.group.id,
+                          userId,
+                          displayName,
+                        ),
+                        onLeaveGroup: () => _leaveGroup(groupDetails),
                       ),
-                      onSplitMoney: () => _splitMoney(groupDetails),
-                      onSettle: _settleShare,
-                      onShowBillQr: _showBillQr,
-                      onEditExpense: (expense) =>
-                          _editExpense(groupDetails, expense),
-                      onDeleteExpense: _deleteExpense,
-                      onSetMemberRole: (userId, role) =>
-                          _setMemberRole(groupDetails.group.id, userId, role),
-                      onRemoveMember: (userId, displayName) => _removeMember(
-                        groupDetails.group.id,
-                        userId,
-                        displayName,
-                      ),
-                      onLeaveGroup: () => _leaveGroup(groupDetails),
-                    ),
-                  ],
+                    ],
+                  ),
                 );
               },
             ),
@@ -680,9 +698,14 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     ref.invalidate(expenseGroupDetailsProvider(widget.groupId));
   }
 
-  void _refresh() {
+  Future<void> _refresh() async {
     ref.invalidate(expenseGroupsProvider);
-    _reloadDetails();
+    try {
+      _reloadDetails();
+      await ref.read(expenseGroupDetailsProvider(widget.groupId).future);
+    } on Object {
+      // Lỗi đã được hiển thị qua trạng thái lỗi của chi tiết nhóm.
+    }
   }
 
   void _goBack() {
@@ -743,7 +766,7 @@ class _GroupDetails extends StatelessWidget {
         Card(
           child: ListTile(
             leading: const Icon(Icons.account_balance_wallet_outlined),
-            title: const Text('Quỹ chung'),
+            title: const Text('Quỹ chung', maxLines: 3),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/groups/${details.group.id}/fund'),
           ),
@@ -912,11 +935,11 @@ class _DirectShareInbox extends ConsumerWidget {
     final shares = ref.watch(directBillSharesProvider);
     return shares.when(
       loading: () => const Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
         child: LinearProgressIndicator(),
       ),
       error: (error, _) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
         child: AppCallout(
           tone: CalloutTone.warning,
           message: 'Không tải được hộp thư chia sẻ: ${friendlyMessage(error)}',
@@ -933,7 +956,7 @@ class _DirectShareInbox extends ConsumerWidget {
             .toList(growable: false);
         if (visible.isEmpty) return const SizedBox.shrink();
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
           child: Card(
             color: Theme.of(context).colorScheme.tertiaryContainer,
             child: Padding(
@@ -1380,21 +1403,21 @@ class _ExpenseCard extends StatelessWidget {
                         value: 'invite',
                         child: ListTile(
                           leading: Icon(Icons.qr_code_2),
-                          title: Text('QR mời vào bill'),
+                          title: Text('QR mời vào bill', maxLines: 3),
                         ),
                       ),
                       PopupMenuItem(
                         value: 'edit',
                         child: ListTile(
                           leading: Icon(Icons.edit_outlined),
-                          title: Text('Sửa khoản chi'),
+                          title: Text('Sửa khoản chi', maxLines: 3),
                         ),
                       ),
                       PopupMenuItem(
                         value: 'delete',
                         child: ListTile(
                           leading: Icon(Icons.delete_outline),
-                          title: Text('Xóa khoản chi'),
+                          title: Text('Xóa khoản chi', maxLines: 3),
                         ),
                       ),
                     ],
