@@ -70,13 +70,13 @@ void main() {
 
     expect(find.text('Nhóm của tôi'), findsOneWidget);
     expect(find.text('Chuyến đi Đà Lạt'), findsOneWidget);
-    expect(find.text('Mã mời: DALAT123'), findsNothing);
+    expect(find.text('QR mời vào nhóm'), findsNothing);
 
     await tester.tap(find.text('Chuyến đi Đà Lạt'));
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.arrow_back), findsOneWidget);
-    expect(find.text('Mã mời: DALAT123'), findsOneWidget);
+    expect(find.text('QR mời vào nhóm'), findsOneWidget);
     expect(find.text('Chủ nhóm · 0912345678'), findsOneWidget);
     expect(find.text('Nhóm của tôi'), findsNothing);
 
@@ -159,7 +159,7 @@ void main() {
     final detailsBefore = service.detailCalls;
 
     await tester.fling(
-      find.text('Mã mời: DALAT123'),
+      find.text('QR mời vào nhóm'),
       const Offset(0, 400),
       1000,
     );

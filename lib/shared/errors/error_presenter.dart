@@ -34,6 +34,8 @@ String friendlyMessage(Object error) {
 
     final PostgrestException e => switch (e.code) {
       'PGRST301' => 'Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.',
+      // UF001: RPC chủ động gửi câu tiếng Việt cho người dùng.
+      'UF001' => e.message,
       '23505' => 'Dữ liệu này đã tồn tại trên máy chủ.',
       _ => 'Máy chủ từ chối yêu cầu. Dữ liệu trên máy không bị ảnh hưởng.',
     },

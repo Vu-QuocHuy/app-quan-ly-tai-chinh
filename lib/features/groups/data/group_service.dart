@@ -29,7 +29,7 @@ class ExpenseGroupService {
           (row) => GroupFundEntry(
             id: _requiredUuid(row['id'], 'fund.id'),
             groupId: _requiredUuid(row['group_id'], 'fund.group_id'),
-            actorId: _requiredUuid(row['actor_id'], 'fund.actor_id'),
+            actorId: _optionalUuid(row['actor_id'], 'fund.actor_id'),
             kind: _requiredString(row['kind'], 'Loại', 16),
             amountMinor: _positiveInteger(row['amount_minor'], 'Số tiền'),
             note: (row['note'] as String?) ?? '',
@@ -68,6 +68,33 @@ class ExpenseGroupService {
     await _client.rpc('delete_group_fund_entry', params: {'p_id': id});
   }
 
+  Future<void> setFundGoal({
+    required String groupId,
+    int? goalMinor,
+    DateTime? deadline,
+  }) async {
+    _requiredUuid(groupId, 'group.id');
+    if (goalMinor != null && (goalMinor < 1 || goalMinor > _maxSafeInteger)) {
+      throw const FormatException('Mục tiêu quỹ không hợp lệ.');
+    }
+    if (goalMinor == null && deadline != null) {
+      throw const FormatException('Hãy nhập mục tiêu trước khi đặt hạn.');
+    }
+    await _client.rpc(
+      'set_group_fund_goal',
+      params: {
+        'p_group_id': groupId,
+        'p_goal_minor': goalMinor,
+        'p_deadline': deadline == null ? null : _isoDate(deadline),
+      },
+    );
+  }
+
+  static String _isoDate(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-'
+      '${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')}';
+
   String get currentUserId {
     final id = _client.auth.currentUser?.id;
     if (id == null) throw StateError('Bạn cần đăng nhập để dùng nhóm.');
@@ -78,7 +105,9 @@ class ExpenseGroupService {
     final rows = _asRows(
       await _client
           .from('expense_groups')
-          .select('id, name, invite_code, owner_id')
+          .select(
+            'id, name, invite_code, owner_id, fund_goal_minor, fund_deadline',
+          )
           .order('created_at', ascending: false),
     );
     return rows.map(_groupFromMap).toList(growable: false);
@@ -102,7 +131,7 @@ class ExpenseGroupService {
       params: {'p_invite_code': validCode},
     );
     final list = _asRows(rows);
-    if (list.isEmpty) throw StateError('Không tham gia được nhóm.');
+    if (list.isEmpty) throw StateError('Mã mời không hợp lệ.');
     return _groupFromMap(list.first);
   }
 
@@ -185,6 +214,8 @@ class ExpenseGroupService {
             name: group.name,
             inviteCode: group.inviteCode,
             ownerId: ownerId,
+            fundGoalMinor: group.fundGoalMinor,
+            fundDeadline: group.fundDeadline,
           );
     final splitsByExpense = <String, List<GroupExpenseSplit>>{};
     final splitKeys = <String>{};
@@ -413,6 +444,10 @@ class ExpenseGroupService {
         map['owner_id'] ?? map['ownerId'],
         'group.ownerId',
       ),
+      fundGoalMinor: map['fund_goal_minor'] == null
+          ? null
+          : _positiveInteger(map['fund_goal_minor'], 'group.fundGoalMinor'),
+      fundDeadline: _optionalDate(map['fund_deadline'], 'group.fundDeadline'),
     );
   }
 

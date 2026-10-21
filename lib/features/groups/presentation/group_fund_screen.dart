@@ -8,6 +8,7 @@ import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_refresh.dart';
 import '../domain/group_models.dart';
+import 'fund_progress_card.dart';
 
 class GroupFundScreen extends ConsumerStatefulWidget {
   const GroupFundScreen({required this.groupId, super.key});
@@ -189,6 +190,38 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
     }
   }
 
+  Future<void> _editGoal(ExpenseGroup group) async {
+    final result = await showDialog<({int? goalMinor, DateTime? deadline})>(
+      context: context,
+      builder: (_) => _FundGoalDialog(
+        initialGoalMinor: group.fundGoalMinor,
+        initialDeadline: group.fundDeadline,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(expenseGroupServiceProvider)!
+          .setFundGoal(
+            groupId: widget.groupId,
+            goalMinor: result.goalMinor,
+            deadline: result.deadline,
+          );
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(friendlyMessage(error))));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+        _refresh(force: true);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -269,6 +302,14 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              FundProgressCard(
+                balanceMinor: balance,
+                goalMinor: data.details.group.fundGoalMinor,
+                deadline: data.details.group.fundDeadline,
+                isOwner: data.details.group.ownerId == currentUserId,
+                onEditGoal: () => _editGoal(data.details.group),
+              ),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -317,7 +358,7 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
                       entry.kind == 'deposit' ? 'Thu vào quỹ' : entry.note,
                     ),
                     subtitle: Text(
-                      '${names[entry.actorId] ?? 'Thành viên'} · ${entry.createdAt.day}/${entry.createdAt.month}/${entry.createdAt.year}',
+                      '${names[entry.actorId] ?? (entry.actorId == null ? 'Tài khoản đã xóa' : 'Thành viên')} · ${entry.createdAt.day}/${entry.createdAt.month}/${entry.createdAt.year}',
                     ),
                     trailing: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -358,4 +399,113 @@ class _FundSnapshot {
   const _FundSnapshot(this.details, this.entries);
   final GroupDetails details;
   final List<GroupFundEntry> entries;
+}
+
+class _FundGoalDialog extends StatefulWidget {
+  const _FundGoalDialog({this.initialGoalMinor, this.initialDeadline});
+
+  final int? initialGoalMinor;
+  final DateTime? initialDeadline;
+
+  @override
+  State<_FundGoalDialog> createState() => _FundGoalDialogState();
+}
+
+class _FundGoalDialogState extends State<_FundGoalDialog> {
+  late final TextEditingController _amountController = TextEditingController(
+    text: widget.initialGoalMinor?.toString(),
+  );
+  late DateTime? _deadline = widget.initialDeadline;
+  String? _error;
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDeadline() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final current = _deadline;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current == null || current.isBefore(today) ? today : current,
+      firstDate: today,
+      lastDate: DateTime(today.year + 10, 12, 31),
+    );
+    if (picked != null) setState(() => _deadline = picked);
+  }
+
+  void _save() {
+    final amount = MoneyFormatter.tryParse(_amountController.text);
+    if (amount == null || amount < 1 || amount > 9007199254740991) {
+      setState(() => _error = 'Nhập số tiền mục tiêu hợp lệ.');
+      return;
+    }
+    Navigator.pop(context, (goalMinor: amount, deadline: _deadline));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final deadline = _deadline;
+    return AlertDialog(
+      title: const Text('Mục tiêu quỹ'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _amountController,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Số tiền mục tiêu',
+              suffixText: '₫',
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  deadline == null
+                      ? 'Không có hạn'
+                      : 'Hạn ${deadline.day}/${deadline.month}/${deadline.year}',
+                ),
+              ),
+              TextButton(
+                onPressed: _pickDeadline,
+                child: Text(deadline == null ? 'Chọn hạn' : 'Đổi hạn'),
+              ),
+              if (deadline != null)
+                IconButton(
+                  tooltip: 'Bỏ hạn',
+                  onPressed: () => setState(() => _deadline = null),
+                  icon: const Icon(Icons.close),
+                ),
+            ],
+          ),
+          if (_error != null)
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+        ],
+      ),
+      actions: [
+        if (widget.initialGoalMinor != null)
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(context, (goalMinor: null, deadline: null)),
+            child: const Text('Xóa mục tiêu'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Hủy'),
+        ),
+        FilledButton(onPressed: _save, child: const Text('Lưu')),
+      ],
+    );
+  }
 }

@@ -2,7 +2,6 @@ import '../../../shared/widgets/finmi_page_header.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -13,13 +12,17 @@ import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 import '../../../shared/widgets/app_empty_state.dart';
+import '../../../shared/widgets/qr_scan_screen.dart';
 import '../../../shared/widgets/app_refresh.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../sharing/domain/shared_bill_models.dart';
 import '../data/group_service.dart';
 import '../domain/group_balance_calculator.dart';
 import '../domain/group_models.dart';
-import '../domain/group_split_calculator.dart';
+import '../domain/invite_link.dart';
+import 'group_expense_dialog.dart';
+import 'group_invite_qr_sheet.dart';
+import 'group_split_dialog.dart';
 
 class GroupScreen extends ConsumerStatefulWidget {
   const GroupScreen({super.key});
@@ -190,18 +193,60 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   }
 
   Future<void> _joinGroup() async {
-    final code = await _askText(
-      title: 'Tham gia nhóm',
-      label: 'Mã mời',
-      hint: 'Nhập mã 8 ký tự',
-      confirmLabel: 'Tham gia',
+    final method = await showModalBottomSheet<_JoinMethod>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner),
+              title: const Text('Quét mã QR'),
+              onTap: () => Navigator.pop(context, _JoinMethod.scan),
+            ),
+            ListTile(
+              leading: const Icon(Icons.keyboard_outlined),
+              title: const Text('Nhập mã mời'),
+              onTap: () => Navigator.pop(context, _JoinMethod.type),
+            ),
+          ],
+        ),
+      ),
     );
+    if (method == null || !mounted) return;
+    final String? code;
+    switch (method) {
+      case _JoinMethod.scan:
+        final raw = await Navigator.of(context).push<String>(
+          MaterialPageRoute(
+            builder: (_) => QrScanScreen(
+              title: 'Quét mã mời nhóm',
+              validate: (raw) => InviteLink.parse(raw) is GroupInviteLink
+                  ? null
+                  : 'Mã QR này không phải mã mời nhóm.',
+            ),
+          ),
+        );
+        code = switch (raw == null ? null : InviteLink.parse(raw)) {
+          GroupInviteLink(code: final value) => value,
+          _ => null,
+        };
+      case _JoinMethod.type:
+        code = await _askText(
+          title: 'Tham gia nhóm',
+          label: 'Mã mời',
+          hint: 'Nhập mã 8 ký tự',
+          confirmLabel: 'Tham gia',
+        );
+    }
     if (code == null) return;
+    final inviteCode = code;
     ExpenseGroup? joinedGroup;
     await _runGroupAction(() async {
       joinedGroup = await ref
           .read(expenseGroupServiceProvider)!
-          .joinGroup(code);
+          .joinGroup(inviteCode);
     });
     final group = joinedGroup;
     if (!mounted || group == null) return;
@@ -355,10 +400,12 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                         details: groupDetails,
                         currentUserId: currentUserId,
                         busy: _busy,
-                        onCopyCode: () =>
-                            _copyInviteCode(groupDetails.group.inviteCode),
-                        onAddExpense: () => _addExpense(groupDetails),
-                        onAddReceipt: () => _addReceipt(groupDetails),
+                        onShowInviteQr: () => showGroupInviteQrSheet(
+                          context,
+                          groupName: groupDetails.group.name,
+                          inviteCode: groupDetails.group.inviteCode,
+                        ),
+                        onSplitMoney: () => _splitMoney(groupDetails),
                         onSettle: _settleShare,
                         onEditExpense: (expense) =>
                             _editExpense(groupDetails, expense),
@@ -383,10 +430,11 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     );
   }
 
-  Future<void> _addExpense(GroupDetails details) async {
-    final draft = await showDialog<_NewExpenseDraft>(
+  Future<void> _splitMoney(GroupDetails details) async {
+    final draft = await showDialog<GroupExpenseDraft>(
       context: context,
-      builder: (context) => _NewExpenseDialog(members: details.members),
+      builder: (context) =>
+          GroupSplitDialog(members: details.members, onScan: _scanReceipt),
     );
     if (draft == null) return;
     await _runGroupAction(() async {
@@ -416,10 +464,10 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   }
 
   Future<void> _editExpense(GroupDetails details, GroupExpense expense) async {
-    final draft = await showDialog<_NewExpenseDraft>(
+    final draft = await showDialog<GroupExpenseDraft>(
       context: context,
       builder: (context) =>
-          _NewExpenseDialog(members: details.members, initialExpense: expense),
+          GroupExpenseDialog(members: details.members, initialExpense: expense),
     );
     if (draft == null || !mounted) return;
     await _runGroupAction(() async {
@@ -437,9 +485,9 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   Future<void> _deleteExpense(GroupExpense expense) async {
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Xóa khoản chi?',
+      title: 'Xóa lần chia tiền?',
       message: '“${expense.description}” sẽ bị xóa khỏi nhóm.',
-      confirmLabel: 'Xóa khoản chi',
+      confirmLabel: 'Xóa',
       icon: Icons.delete_outline,
       destructive: true,
     );
@@ -508,52 +556,24 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     }
   }
 
-  Future<void> _addReceipt(GroupDetails details) async {
+  /// Chụp/chọn ảnh rồi đọc hóa đơn; `null` khi người dùng huỷ chọn ảnh.
+  /// Lỗi đọc hóa đơn ném ra để dialog "Chia tiền" báo ngay trong tab Quét.
+  Future<ReceiptPrefill?> _scanReceipt(ImageSource source) async {
     final image = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
+      source: source,
       imageQuality: 92,
       maxWidth: 2400,
     );
-    if (image == null || !mounted) return;
-    setState(() => _busy = true);
-    try {
-      final bytes = await image.readAsBytes();
-      final outcome = await ref
-          .read(importCoordinatorProvider)
-          .importImage(
-            bytes: bytes,
-            fileName: image.name,
-            imagePath: image.path,
-          );
-      if (!mounted) return;
-      final allocation = await showDialog<_InvoiceAllocationDraft>(
-        context: context,
-        builder: (context) => _InvoiceAllocationDialog(
-          invoice: outcome.result.invoice,
-          members: details.members,
-        ),
-      );
-      if (allocation == null) return;
-      await ref
-          .read(expenseGroupServiceProvider)!
-          .addCustomExpense(
-            groupId: details.group.id,
-            description: 'Hóa đơn ${outcome.result.invoice.sellerName}',
-            totalMinor: outcome.result.invoice.totalMinor,
-            splitAmounts: allocation.splitAmounts,
-          );
-      _reloadDetails();
-    } on Object catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Không thể xử lý hóa đơn: ${friendlyMessage(error)}'),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    if (image == null) return null;
+    final bytes = await image.readAsBytes();
+    final outcome = await ref
+        .read(importCoordinatorProvider)
+        .importImage(bytes: bytes, fileName: image.name, imagePath: image.path);
+    final invoice = outcome.result.invoice;
+    return ReceiptPrefill(
+      description: receiptExpenseDescription(invoice.sellerName),
+      totalMinor: invoice.totalMinor,
+    );
   }
 
   Future<void> _runGroupAction(Future<void> Function() action) async {
@@ -594,14 +614,6 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       context.go('/groups');
     }
   }
-
-  Future<void> _copyInviteCode(String code) async {
-    await Clipboard.setData(ClipboardData(text: code));
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Đã sao chép mã mời nhóm.')));
-  }
 }
 
 class _GroupDetails extends StatelessWidget {
@@ -609,9 +621,8 @@ class _GroupDetails extends StatelessWidget {
     required this.details,
     required this.currentUserId,
     required this.busy,
-    required this.onCopyCode,
-    required this.onAddExpense,
-    required this.onAddReceipt,
+    required this.onShowInviteQr,
+    required this.onSplitMoney,
     required this.onSettle,
     required this.onEditExpense,
     required this.onDeleteExpense,
@@ -623,9 +634,8 @@ class _GroupDetails extends StatelessWidget {
   final GroupDetails details;
   final String currentUserId;
   final bool busy;
-  final VoidCallback onCopyCode;
-  final VoidCallback onAddExpense;
-  final VoidCallback onAddReceipt;
+  final VoidCallback onShowInviteQr;
+  final VoidCallback onSplitMoney;
   final Future<void> Function(String expenseId) onSettle;
   final Future<void> Function(GroupExpense expense) onEditExpense;
   final Future<void> Function(GroupExpense expense) onDeleteExpense;
@@ -659,13 +669,12 @@ class _GroupDetails extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Mã mời: ${details.group.inviteCode}'),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
-                    onPressed: onCopyCode,
-                    icon: const Icon(Icons.copy_outlined),
-                    label: const Text('Sao chép mã mời'),
+                    onPressed: onShowInviteQr,
+                    icon: const Icon(Icons.qr_code_2),
+                    label: const Text('QR mời vào nhóm'),
                   ),
                 ),
                 const Divider(),
@@ -707,30 +716,16 @@ class _GroupDetails extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: busy ? null : onAddExpense,
-                icon: const Icon(Icons.add_card_outlined),
-                label: const Text('Thêm khoản chi'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: busy ? null : onAddReceipt,
-                icon: const Icon(Icons.document_scanner_outlined),
-                label: const Text('Từ hóa đơn'),
-              ),
-            ),
-          ],
+        FilledButton.icon(
+          onPressed: busy ? null : onSplitMoney,
+          icon: const Icon(Icons.call_split_outlined),
+          label: const Text('Chia tiền'),
         ),
         const SizedBox(height: 20),
-        Text('Khoản chi', style: Theme.of(context).textTheme.titleLarge),
+        Text('Chia tiền', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         if (details.expenses.isEmpty)
-          const Text('Chưa có khoản chi nào trong nhóm.'),
+          const Text('Chưa có lần chia tiền nào trong nhóm.'),
         for (final expense in details.expenses)
           _ExpenseCard(
             expense: expense,
@@ -1336,467 +1331,4 @@ class _ExpenseCard extends StatelessWidget {
   }
 }
 
-class _NewExpenseDraft {
-  const _NewExpenseDraft({
-    required this.description,
-    required this.totalMinor,
-    required this.memberIds,
-    this.splitAmounts,
-  });
-
-  final String description;
-  final int totalMinor;
-  final List<String> memberIds;
-  final Map<String, int>? splitAmounts;
-}
-
-class _InvoiceAllocationDraft {
-  const _InvoiceAllocationDraft(this.splitAmounts);
-
-  final Map<String, int> splitAmounts;
-}
-
-class _InvoiceAllocationLine {
-  const _InvoiceAllocationLine({
-    required this.description,
-    required this.amount,
-  });
-
-  final String description;
-  final int amount;
-}
-
-class _InvoiceAllocationDialog extends StatefulWidget {
-  const _InvoiceAllocationDialog({
-    required this.invoice,
-    required this.members,
-  });
-
-  final InvoiceEntity invoice;
-  final List<GroupMember> members;
-
-  @override
-  State<_InvoiceAllocationDialog> createState() =>
-      _InvoiceAllocationDialogState();
-}
-
-class _InvoiceAllocationDialogState extends State<_InvoiceAllocationDialog> {
-  late final List<_InvoiceAllocationLine> _lines = _buildLines();
-  late final List<String> _assignees = List.filled(
-    _lines.length,
-    widget.members.first.userId,
-  );
-  String? _error;
-
-  List<_InvoiceAllocationLine> _buildLines() {
-    final lines = widget.invoice.lines
-        .where((line) => line.totalMinor > 0)
-        .map(
-          (line) => _InvoiceAllocationLine(
-            description: line.description,
-            amount: line.totalMinor,
-          ),
-        )
-        .toList(growable: true);
-    final lineTotal = lines.fold<int>(0, (sum, line) => sum + line.amount);
-    if (lines.isEmpty && widget.invoice.totalMinor > 0) {
-      lines.add(
-        _InvoiceAllocationLine(
-          description: 'Tổng hóa đơn',
-          amount: widget.invoice.totalMinor,
-        ),
-      );
-      return lines;
-    }
-    final remainder = widget.invoice.totalMinor - lineTotal;
-    if (remainder > 0) {
-      lines.add(
-        _InvoiceAllocationLine(
-          description: 'Thuế, phí hoặc khoản khác',
-          amount: remainder,
-        ),
-      );
-    }
-    return lines;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Phân chia hóa đơn', maxLines: 3),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                '${widget.invoice.sellerName} · ${MoneyFormatter.format(widget.invoice.totalMinor)}',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              const Text('Kiểm tra dòng OCR và chọn người chịu từng dòng.'),
-              const SizedBox(height: 12),
-              for (var index = 0; index < _lines.length; index++)
-                _buildLine(index),
-              if (_lines.isEmpty)
-                const Text('Không nhận diện được dòng hàng để phân chia.'),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    _error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () async {
-            final discard = await showConfirmDialog(
-              context,
-              title: 'Hủy phân chia hóa đơn?',
-              message: 'Phần chia của hóa đơn này sẽ không được lưu vào nhóm.',
-              confirmLabel: 'Hủy phân chia',
-              destructive: true,
-            );
-            if (discard && context.mounted) Navigator.pop(context);
-          },
-          child: const Text('Hủy'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('Xác nhận chia')),
-      ],
-    );
-  }
-
-  Widget _buildLine(int index) {
-    final line = _lines[index];
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                '${line.description}\n${MoneyFormatter.format(line.amount)}',
-              ),
-            ),
-            SizedBox(
-              width: 150,
-              child: DropdownButtonFormField<String>(
-                initialValue: _assignees[index],
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Người chịu'),
-                items: widget.members
-                    .map(
-                      (member) => DropdownMenuItem(
-                        value: member.userId,
-                        child: Text(
-                          member.displayName,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(growable: false),
-                onChanged: (value) {
-                  if (value != null) setState(() => _assignees[index] = value);
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _submit() {
-    if (_lines.isEmpty) {
-      setState(() => _error = 'Không có dòng hợp lệ để phân chia.');
-      return;
-    }
-    final splitAmounts = <String, int>{};
-    for (var index = 0; index < _lines.length; index++) {
-      final userId = _assignees[index];
-      splitAmounts[userId] = (splitAmounts[userId] ?? 0) + _lines[index].amount;
-    }
-    final total = splitAmounts.values.fold<int>(
-      0,
-      (sum, amount) => sum + amount,
-    );
-    if (total != widget.invoice.totalMinor) {
-      setState(() => _error = 'Các dòng chưa khớp tổng hóa đơn.');
-      return;
-    }
-    Navigator.pop(context, _InvoiceAllocationDraft(splitAmounts));
-  }
-}
-
-class _NewExpenseDialog extends StatefulWidget {
-  const _NewExpenseDialog({required this.members, this.initialExpense});
-
-  final List<GroupMember> members;
-  final GroupExpense? initialExpense;
-
-  @override
-  State<_NewExpenseDialog> createState() => _NewExpenseDialogState();
-}
-
-class _NewExpenseDialogState extends State<_NewExpenseDialog> {
-  late final TextEditingController _descriptionController;
-  late final TextEditingController _amountController;
-  final Map<String, TextEditingController> _splitControllers = {};
-  late final Set<String> _selectedIds;
-  late GroupSplitMode? _customMode;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    final initial = widget.initialExpense;
-    _descriptionController = TextEditingController(text: initial?.description);
-    _amountController = TextEditingController(
-      text: initial?.totalMinor.toString(),
-    );
-    _selectedIds = initial == null
-        ? widget.members.map((item) => item.userId).toSet()
-        : initial.splits
-              .map((split) => split.userId)
-              .whereType<String>()
-              .toSet();
-    _customMode = initial == null ? null : GroupSplitMode.exact;
-    if (initial != null) {
-      for (final split in initial.splits) {
-        final userId = split.userId;
-        if (userId != null) {
-          _splitControllers[userId] = TextEditingController(
-            text: split.amountMinor.toString(),
-          );
-        }
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _descriptionController.dispose();
-    _amountController.dispose();
-    for (final controller in _splitControllers.values) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        widget.initialExpense == null ? 'Thêm khoản chi' : 'Sửa khoản chi',
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _descriptionController,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Nội dung chi'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _amountController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Tổng tiền',
-                suffixText: '₫',
-              ),
-            ),
-            const SizedBox(height: 16),
-            SegmentedButton<GroupSplitMode?>(
-              segments: const [
-                ButtonSegment(value: null, label: Text('Đều')),
-                ButtonSegment(
-                  value: GroupSplitMode.exact,
-                  label: Text('Số tiền'),
-                ),
-                ButtonSegment(
-                  value: GroupSplitMode.percentage,
-                  label: Text('%'),
-                ),
-              ],
-              selected: {_customMode},
-              onSelectionChanged: (value) => setState(() {
-                _customMode = value.first;
-                _error = null;
-              }),
-            ),
-            const SizedBox(height: 12),
-            Text(_customMode == null ? 'Chia đều cho' : 'Phần của từng người'),
-            for (final member in widget.members) _buildMemberRow(member),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: _cancel, child: const Text('Hủy')),
-        FilledButton(
-          onPressed: _submit,
-          child: Text(
-            widget.initialExpense == null ? 'Tạo bản ghi' : 'Lưu thay đổi',
-          ),
-        ),
-      ],
-    );
-  }
-
-  bool get _hasChanges {
-    final initial = widget.initialExpense;
-    final initialMemberIds = initial == null
-        ? widget.members.map((item) => item.userId).toSet()
-        : initial.splits
-              .map((split) => split.userId)
-              .whereType<String>()
-              .toSet();
-    if (_descriptionController.text != (initial?.description ?? '') ||
-        _amountController.text != (initial?.totalMinor.toString() ?? '') ||
-        _customMode != (initial == null ? null : GroupSplitMode.exact) ||
-        _selectedIds.length != initialMemberIds.length ||
-        !_selectedIds.containsAll(initialMemberIds)) {
-      return true;
-    }
-
-    final initialSplitAmounts = {
-      if (initial != null)
-        for (final split in initial.splits)
-          if (split.userId != null) split.userId!: split.amountMinor,
-    };
-    return _splitControllers.entries.any(
-      (entry) =>
-          entry.value.text !=
-          (initialSplitAmounts[entry.key]?.toString() ?? ''),
-    );
-  }
-
-  Future<void> _cancel() async {
-    if (_hasChanges) {
-      final discard = await showDiscardChangesDialog(context);
-      if (!discard || !mounted) return;
-    }
-    Navigator.pop(context);
-  }
-
-  Widget _buildMemberRow(GroupMember member) {
-    final controller = _splitControllers.putIfAbsent(
-      member.userId,
-      TextEditingController.new,
-    );
-    return Row(
-      children: [
-        Expanded(
-          child: CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _selectedIds.contains(member.userId),
-            title: Text(member.displayName),
-            onChanged: (value) => setState(() {
-              if (value == true) {
-                _selectedIds.add(member.userId);
-              } else {
-                _selectedIds.remove(member.userId);
-              }
-              _error = null;
-            }),
-          ),
-        ),
-        if (_customMode != null)
-          SizedBox(
-            width: 92,
-            child: TextField(
-              controller: controller,
-              enabled: _selectedIds.contains(member.userId),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                suffixText: _customMode == GroupSplitMode.percentage
-                    ? '%'
-                    : '₫',
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  void _submit() {
-    final total = int.tryParse(
-      _amountController.text.replaceAll(RegExp(r'[^0-9]'), ''),
-    );
-    final description = _descriptionController.text.trim();
-    if (description.length < 2 ||
-        total == null ||
-        total <= 0 ||
-        _selectedIds.isEmpty) {
-      setState(
-        () => _error = 'Hãy nhập nội dung, tổng tiền và chọn thành viên.',
-      );
-      return;
-    }
-    Map<String, int>? splitAmounts;
-    if (_customMode != null) {
-      splitAmounts = _parseSplits(total);
-      if (splitAmounts == null) return;
-    }
-    Navigator.pop(
-      context,
-      _NewExpenseDraft(
-        description: description,
-        totalMinor: total,
-        memberIds: _selectedIds.toList(growable: false),
-        splitAmounts: widget.initialExpense == null
-            ? splitAmounts
-            : splitAmounts!,
-      ),
-    );
-  }
-
-  Map<String, int>? _parseSplits(int total) {
-    final values = <String, double>{};
-    for (final id in _selectedIds) {
-      final value = double.tryParse(
-        _splitControllers[id]!.text.trim().replaceAll(',', '.'),
-      );
-      if (value == null || value < 0) {
-        setState(() => _error = 'Hãy nhập phần chia hợp lệ cho mọi người.');
-        return null;
-      }
-      values[id] = value;
-    }
-    final amounts = GroupSplitCalculator.calculate(
-      totalMinor: total,
-      memberIds: _selectedIds,
-      values: values,
-      mode: _customMode!,
-    );
-    if (amounts == null) {
-      setState(
-        () => _error = _customMode == GroupSplitMode.percentage
-            ? 'Tổng tỷ lệ phải bằng 100%.'
-            : 'Tổng các phần tiền phải bằng tổng khoản chi.',
-      );
-      return null;
-    }
-    return amounts;
-  }
-}
+enum _JoinMethod { scan, type }

@@ -56,6 +56,29 @@ void main() {
       expect(message, isNot(contains('secret@example.com')));
     });
 
+    test('hiện nguyên câu tiếng Việt của lỗi UF001 từ RPC', () {
+      expect(
+        friendlyMessage(
+          PostgrestException(
+            message: 'Quỹ không đủ tiền cho khoản chi này',
+            code: 'UF001',
+          ),
+        ),
+        'Quỹ không đủ tiền cho khoản chi này',
+      );
+    });
+
+    test('lỗi 22023 và P0001 vẫn hiện câu chung', () {
+      for (final code in ['22023', 'P0001']) {
+        expect(
+          friendlyMessage(
+            PostgrestException(message: 'Fund entry is invalid', code: code),
+          ),
+          'Máy chủ từ chối yêu cầu. Dữ liệu trên máy không bị ảnh hưởng.',
+        );
+      }
+    });
+
     test('không bao giờ để lộ chuỗi kỹ thuật ra UI', () {
       final errors = <Object>[
         const SocketException("Failed host lookup: 'x.supabase.co'"),
