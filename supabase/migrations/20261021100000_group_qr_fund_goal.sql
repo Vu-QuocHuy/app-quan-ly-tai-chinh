@@ -124,9 +124,6 @@ begin
     insert into public.group_audit_events (group_id, actor_id, target_user_id, event_type)
       values (v_group.id, v_user_id, v_user_id, 'member_joined');
   end if;
-  update public.expense_group_join_rate_limits
-    set attempt_count = 0, window_started_at = now()
-    where user_id = v_user_id;
   return query select v_group.id, v_group.name, v_group.invite_code, v_group.owner_id;
 end;
 $$;

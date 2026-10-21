@@ -134,6 +134,8 @@ hàm gốc (hàm mới dùng `set search_path = ''`), `revoke all ... from publi
   được commit. Client đã ném lỗi khi kết quả rỗng; chỉ đổi câu thông báo (mục 4.5).
 - Lỗi vượt giới hạn: đổi `errcode` từ `P0001` sang `UF001`.
 - Lỗi đầu vào sai định dạng (`null`, dài hơn 32 ký tự) giữ `22023`; client đã chặn trước.
+- Bỏ lệnh đặt `attempt_count = 0` sau khi tham gia thành công, để kẻ đoán mã không đặt lại bộ đếm
+  bằng cách tham gia nhóm của chính mình; cửa sổ 1 phút vẫn tự đặt lại.
 - Phần còn lại không đổi.
 
 **Sửa — `add_group_fund_entry`**: lỗi số dư không đủ đổi sang `UF001`. Logic không đổi.
@@ -285,7 +287,8 @@ Chạy local với Docker; CI chưa chạy.
 4. Đặt `fund_deadline` khi `fund_goal_minor` null bằng `update` trực tiếp → vi phạm constraint.
 5. `join_expense_group` với mã không tồn tại → 0 dòng, `attempt_count` tăng; lần thứ 11 trong
    một phút → `UF001`.
-6. `join_expense_group` với mã đúng → vào nhóm, `attempt_count` về 0.
+6. `join_expense_group` với mã đúng → vào nhóm, `attempt_count` **không** bị đặt lại (chặn việc đặt lại bộ đếm bằng cách tham gia
+   nhóm của chính mình giữa các lần đoán); cửa sổ 1 phút vẫn tự đặt lại.
 7. `add_group_fund_entry` chi vượt số dư → `UF001`.
 8. Bill có `payer_id` null: thành viên thường gọi `update_group_expense_custom` hoặc
    `delete_group_expense` → `42501`; trưởng nhóm làm được.

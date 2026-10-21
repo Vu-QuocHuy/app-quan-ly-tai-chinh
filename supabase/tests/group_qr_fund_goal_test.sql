@@ -102,8 +102,8 @@ select is(
 select is(
   (select attempt_count from public.expense_group_join_rate_limits
      where user_id = '00000000-0000-4000-8000-0000000000d4'),
-  0,
-  'tham gia thành công đặt lại bộ đếm'
+  1,
+  'tham gia thành công không đặt lại bộ đếm'
 );
 
 -- Quỹ không đủ tiền
