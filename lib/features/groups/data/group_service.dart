@@ -214,6 +214,8 @@ class ExpenseGroupService {
             name: group.name,
             inviteCode: group.inviteCode,
             ownerId: ownerId,
+            fundGoalMinor: group.fundGoalMinor,
+            fundDeadline: group.fundDeadline,
           );
     final splitsByExpense = <String, List<GroupExpenseSplit>>{};
     final splitKeys = <String>{};
