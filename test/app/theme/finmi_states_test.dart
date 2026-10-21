@@ -99,9 +99,9 @@ void main() {
       await tester.runAsync(() async {
         final image = await render.toImage();
         final bytes = (await image.toByteData(format: ui.ImageByteFormat.png))!;
-        await File(
-          'artifacts/finmi/state-$state.png',
-        ).writeAsBytes(bytes.buffer.asUint8List());
+        final target = File('artifacts/finmi/state-$state.png');
+        await target.parent.create(recursive: true);
+        await target.writeAsBytes(bytes.buffer.asUint8List());
         image.dispose();
       });
       await tester.pumpWidget(const SizedBox.shrink());
