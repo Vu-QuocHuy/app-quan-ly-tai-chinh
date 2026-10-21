@@ -524,6 +524,14 @@ security definer
 set search_path = public, pg_temp
 as $$
 begin
+  -- Legacy clients omit guest splits; reject to prevent silent deletion.
+  if exists (
+    select 1 from public.group_expense_splits
+    where expense_id = p_expense_id and participant_name is not null
+  ) then
+    raise exception 'Bill có khách tham gia; hãy cập nhật ứng dụng để sửa bill này'
+      using errcode = 'UF001';
+  end if;
   perform public.update_group_expense_custom(
     p_expense_id, p_description, p_total_minor, p_splits, 'custom'
   );
