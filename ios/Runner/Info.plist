@@ -4,6 +4,8 @@
 <dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Finmi dùng camera để chụp hóa đơn và quét QR thanh toán.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Finmi dùng micro để chuyển lời nói thành câu hỏi cho trợ lý.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Finmi cần truy cập ảnh bạn chọn để nhận diện hóa đơn.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

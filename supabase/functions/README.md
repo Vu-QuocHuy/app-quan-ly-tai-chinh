@@ -3,6 +3,8 @@
 `ai-api` là backend AI tối giản của Quản lý Tài chính. Function nhận các action:
 
 - `chat`: trả lời câu hỏi dựa trên facts local và tỷ giá bên ngoài khi cần.
+- `draft_transaction`: trích xuất bản nháp thu/chi từ tin nhắn; không ghi dữ liệu cho tới khi người dùng xác nhận trong app.
+- `transcribe`: chuyển WAV tiếng Việt thành văn bản qua OpenAI Audio Transcriptions API.
 - `extract`: chuyển OCR text thành hóa đơn có cấu trúc.
 - `classify`: phân loại merchant bằng bộ rule nhẹ, không tốn lượt Gemini.
 - `extract_submit`, `extract_status`, `extract_cancel`, `extract_retry`: quản lý job trích xuất bất đồng bộ.
@@ -37,10 +39,20 @@ nếu GitHub Secret này chưa được cấu hình.
 Workflow `.github/workflows/production-health.yml` dùng endpoint này làm smoke
 check production định kỳ sau khi cấu hình `SUPABASE_FUNCTION_URL`.
 
-Chat chỉ nhận facts tổng hợp đã whitelist. Facts chứa merchant, invoice ID, dòng
-hóa đơn, kết quả tìm kiếm hoặc danh mục tùy chỉnh sẽ bị loại bỏ tại Edge Function;
-lịch sử chỉ giữ tối đa 4 câu hỏi gần nhất và ẩn email, số điện thoại, mã số dài.
-Các truy vấn dữ liệu local được trả lời ở thiết bị và không gọi function.
+Chatbot trong ứng dụng giữ tin nhắn trong bộ nhớ của phiên hiện tại; đóng trợ lý
+hoặc thoát app sẽ bỏ phiên và app không ghi tin nhắn mới vào thiết bị hay Supabase.
+Các bản chat cũ trên Supabase được giữ nguyên để tránh xóa dữ liệu không thể phục hồi,
+nhưng app không tải hoặc hiển thị chúng. Chat online chỉ nhận facts tổng hợp đã
+whitelist; facts chứa merchant, invoice ID, dòng hóa đơn, kết quả tìm kiếm hoặc
+danh mục tùy chỉnh sẽ bị loại bỏ tại Edge Function. Câu hỏi tài chính vẫn được trả
+lời trực tiếp từ dữ liệu local. Khi nhận diện câu mô tả giao dịch, action
+`draft_transaction` gửi nội dung câu đó cùng ngày hiện tại và tên/mã danh mục cần
+thiết tới Gemini; bản nháp không được lưu trong chat hay database. App chỉ ghi
+khoản thu/chi vào local outbox để đồng bộ Supabase sau khi người dùng xác nhận.
+
+`transcribe` nhận WAV tối đa 15 MB, gửi trong bộ nhớ tới Groq Speech-to-Text với
+model `whisper-large-v3` và ngôn ngữ tiếng Việt. File âm thanh không được lưu vào
+Storage hay database. Khóa Groq chỉ nằm trong secret của Edge Function.
 
 ## Deploy
 
@@ -51,6 +63,7 @@ supabase login
 supabase link --project-ref YOUR_PROJECT_REF
 supabase secrets set GEMINI_API_KEY=your_gemini_key
 supabase secrets set GEMINI_MODEL=gemini-3.8-flash
+supabase secrets set GROQ_API_KEY=your_groq_api_key
 supabase secrets set AI_WORKER_SECRET=at-least-32-random-characters
 supabase secrets set HEALTHCHECK_SECRET=another-at-least-32-random-characters
 supabase functions deploy ai-api
@@ -77,7 +90,7 @@ quota được ghi atomically trong bảng Supabase và có thể thay đổi b�
 `AI_MAX_REQUESTS_PER_DAY` với giá trị từ 1 đến 5000. Nếu môi trường local
 chưa có bảng quota hoặc RPC tương ứng, AI request sẽ bị từ chối an toàn; cần
 deploy đầy đủ migration trước khi đưa lên production.
-`AI_MAX_BODY_BYTES` giới hạn tổng JSON request (mặc định 16 MB, tối đa 25 MB),
+`AI_MAX_BODY_BYTES` giới hạn tổng JSON request (mặc định 24 MB, tối đa 25 MB),
 còn `AI_ALLOWED_ORIGINS` nhận danh sách origin web phân tách bằng dấu phẩy để
 khóa CORS theo domain production. Đặt `AI_REQUIRE_ORIGIN_ALLOWLIST=true` ở
 production để fail-closed nếu allowlist bị bỏ quên; request mobile không có
@@ -87,7 +100,7 @@ né giới hạn bằng cách gọi RPC trực tiếp thay vì đi qua Edge Func
 Retry job cũng tiêu thụ quota ngay trong RPC và giữ giới hạn riêng mặc định 30
 lượt/phút, 500 lượt/ngày.
 Các action online dùng thêm cost units để phản ánh chi phí tương đối:
-`classify=1`, `chat=2`, `extract=5`. Mặc định mỗi user được tối đa 1.000
+`classify=1`, `chat=2`, `draft_transaction=2`, `extract=5`, `transcribe=1`. Mặc định mỗi user được tối đa 1.000
 units/ngày và 10.000 units/tháng; có thể đổi mặc định bằng
 giá trị server-side trong migration, hoặc override riêng user bằng quyền
 quản trị trong bảng private `ai_cost_budgets`. Async submit/retry áp dụng

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,21 +19,19 @@ class GroupFundScreen extends ConsumerStatefulWidget {
 
 class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
   late Future<_FundSnapshot> _future;
-  Timer? _pollTimer;
   bool _fetching = false;
+  bool _refreshPending = false;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
-    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) => _refresh());
-  }
-
-  @override
-  void dispose() {
-    _pollTimer?.cancel();
-    super.dispose();
+    ref.listenManual(sharedGroupRealtimeProvider, (_, _) {});
+    ref.listenManual(
+      sharedGroupRefreshSignalProvider,
+      (_, _) => _refresh(force: true),
+    );
   }
 
   Future<_FundSnapshot> _load() async {
@@ -55,11 +51,21 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
       return _FundSnapshot(details, entries);
     } finally {
       _fetching = false;
+      if (_refreshPending && mounted) {
+        _refreshPending = false;
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _refresh(force: true),
+        );
+      }
     }
   }
 
   void _refresh({bool force = false}) {
-    if (!mounted || _fetching || (_busy && !force)) return;
+    if (!mounted || (_busy && !force)) return;
+    if (_fetching) {
+      _refreshPending = true;
+      return;
+    }
     setState(() => _future = _load());
   }
 

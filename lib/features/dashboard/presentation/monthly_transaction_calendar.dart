@@ -126,13 +126,6 @@ class MonthlyTransactionCalendar extends StatelessWidget {
               );
             },
           ),
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text(
-              '+ Thu nhiều hơn chi · − Chi nhiều hơn thu\nK = nghìn · M = triệu · B = tỷ\nChạm ngày để xem thống kê. Vuốt ngang để xem đủ tuần.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
         ],
       ),
     );

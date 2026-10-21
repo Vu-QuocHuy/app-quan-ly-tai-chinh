@@ -1,15 +1,23 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:cross_file/cross_file.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/providers/app_providers.dart';
-import '../data/chat_history_store.dart';
+import '../../../core/utils/money_formatter.dart';
+import '../../income/data/income_repository.dart';
+import '../../invoices/domain/invoice_models.dart';
+import '../../ingestion/data/ai_extraction_client.dart';
 import '../domain/chat_models.dart';
 import '../domain/chat_privacy_policy.dart';
+import '../data/voice_file_cleanup.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 
@@ -59,25 +67,45 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
+  static const _maxVoiceRecordingSeconds = 30;
+
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final _uuid = const Uuid();
-  Future<void> _pendingPersistence = Future<void>.value();
-  List<ChatMessage> _messages = const [];
-  bool _loading = true;
+  final _audioRecorder = AudioRecorder();
+  late List<ChatMessage> _messages;
   bool _sending = false;
+  bool _recording = false;
+  bool _transcribing = false;
+  Timer? _recordingTimer;
   String? _connectionNote;
+  TransactionDraftResult? _draftConversation;
+  final Map<String, _TransactionDraft> _draftCards = {};
+  String? _savingDraftMessageId;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_loadHistory());
+    _messages = [_welcomeMessage()];
+    unawaited(
+      ref
+          .read(chatHistoryStoreProvider)
+          .clearAll(includeLegacy: true)
+          .catchError((Object _) {}),
+    );
   }
 
   @override
   void dispose() {
+    _recordingTimer?.cancel();
     _inputController.dispose();
     _scrollController.dispose();
+    unawaited(
+      (_recording || _transcribing
+              ? _audioRecorder.cancel()
+              : Future<void>.value())
+          .then((_) => _audioRecorder.dispose()),
+    );
     super.dispose();
   }
 
@@ -94,11 +122,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   'Trợ lý tài chính',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
-              ),
-              IconButton(
-                tooltip: 'Xóa lịch sử trò chuyện',
-                onPressed: _messages.isEmpty || _sending ? null : _clearHistory,
-                icon: const Icon(Icons.delete_sweep_outlined),
               ),
               IconButton(
                 tooltip: 'Đóng trợ lý',
@@ -139,14 +162,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildMessages(BuildContext context) {
-    if (_loading) {
-      return Center(
-        child: Semantics(
-          label: 'Đang tải lịch sử trò chuyện',
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
     if (_messages.isEmpty) {
       return Center(
         child: Padding(
@@ -175,13 +190,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
           );
         }
-        return _MessageBubble(message: _messages[index]);
+        final message = _messages[index];
+        final draft = _draftCards[message.id];
+        return _MessageBubble(
+          message: message,
+          accessory: draft == null ? null : _buildDraftCard(message.id, draft),
+        );
       },
     );
   }
 
   Widget _buildSuggestions(BuildContext context) {
-    if (_loading || _sending) return const SizedBox.shrink();
+    if (_messages.length > 1 || _sending || _recording || _transcribing) {
+      return const SizedBox.shrink();
+    }
     const suggestions = chatQuickPrompts;
     return SizedBox(
       height: 48 * (MediaQuery.textScalerOf(context).scale(14) / 14),
@@ -200,6 +222,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Widget _buildComposer(BuildContext context) {
     final canSend = !_sending && _inputController.text.trim().isNotEmpty;
+    final canRecord = !_sending && !_transcribing;
     return Material(
       color: Theme.of(context).colorScheme.surface,
       child: Padding(
@@ -215,14 +238,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 maxLines: 3,
                 textInputAction: TextInputAction.newline,
                 onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Hỏi trợ lý',
-                  hintText: 'Ví dụ: So sánh chi tiêu tháng này với tháng trước',
+                decoration: InputDecoration(
+                  labelText: 'Nhắn trợ lý',
+                  hintText: 'Ví dụ: Vừa ăn trưa hết 45 nghìn',
+                  helperText: _transcribing
+                      ? 'Đang chuyển lời nói thành văn bản…'
+                      : _recording
+                      ? 'Đang ghi âm · chạm mic để dừng; tự dừng sau $_maxVoiceRecordingSeconds giây'
+                      : null,
                   border: OutlineInputBorder(),
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
+            Semantics(
+              button: true,
+              label: _recording
+                  ? 'Dừng ghi âm'
+                  : 'Nói câu hỏi hoặc mô tả giao dịch, tối đa $_maxVoiceRecordingSeconds giây',
+              child: IconButton.filledTonal(
+                tooltip: _recording
+                    ? 'Dừng ghi âm'
+                    : 'Nói câu hỏi hoặc giao dịch · tối đa $_maxVoiceRecordingSeconds giây',
+                onPressed: canRecord ? _toggleVoiceInput : null,
+                icon: Icon(
+                  _transcribing
+                      ? Icons.hourglass_top
+                      : _recording
+                      ? Icons.stop_rounded
+                      : Icons.mic_none,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
             Semantics(
               button: true,
               label: 'Gửi câu hỏi',
@@ -238,58 +286,116 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Future<void> _loadHistory() async {
-    final store = ref.read(chatHistoryStoreProvider);
-    List<ChatMessage> loaded;
-    try {
-      loaded = await store.load();
-    } on Object {
-      loaded = await store.loadLocal();
-      if (store.canSyncCloud) {
-        _connectionNote =
-            'Chưa tải được lịch sử từ cloud; đang hiển thị bản trên thiết bị.';
-      }
+  Future<void> _toggleVoiceInput() async {
+    if (_recording) {
+      await _finishVoiceInput();
+      return;
     }
-    if (!mounted) return;
-    setState(() {
-      _messages = loaded.isEmpty ? [_welcomeMessage()] : loaded;
-      _loading = false;
-    });
-    _scrollToEnd();
-  }
-
-  Future<void> _persistMessage(
-    ChatMessage message,
-    ChatHistoryStore store,
-  ) async {
+    if (_sending || _transcribing) return;
     try {
-      final savedToCloud = await store.append(message);
-      if (savedToCloud || !store.canSyncCloud || !mounted) return;
+      if (!await _audioRecorder.hasPermission()) {
+        throw StateError('Bạn cần cấp quyền micro để nhập bằng giọng nói.');
+      }
+      final path = kIsWeb
+          ? 'voice-${_uuid.v4()}.wav'
+          : '${(await getTemporaryDirectory()).path}/voice-${_uuid.v4()}.wav';
+      await _audioRecorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.wav,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+        path: path,
+      );
+      if (!mounted) {
+        await _audioRecorder.cancel();
+        return;
+      }
       setState(() {
-        _connectionNote =
-            'Tin nhắn đã lưu trên thiết bị nhưng chưa đồng bộ được lên cloud.';
+        _recording = true;
+        _connectionNote = null;
       });
-    } on Object {
-      if (store.canSyncCloud && mounted) {
-        setState(() {
-          _connectionNote =
-              'Tin nhắn vẫn hiển thị nhưng chưa lưu được lịch sử cloud.';
-        });
-      }
+      _recordingTimer = Timer(
+        const Duration(seconds: _maxVoiceRecordingSeconds),
+        () => unawaited(_finishVoiceInput()),
+      );
+    } on Object catch (error) {
+      if (mounted) setState(() => _connectionNote = friendlyMessage(error));
     }
   }
 
-  void _enqueueMessagePersistence(ChatMessage message) {
-    final store = ref.read(chatHistoryStoreProvider);
-    _pendingPersistence = _pendingPersistence.then(
-      (_) => _persistMessage(message, store),
-    );
+  Future<void> _finishVoiceInput() async {
+    if (!_recording) return;
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+    String? recordingPath;
+    setState(() {
+      _recording = false;
+      _transcribing = true;
+    });
+    try {
+      recordingPath = await _audioRecorder.stop();
+      if (recordingPath == null) {
+        throw StateError('Không có bản ghi âm để gửi.');
+      }
+      final audio = XFile(recordingPath);
+      if (await audio.length() > 15 * 1024 * 1024) {
+        throw StateError('Bản ghi vượt quá giới hạn 15 MB.');
+      }
+      final bytes = await audio.readAsBytes();
+      await _audioRecorder.cancel();
+      await deleteVoiceFile(recordingPath);
+      recordingPath = null;
+      final client = ref.read(supabaseClientProvider);
+      if (client == null) throw StateError('Chưa kết nối được dịch vụ AI.');
+      final response = await client.functions.invoke(
+        'ai-api',
+        body: {
+          'action': 'transcribe',
+          'requestId': _uuid.v4(),
+          'audioBase64': base64Encode(bytes),
+        },
+      );
+      final data = response.data;
+      if (data is! Map || data['text'] is! String) {
+        throw const FormatException(
+          'Dịch vụ phiên âm trả dữ liệu không hợp lệ.',
+        );
+      }
+      final transcript = (data['text'] as String).trim();
+      if (transcript.isEmpty) {
+        throw StateError('Không nhận diện được lời nói. Hãy thử lại.');
+      }
+      if (!mounted) return;
+      final current = _inputController.text.trim();
+      _inputController.text = current.isEmpty
+          ? transcript
+          : '$current $transcript';
+      _inputController.selection = TextSelection.collapsed(
+        offset: _inputController.text.length,
+      );
+      setState(() => _connectionNote = null);
+    } on Object catch (error) {
+      if (mounted) setState(() => _connectionNote = friendlyMessage(error));
+    } finally {
+      if (recordingPath != null) {
+        try {
+          await _audioRecorder.cancel();
+        } on Object {
+          // The recorder may already have been disposed when this screen closed.
+        }
+        await deleteVoiceFile(recordingPath);
+      }
+      if (mounted) setState(() => _transcribing = false);
+    }
   }
 
   Future<void> _send(String value) async {
     final question = value.trim();
     if (question.isEmpty || _sending) return;
     final inScope = ChatPrivacyPolicy.isPersonalFinanceQuestion(question);
+    final draftRequest =
+        _draftConversation != null || _looksLikeTransactionEntry(question);
     final userMessage = ChatMessage(
       id: _uuid.v4(),
       role: ChatMessageRole.user,
@@ -303,9 +409,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _connectionNote = null;
     });
     _scrollToEnd();
-    if (inScope) _enqueueMessagePersistence(userMessage);
 
     try {
+      if (draftRequest) {
+        await _handleTransactionMessage(question, inScope: inScope);
+        return;
+      }
       final reply = inScope
           ? await ref.read(localChatAssistantProvider).answer(question)
           : const ChatReply(text: ChatPrivacyPolicy.outOfScopeMessage);
@@ -322,7 +431,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _messages = updated;
         _sending = false;
       });
-      if (inScope) _enqueueMessagePersistence(assistantMessage);
       _scrollToEnd();
     } on Object catch (error) {
       if (!mounted) return;
@@ -332,8 +440,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ChatMessage(
             id: _uuid.v4(),
             role: ChatMessageRole.assistant,
-            text:
-                'Không thể đọc dữ liệu local lúc này: ${friendlyMessage(error)}',
+            text: draftRequest
+                ? 'Không thể tạo bản nháp giao dịch: ${friendlyMessage(error)}. Chưa có khoản thu/chi nào được lưu.'
+                : 'Không thể đọc dữ liệu local lúc này: ${friendlyMessage(error)}',
             createdAt: DateTime.now(),
           ),
         ];
@@ -343,48 +452,442 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  Future<void> _clearHistory() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Xóa lịch sử trò chuyện?', maxLines: 3),
-        content: const Text(
-          'Lịch sử trên thiết bị sẽ bị xóa; nếu đã đăng nhập, bản cloud cũng bị xóa.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Hủy'),
+  Future<void> _handleTransactionMessage(
+    String question, {
+    required bool inScope,
+  }) async {
+    if (_draftConversation != null && _isDraftCancellation(question)) {
+      final pendingCardIds = _draftCards.keys.toSet();
+      setState(() {
+        _draftConversation = null;
+        _draftCards.clear();
+        _messages = [
+          for (final message in _messages)
+            if (pendingCardIds.contains(message.id))
+              ChatMessage(
+                id: message.id,
+                role: message.role,
+                text: 'Bản nháp đã bị hủy.',
+                createdAt: message.createdAt,
+              )
+            else
+              message,
+          ChatMessage(
+            id: _uuid.v4(),
+            role: ChatMessageRole.assistant,
+            text:
+                'Đã bỏ bản nháp giao dịch. Chưa có khoản thu/chi nào được lưu.',
+            createdAt: DateTime.now(),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Xóa lịch sử'),
+        ];
+        _sending = false;
+      });
+      _scrollToEnd();
+      return;
+    }
+
+    final categories = [
+      ...await ref.read(incomeCategoriesProvider.future),
+      ...await ref.read(categoriesProvider.future),
+    ];
+    final now = DateTime.now();
+    final previous = _draftConversation;
+    final result = await ref
+        .read(aiExtractionClientProvider)
+        .draftTransaction(
+          question,
+          today: now,
+          categories: categories,
+          previous: previous,
+        );
+    if (!mounted) return;
+
+    if (!result.isTransaction) {
+      final reply = inScope
+          ? await ref.read(localChatAssistantProvider).answer(question)
+          : const ChatReply(text: ChatPrivacyPolicy.outOfScopeMessage);
+      if (!mounted) return;
+      setState(() {
+        _messages = [
+          ..._messages,
+          ChatMessage(
+            id: _uuid.v4(),
+            role: ChatMessageRole.assistant,
+            text: reply.text,
+            createdAt: DateTime.now(),
+            citations: reply.citations,
+          ),
+        ];
+        _sending = false;
+      });
+      _scrollToEnd();
+      return;
+    }
+
+    final previousCardIds = _draftCards.keys.toSet();
+    _draftConversation = result;
+    if (!result.isReady) {
+      setState(() {
+        _draftCards.clear();
+        _messages = [
+          for (final message in _messages)
+            if (previousCardIds.contains(message.id))
+              ChatMessage(
+                id: message.id,
+                role: message.role,
+                text: 'Bản nháp này đã được cập nhật trong tin nhắn mới hơn.',
+                createdAt: message.createdAt,
+              )
+            else
+              message,
+          ChatMessage(
+            id: _uuid.v4(),
+            role: ChatMessageRole.assistant,
+            text: result.clarification.isEmpty
+                ? 'Bạn cho mình biết số tiền và đây là khoản thu hay khoản chi nhé.'
+                : result.clarification,
+            createdAt: DateTime.now(),
+          ),
+        ];
+        _sending = false;
+      });
+      _scrollToEnd();
+      return;
+    }
+
+    final date = result.date ?? DateTime(now.year, now.month, now.day);
+    final isIncome = result.type == 'income';
+    final categoryKind = isIncome ? CategoryKind.income : CategoryKind.expense;
+    final category =
+        categories
+            .where(
+              (item) =>
+                  item.id == result.categoryId && item.kind == categoryKind,
+            )
+            .firstOrNull ??
+        categories
+            .where(
+              (item) =>
+                  item.kind == categoryKind &&
+                  item.name.trim().toLowerCase() == 'khác',
+            )
+            .firstOrNull;
+    final draft = _TransactionDraft(
+      isIncome: isIncome,
+      amountMinor: result.amountMinor!,
+      date: date,
+      description: result.description,
+      categoryId: category?.id,
+      categoryName: category?.name,
+      possibleDuplicate: await _hasPotentialDuplicate(
+        isIncome: isIncome,
+        amountMinor: result.amountMinor!,
+        date: date,
+        description: result.description,
+        categoryId: category?.id,
+      ),
+    );
+    if (!mounted) return;
+    final messageId = _uuid.v4();
+    setState(() {
+      _draftCards.clear();
+      _draftCards[messageId] = draft;
+      _messages = [
+        for (final message in _messages)
+          if (previousCardIds.contains(message.id))
+            ChatMessage(
+              id: message.id,
+              role: message.role,
+              text: 'Bản nháp này đã được cập nhật trong tin nhắn mới hơn.',
+              createdAt: message.createdAt,
+            )
+          else
+            message,
+        ChatMessage(
+          id: messageId,
+          role: ChatMessageRole.assistant,
+          text: '',
+          createdAt: DateTime.now(),
+        ),
+      ];
+      _sending = false;
+    });
+    _scrollToEnd();
+  }
+
+  Future<bool> _hasPotentialDuplicate({
+    required bool isIncome,
+    required int amountMinor,
+    required DateTime date,
+    required String description,
+    required String? categoryId,
+  }) async {
+    try {
+      if (isIncome) {
+        return await ref
+            .read(incomeRepositoryProvider)
+            .hasPotentialDuplicate(amountMinor, date);
+      }
+      final candidate = InvoiceEntity(
+        id: _uuid.v4(),
+        sellerName: description.isEmpty ? 'Khoản chi' : description,
+        notes: description,
+        currencyCode: 'VND',
+        subtotalMinor: amountMinor,
+        taxMinor: 0,
+        totalMinor: amountMinor,
+        sourceType: InvoiceSourceType.manual,
+        status: InvoiceStatus.confirmed,
+        categoryId: categoryId,
+        issuedAt: date,
+        createdAt: date,
+        updatedAt: date,
+      );
+      final matches = await ref
+          .read(invoiceRepositoryProvider)
+          .findDuplicateCandidates(candidate);
+      return matches.any(
+        (item) =>
+            item.status == InvoiceStatus.confirmed &&
+            item.totalMinor == amountMinor &&
+            _sameDay(item.issuedAt ?? item.createdAt, date),
+      );
+    } on Object {
+      return false;
+    }
+  }
+
+  Widget _buildDraftCard(String messageId, _TransactionDraft draft) {
+    final busy = _savingDraftMessageId == messageId;
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${draft.isIncome ? 'Khoản thu' : 'Khoản chi'} · ${MoneyFormatter.format(draft.amountMinor)}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          if (draft.description.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(draft.description),
+          ],
+          const SizedBox(height: 4),
+          Text(
+            '${MaterialLocalizations.of(context).formatMediumDate(draft.date)} · ${draft.categoryName ?? 'Chưa phân loại'}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          if (draft.possibleDuplicate) ...[
+            const SizedBox(height: 10),
+            const AppCallout(
+              tone: CalloutTone.warning,
+              title: 'Có thể trùng giao dịch',
+              message:
+                  'Đã có khoản cùng số tiền trong ngày này. Hãy kiểm tra trước khi lưu.',
+            ),
+          ],
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              TextButton(
+                onPressed: busy ? null : () => _discardDraft(messageId),
+                child: const Text('Bỏ qua'),
+              ),
+              FilledButton.icon(
+                onPressed: busy ? null : () => _saveDraft(messageId, draft),
+                icon: busy
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check),
+                label: Text(
+                  draft.possibleDuplicate ? 'Vẫn lưu' : 'Xác nhận lưu',
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
-    if (confirmed != true) return;
-    await _pendingPersistence;
-    try {
-      await ref.read(chatHistoryStoreProvider).clear();
-    } on Object {
-      if (mounted) {
-        setState(() {
-          _connectionNote =
-              'Đã xóa bản trên thiết bị nhưng chưa xóa được lịch sử cloud.';
-        });
-      }
-    }
-    if (!mounted) return;
-    setState(() => _messages = [_welcomeMessage()]);
   }
+
+  Future<void> _saveDraft(String messageId, _TransactionDraft draft) async {
+    if (_savingDraftMessageId != null) return;
+    setState(() => _savingDraftMessageId = messageId);
+    try {
+      if (draft.isIncome) {
+        await ref
+            .read(incomeRepositoryProvider)
+            .save(
+              draft.amountMinor,
+              source: IncomeSource.manual,
+              categoryId: draft.categoryId,
+              receivedAt: draft.date,
+              note: draft.description,
+            );
+      } else {
+        final now = DateTime.now();
+        await ref
+            .read(invoiceRepositoryProvider)
+            .saveInvoice(
+              InvoiceEntity(
+                id: _uuid.v4(),
+                sellerName: draft.description.isEmpty
+                    ? draft.categoryName ?? 'Khoản chi'
+                    : draft.description,
+                notes: draft.description,
+                currencyCode: 'VND',
+                subtotalMinor: draft.amountMinor,
+                taxMinor: 0,
+                totalMinor: draft.amountMinor,
+                sourceType: InvoiceSourceType.manual,
+                status: InvoiceStatus.confirmed,
+                categoryId: draft.categoryId,
+                issuedAt: draft.date,
+                createdAt: now,
+                updatedAt: now,
+                confirmedAt: now,
+              ),
+            );
+      }
+      if (!mounted) return;
+      final label = draft.isIncome ? 'thu' : 'chi';
+      setState(() {
+        _draftCards.remove(messageId);
+        _draftConversation = null;
+        _messages = [
+          for (final message in _messages)
+            if (message.id == messageId)
+              ChatMessage(
+                id: message.id,
+                role: message.role,
+                text:
+                    'Đã lưu khoản $label ${MoneyFormatter.format(draft.amountMinor)}.',
+                createdAt: message.createdAt,
+              )
+            else
+              message,
+        ];
+      });
+      _scrollToEnd();
+    } on Object catch (error) {
+      if (mounted) setState(() => _connectionNote = friendlyMessage(error));
+    } finally {
+      if (mounted) setState(() => _savingDraftMessageId = null);
+    }
+  }
+
+  void _discardDraft(String messageId) {
+    setState(() {
+      _draftCards.remove(messageId);
+      _draftConversation = null;
+      _messages = [
+        for (final message in _messages)
+          if (message.id == messageId)
+            ChatMessage(
+              id: message.id,
+              role: message.role,
+              text: 'Đã bỏ bản nháp. Chưa có giao dịch nào được lưu.',
+              createdAt: message.createdAt,
+            )
+          else
+            message,
+      ];
+    });
+  }
+
+  bool _isDraftCancellation(String text) => RegExp(
+    r'^(thôi|huỷ|hủy|bỏ qua|không lưu)( nhé| nha)?[.! ]*$',
+    caseSensitive: false,
+    unicode: true,
+  ).hasMatch(text.trim());
+
+  // shortcut: starts AI parsing only for transaction verbs or currency markers.
+  bool _looksLikeTransactionEntry(String value) {
+    final text = value.toLowerCase().trim();
+    const questionMarkers = [
+      '?',
+      'bao nhiêu',
+      'nhiều nhất',
+      'tổng',
+      'so sánh',
+      'tháng này',
+      'tháng trước',
+      'có nên',
+      'nên mua',
+      'tại sao',
+      'làm sao',
+      'thế nào',
+      'là gì',
+      'danh mục',
+      'gần đây',
+      'mới nhất',
+      'định kỳ',
+      'dự báo',
+      'bất thường',
+      'gợi ý',
+      'liệt kê',
+    ];
+    if (questionMarkers.any(text.contains)) return false;
+    const actions = [
+      'mua',
+      'trả',
+      'thanh toán',
+      'chi',
+      'tiêu',
+      'ăn',
+      'uống',
+      'đổ xăng',
+      'đi chợ',
+      'đặt',
+      'nhận',
+      'thu',
+      'lương',
+      'thưởng',
+      'bán',
+      'chuyển',
+      'ghi lại',
+      'ghi nhận',
+      'đóng tiền',
+      'nộp tiền',
+      'hoàn tiền',
+    ];
+    if (actions.any(
+      (action) => RegExp(
+        '(^|\\s)${RegExp.escape(action)}(?=\\s|\$)',
+        unicode: true,
+      ).hasMatch(text),
+    )) {
+      return true;
+    }
+    return RegExp(
+      r'\d+(?:[.,]\d+)?\s*(k|nghìn|ngàn|triệu|tr|đồng|vnd|₫)\b',
+      caseSensitive: false,
+      unicode: true,
+    ).hasMatch(text);
+  }
+
+  bool _sameDay(DateTime left, DateTime right) =>
+      left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
 
   ChatMessage _welcomeMessage() => ChatMessage(
     id: 'welcome',
     role: ChatMessageRole.assistant,
     text:
         'Xin chào! Mình có thể giúp bạn xem tổng thu, tổng chi, ngân sách, danh mục, '
-        'so sánh tháng và khoản chi định kỳ.',
+        'so sánh tháng và khoản chi định kỳ. Bạn cũng có thể mô tả khoản thu/chi để '
+        'tạo bản nháp rồi xác nhận trước khi lưu.',
     createdAt: DateTime.now(),
   );
 
@@ -400,10 +903,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
+class _TransactionDraft {
+  const _TransactionDraft({
+    required this.isIncome,
+    required this.amountMinor,
+    required this.date,
+    required this.description,
+    required this.categoryId,
+    required this.categoryName,
+    required this.possibleDuplicate,
+  });
+
+  final bool isIncome;
+  final int amountMinor;
+  final DateTime date;
+  final String description;
+  final String? categoryId;
+  final String? categoryName;
+  final bool possibleDuplicate;
+}
+
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+  const _MessageBubble({required this.message, this.accessory});
 
   final ChatMessage message;
+  final Widget? accessory;
 
   @override
   Widget build(BuildContext context) {
@@ -413,7 +937,10 @@ class _MessageBubble extends StatelessWidget {
         ? scheme.primaryContainer
         : scheme.surfaceContainerHigh;
     return Semantics(
-      label: '${isUser ? 'Bạn' : 'Trợ lý'}: ${message.text}',
+      label: message.text.isEmpty
+          ? 'Bản nháp giao dịch'
+          : '${isUser ? 'Bạn' : 'Trợ lý'}: ${message.text}',
+      explicitChildNodes: true,
       child: Align(
         alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
         child: ConstrainedBox(
@@ -426,28 +953,10 @@ class _MessageBubble extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(message.text),
-                  if (!isUser) ...[
-                    const SizedBox(height: 4),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: IconButton(
-                        tooltip: 'Sao chép câu trả lời',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () async {
-                          await Clipboard.setData(
-                            ClipboardData(text: message.text),
-                          );
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Đã sao chép câu trả lời.'),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.copy_outlined, size: 18),
-                      ),
-                    ),
+                  if (message.text.isNotEmpty) Text(message.text),
+                  if (accessory != null) ...[
+                    const SizedBox(height: 10),
+                    accessory!,
                   ],
                   if (message.citations.isNotEmpty) ...[
                     const SizedBox(height: 10),

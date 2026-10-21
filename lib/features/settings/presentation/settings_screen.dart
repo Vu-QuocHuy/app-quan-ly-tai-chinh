@@ -225,30 +225,6 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                _Section(
-                  title: 'Nâng cao',
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.history_outlined),
-                      title: const Text('Lịch sử nhập hóa đơn', maxLines: 3),
-                      subtitle: const Text(
-                        'Theo dõi tác vụ nhập và thử lại khi gặp lỗi.',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => context.push('/settings/import-jobs'),
-                    ),
-                    conflictsAsync.when(
-                      data: (_) => const SizedBox.shrink(),
-                      loading: () => const SizedBox.shrink(),
-                      error: (error, _) => _ErrorTile(
-                        error: error,
-                        label: 'Không đọc được trạng thái xung đột',
-                        onRetry: () => ref.invalidate(invoiceConflictsProvider),
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),

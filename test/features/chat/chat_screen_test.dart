@@ -9,6 +9,7 @@ import 'package:hoadon_insight/features/chat/domain/local_chat_assistant.dart';
 import 'package:hoadon_insight/features/chat/domain/chat_models.dart';
 import 'package:hoadon_insight/features/chat/presentation/chat_screen.dart';
 import 'package:hoadon_insight/features/income/data/income_repository.dart';
+import 'package:hoadon_insight/features/ingestion/data/ai_extraction_client.dart';
 import 'package:hoadon_insight/features/invoices/domain/invoice_models.dart';
 import 'package:hoadon_insight/features/invoices/domain/invoice_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -170,19 +171,51 @@ void main() {
     expect(incomeChip, findsOneWidget);
     expect(find.byType(ActionChip), findsWidgets);
   });
-}
+  testWidgets('transaction drafts fall back to the existing Khác category', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final other = CategoryEntity(
+      id: 'other',
+      name: 'Khác',
+      iconName: 'category',
+      colorValue: 0xFF64748B,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          aiExtractionClientProvider.overrideWithValue(
+            _DraftingAiClient(
+              const TransactionDraftResult(
+                isTransaction: true,
+                type: 'expense',
+                amountMinor: 90000,
+                date: null,
+                description: 'Chi tiêu kiểm thử',
+                categoryId: null,
+                clarification: '',
+              ),
+            ),
+          ),
+          incomeCategoriesProvider.overrideWith((ref) => Stream.value([])),
+          categoriesProvider.overrideWith((ref) => Stream.value([other])),
+          chatHistoryStoreProvider.overrideWithValue(const ChatHistoryStore()),
+          invoiceRepositoryProvider.overrideWithValue(_InvoiceRepository()),
+        ],
+        child: const MaterialApp(home: ChatScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
 
-class _DelayedHistoryStore extends ChatHistoryStore {
-  final gate = Completer<void>();
-  final messages = <ChatMessage>[];
-  @override
-  Future<List<ChatMessage>> load() async => [];
-  @override
-  Future<bool> append(ChatMessage message) async {
-    messages.add(message);
-    if (messages.length == 1) await gate.future;
-    return true;
-  }
+    await tester.enterText(find.byType(TextField), 'Hôm nay chi 90 nghìn');
+    await tester.pump();
+    await tester.tap(find.byTooltip('Gửi câu hỏi'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Khác'), findsOneWidget);
+    expect(find.text('Xác nhận lưu'), findsOneWidget);
+    expect(find.textContaining('Mình đã tạo bản nháp'), findsNothing);
+  });
 }
 
 class _DelayedHistoryStore extends ChatHistoryStore {
@@ -217,4 +250,18 @@ class _IncomeRepository extends Fake implements IncomeRepository {
       ),
     ]);
   }
+}
+
+class _DraftingAiClient extends AiExtractionClient {
+  _DraftingAiClient(this.result) : super(enabled: false);
+
+  final TransactionDraftResult result;
+
+  @override
+  Future<TransactionDraftResult> draftTransaction(
+    String text, {
+    required DateTime today,
+    required List<CategoryEntity> categories,
+    TransactionDraftResult? previous,
+  }) async => result;
 }
