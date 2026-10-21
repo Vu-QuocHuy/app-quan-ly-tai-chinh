@@ -451,6 +451,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
             description: draft.description,
             totalMinor: draft.totalMinor,
             splitAmounts: draft.splitAmounts!,
+            splitMode: 'custom',
           );
     });
   }
