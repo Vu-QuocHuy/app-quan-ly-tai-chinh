@@ -295,7 +295,7 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
                     entry.kind == 'deposit' ? 'Thu vào quỹ' : entry.note,
                   ),
                   subtitle: Text(
-                    '${names[entry.actorId] ?? 'Thành viên'} · ${entry.createdAt.day}/${entry.createdAt.month}/${entry.createdAt.year}',
+                    '${names[entry.actorId] ?? (entry.actorId == null ? 'Tài khoản đã xóa' : 'Thành viên')} · ${entry.createdAt.day}/${entry.createdAt.month}/${entry.createdAt.year}',
                   ),
                   trailing: Column(
                     mainAxisSize: MainAxisSize.min,

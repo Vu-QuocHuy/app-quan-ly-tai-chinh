@@ -4,12 +4,16 @@ class ExpenseGroup {
     required this.name,
     required this.inviteCode,
     required this.ownerId,
+    this.fundGoalMinor,
+    this.fundDeadline,
   });
 
   final String id;
   final String name;
   final String inviteCode;
   final String ownerId;
+  final int? fundGoalMinor;
+  final DateTime? fundDeadline;
 }
 
 class GroupFundEntry {
@@ -25,7 +29,9 @@ class GroupFundEntry {
 
   final String id;
   final String groupId;
-  final String actorId;
+
+  /// `null` khi người ghi đã xóa tài khoản.
+  final String? actorId;
   final String kind;
   final int amountMinor;
   final String note;
