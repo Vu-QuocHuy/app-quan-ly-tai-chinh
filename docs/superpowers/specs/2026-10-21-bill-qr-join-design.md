@@ -179,15 +179,17 @@ bản). Bản 4 tham số giữ chữ ký và grant, thân hàm chỉ gọi bả
   `static String billUri(String code)` → `hoadoninsight://join-bill?code=<CODE>`.
 - `GroupExpense` thêm `String splitMode` (`'equal'`/`'custom'`), `bool joinOpen`,
   `String? joinCode`. `GroupExpenseSplit` thêm `String? participantName`.
-- `GroupBalanceCalculator.calculate`: bỏ qua split có `userId` không thuộc `memberIds`; người trả
-  không thuộc `memberIds` cũng bỏ qua.
+- `GroupBalanceCalculator.calculate`: split có `userId` không thuộc `memberIds` không vào số dư
+  của ai trong nhóm, và phần tiền đó được trừ khỏi số người trả được ghi có (nợ của khách chỉ
+  nằm trong bill, thành viên không bị gợi ý trả thay); người trả không thuộc `memberIds` bị bỏ qua.
 - Model mới `ExternalBill` (+ `ExternalBillParticipant`) parse từ `list_my_external_bills`.
 - `ExpenseGroupService` thêm: `openBillInvite(expenseId) → String`, `closeBillInvite(expenseId)`,
   `joinBill(code) → String expenseId` (null từ RPC → `StateError('Mã mời không hợp lệ.')`),
   `leaveBill(expenseId)`, `listExternalBills() → List<ExternalBill>`;
   `updateCustomExpense` nhận thêm `splitMode`. `loadDetails` select thêm `split_mode, join_open,
   join_code` và `participant_name`.
-- `GroupExpenseDraft` đã có đủ thông tin; khi sửa ở chế độ "Đều", màn nhóm gửi
+- `GroupExpenseDraft` thêm `bool equalSplit`; bill `equal` mở dialog sửa ở chế độ "Đều", dialog sửa
+  liệt kê cả khách để lưu không làm rơi họ; khi lưu ở chế độ "Đều", màn nhóm gửi
   `splitMode: 'equal'`.
 
 ### 4.5 Flutter — presentation
@@ -202,7 +204,8 @@ bản). Bản 4 tham số giữ chữ ký và grant, thân hàm chỉ gọi bả
   split của người ngoài hiện `participantName` kèm nhãn "Khách".
 - **Mục "Bill bạn tham gia"** (`external_bills_section.dart`, đặt dưới hộp thư chia sẻ ở tab
   Nhóm, ẩn khi rỗng): mỗi bill hiện mô tả, người trả, "Phần của bạn: …", trạng thái; nút
-  "Tôi đã thanh toán" (gọi `settleMyShare`) và "Rời bill" (khi bill chưa ai trả, có xác nhận).
+  "Tôi đã thanh toán" (gọi `settleMyShare`; ẩn khi phần của mình là 0đ để không vô tình đóng lời
+  mời của cả bill) và "Rời bill" (khi bill chưa ai trả, có xác nhận).
   Bấm vào mở bottom sheet chi tiết danh sách người tham gia. Dữ liệu qua provider
   `externalBillsProvider`, làm mới khi kéo xuống và sau mỗi thao tác.
 
