@@ -87,7 +87,7 @@ class DashboardScreen extends ConsumerWidget {
       ),
       (CupertinoIcons.creditcard, 'Ngân sách', () => context.go('/budgets')),
       (CupertinoIcons.group, 'Nhóm', () => context.go('/groups')),
-      (CupertinoIcons.camera, 'Quét hóa đơn', actions?.scanReceipt),
+      (CupertinoIcons.camera, 'Quét', actions?.scanReceipt),
       (CupertinoIcons.tag, 'Danh mục', () => context.push('/categories')),
       (
         CupertinoIcons.doc_text,

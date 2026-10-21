@@ -360,6 +360,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                 CategoryAvatar(category: row.category, radius: 18),
                 const SizedBox(width: 10),
                 Expanded(
+                  flex: 3,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -372,17 +373,21 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                         '${row.amount >= 0 ? 'Thu' : 'Chi'} · ${row.category?.name ?? 'Khác'} · ${DateFormat('dd/MM/yyyy').format(row.date)}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${row.amount >= 0 ? '+' : '−'}${MoneyFormatter.format(row.amount.abs())}',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: row.amount >= 0
-                              ? context.finance.income.color
-                              : context.finance.expense.color,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
                     ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  flex: 2,
+                  child: Text(
+                    '${row.amount >= 0 ? '+' : '−'}${MoneyFormatter.format(row.amount.abs())}',
+                    textAlign: TextAlign.end,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: row.amount >= 0
+                          ? context.finance.income.color
+                          : context.finance.expense.color,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
               ],
@@ -563,21 +568,6 @@ class _PeriodFlowChart extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('Dòng tiền', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            children: [
-              Text(
-                '↓ Thu nhập',
-                style: TextStyle(color: context.finance.income.color),
-              ),
-              Text(
-                '↑ Chi tiêu',
-                style: TextStyle(color: context.finance.expense.color),
-              ),
-            ],
-          ),
           const SizedBox(height: 16),
           if (maximum == 0)
             const AppEmptyState(
@@ -649,15 +639,6 @@ class _PeriodFlowChart extends StatelessWidget {
                 ),
               ),
             ),
-          const SizedBox(height: 12),
-          Text(
-            daily
-                ? 'Thu và chi trong ngày đã chọn'
-                : yearly
-                ? 'Tháng 1 → Tháng 12 · Chạm cột để xem số tiền'
-                : 'Ngày 1 → Ngày $count · Chạm cột để xem số tiền',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
         ],
       ),
     );
@@ -681,6 +662,7 @@ class _PeriodPieState extends State<_PeriodPie> {
   @override
   Widget build(BuildContext context) {
     final categories = _income ? widget.incomeCategories : widget.categories;
+    final finance = Theme.of(context).extension<AppFinanceColors>()!;
     final entries =
         widget.data
             .categories(_income)
@@ -691,10 +673,48 @@ class _PeriodPieState extends State<_PeriodPie> {
     final total = entries.fold<int>(0, (v, e) => v + e.value);
     CategoryEntity? category(String id) =>
         categories.where((c) => c.id == id).firstOrNull;
+    final colorScheme = Theme.of(context).colorScheme;
     Color color(String id) => CategoryPalette.resolve(
       category(id)?.colorValue ?? 0xFF52665A,
-      Theme.of(context).colorScheme,
+      colorScheme,
     ).glyph;
+    final titleColor = colorScheme.brightness == Brightness.dark
+        ? Colors.black
+        : Colors.white;
+    Widget categoryRow(MapEntry<String, int> entry) {
+      final name = category(entry.key)?.name ?? 'Khác';
+      final percentage = (entry.value / total * 100).round();
+      return Semantics(
+        label: '$name, $percentage%, ${MoneyFormatter.format(entry.value)}',
+        excludeSemantics: true,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              CategoryAvatar(category: category(entry.key), radius: 14),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  name,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                flex: 2,
+                child: MoneyText(
+                  entry.value,
+                  textAlign: TextAlign.end,
+                  tone: _income ? finance.income : finance.expense,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -736,7 +756,13 @@ class _PeriodPieState extends State<_PeriodPie> {
                           value: e.value.toDouble(),
                           color: color(e.key),
                           radius: 36,
-                          showTitle: false,
+                          title: '${(e.value / total * 100).round()}%',
+                          titleStyle: TextStyle(
+                            color: titleColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          showTitle: e.value / total * 100 >= 5,
                         ),
                     ],
                   ),
@@ -744,32 +770,7 @@ class _PeriodPieState extends State<_PeriodPie> {
               ),
             ),
             const SizedBox(height: 12),
-            for (final entry in entries)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CategoryAvatar(category: category(entry.key), radius: 14),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            category(entry.key)?.name ?? 'Khác',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                          Text(
-                            '${MoneyFormatter.format(entry.value)} · ${(entry.value / total * 100).toStringAsFixed(1).replaceAll('.', ',')}%',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            for (final entry in entries) categoryRow(entry),
           ],
         ],
       ),

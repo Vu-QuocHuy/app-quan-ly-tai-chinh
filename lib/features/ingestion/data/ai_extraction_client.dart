@@ -10,6 +10,39 @@ import '../domain/extraction.dart';
 import '../domain/invoice_validator.dart';
 import '../domain/source_hasher.dart';
 
+class TransactionDraftResult {
+  const TransactionDraftResult({
+    required this.isTransaction,
+    required this.type,
+    required this.amountMinor,
+    required this.date,
+    required this.description,
+    required this.categoryId,
+    required this.clarification,
+  });
+
+  final bool isTransaction;
+  final String type;
+  final int? amountMinor;
+  final DateTime? date;
+  final String description;
+  final String? categoryId;
+  final String clarification;
+
+  bool get isReady =>
+      isTransaction &&
+      (type == 'income' || type == 'expense') &&
+      amountMinor != null;
+
+  Map<String, Object?> toJson() => {
+    'type': type,
+    'amountMinor': amountMinor,
+    'date': date == null ? null : _dateOnly(date!),
+    'description': description,
+    'categoryId': categoryId,
+  };
+}
+
 class AiExtractionClient implements InvoiceExtractor {
   static const _maxSafeInteger = 9007199254740991;
   static const _maxItems = 200;
@@ -89,6 +122,78 @@ class AiExtractionClient implements InvoiceExtractor {
     return categoryId is String && _supportedCategories.contains(categoryId)
         ? categoryId
         : null;
+  }
+
+  Future<TransactionDraftResult> draftTransaction(
+    String text, {
+    required DateTime today,
+    required List<CategoryEntity> categories,
+    TransactionDraftResult? previous,
+  }) async {
+    if (!isConfigured) {
+      throw const NetworkException('AI tạo giao dịch chưa được cấu hình.');
+    }
+    if (text.trim().isEmpty || text.length > 3_000 || categories.length > 100) {
+      throw const FormatException('Mô tả giao dịch không hợp lệ.');
+    }
+    final data = await _supabaseFunctions!.invoke({
+      'action': 'draft_transaction',
+      'requestId': _uuid.v4(),
+      'locale': 'vi-VN',
+      'text': text.trim(),
+      'today': _dateOnly(today),
+      'categories': categories
+          .map(
+            (category) => {
+              'id': category.id,
+              'name': category.name,
+              'kind': category.kind.name,
+            },
+          )
+          .toList(growable: false),
+      if (previous != null) 'previousDraft': previous.toJson(),
+    }, errorMessage: 'Không thể phân tích giao dịch. Bản nháp chưa được lưu.');
+    final isTransaction = data['isTransaction'];
+    final type = data['type'];
+    final amount = data['amountMinor'];
+    final dateValue = data['date'];
+    final description = data['description'];
+    final categoryId = data['categoryId'];
+    final clarification = data['clarification'];
+    if (isTransaction is! bool ||
+        type is! String ||
+        !{'income', 'expense', 'unclear'}.contains(type) ||
+        (amount != null &&
+            (amount is! int || amount < 1 || amount > _maxSafeInteger)) ||
+        (dateValue != null && dateValue is! String) ||
+        description is! String ||
+        description.length > 300 ||
+        (categoryId != null && categoryId is! String) ||
+        clarification is! String ||
+        clarification.length > 300) {
+      throw const FormatException('AI trả về bản nháp giao dịch không hợp lệ.');
+    }
+    final date = dateValue == null ? null : _parseDateOnly(dateValue as String);
+    if (dateValue != null && date == null) {
+      throw const FormatException('Ngày giao dịch AI trả về không hợp lệ.');
+    }
+    final validCategory =
+        categoryId is String &&
+        categories.any(
+          (category) =>
+              category.id == categoryId &&
+              ((type == 'income' && category.kind == CategoryKind.income) ||
+                  (type == 'expense' && category.kind == CategoryKind.expense)),
+        );
+    return TransactionDraftResult(
+      isTransaction: isTransaction,
+      type: type,
+      amountMinor: amount,
+      date: date,
+      description: description.trim(),
+      categoryId: validCategory ? categoryId : null,
+      clarification: clarification.trim(),
+    );
   }
 
   Future<ExtractionResult> extractImage(ExtractionInput input) async {
@@ -328,4 +433,16 @@ class AiExtractionClient implements InvoiceExtractor {
     if (parsed == null) throw ExtractionException('$field không hợp lệ.');
     return parsed;
   }
+}
+
+String _dateOnly(DateTime value) =>
+    '${value.year.toString().padLeft(4, '0')}-'
+    '${value.month.toString().padLeft(2, '0')}-'
+    '${value.day.toString().padLeft(2, '0')}';
+
+DateTime? _parseDateOnly(String value) {
+  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) return null;
+  final date = DateTime.tryParse(value);
+  if (date == null || _dateOnly(date) != value) return null;
+  return DateTime(date.year, date.month, date.day);
 }
