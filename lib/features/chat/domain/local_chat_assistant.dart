@@ -1,6 +1,7 @@
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
 import '../../income/data/income_repository.dart';
+import '../../ingestion/domain/quick_transaction_parser.dart';
 import '../../invoices/domain/invoice_filters.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../invoices/domain/invoice_repository.dart';
@@ -27,6 +28,46 @@ class LocalChatAssistant {
       sourceId: monthKey,
       capturedAt: DateTime.now(),
     );
+
+    if (normalized.contains('neu ') &&
+        (normalized.contains('giam chi') ||
+            normalized.contains('tang thu') ||
+            normalized.contains('tiet kiem'))) {
+      QuickTransaction scenario;
+      try {
+        scenario = QuickTransactionParser.parse(question, now: reference);
+      } on FormatException {
+        return const ChatReply(
+          text:
+              'Hãy nêu số tiền muốn giảm chi, tăng thu hoặc tiết kiệm mỗi tháng.',
+        );
+      }
+      final period = RegExp(r'(\d+)\s*thang').firstMatch(normalized);
+      final months = int.tryParse(period?.group(1) ?? '') ?? 1;
+      if (months < 1 || months > 60) {
+        return const ChatReply(
+          text: 'Hãy chọn khoảng thời gian từ 1 đến 60 tháng.',
+        );
+      }
+      final insights = await tools.spendingInsights(monthKey);
+      final income = (await tools.incomeEntries())
+          .where((entry) => MonthUtils.key(entry.receivedAt) == monthKey)
+          .fold<int>(0, (sum, entry) => sum + entry.amountMinor);
+      final baseSavings = income - insights.forecastTotalMinor;
+      final adjustedSavings = baseSavings + scenario.amountMinor;
+      return ChatReply(
+        text:
+            'Nếu thay đổi ${MoneyFormatter.format(scenario.amountMinor)} mỗi tháng, '
+            'chênh lệch thu − chi dự kiến là ${MoneyFormatter.format(adjustedSavings)}/tháng; '
+            'sau $months tháng là ${MoneyFormatter.format(adjustedSavings * months)}. '
+            'Đây là phép tính giả định, chưa ghi giao dịch.',
+        citations: [citation],
+        facts: [
+          ChatFact('scenario_monthly_savings_minor_vnd', '$adjustedSavings'),
+          ChatFact('scenario_months', '$months'),
+        ],
+      );
+    }
 
     if (_isIncomeQuestion(normalized)) {
       final entries = await tools.incomeEntries();

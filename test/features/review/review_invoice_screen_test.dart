@@ -82,9 +82,11 @@ void main() {
     await tester.pumpAndSettle();
     final totalField = find.widgetWithText(TextFormField, 'Tổng thanh toán *');
     expect(
-      tester.widget<TextField>(
-        find.descendant(of: totalField, matching: find.byType(TextField)),
-      ).keyboardType,
+      tester
+          .widget<TextField>(
+            find.descendant(of: totalField, matching: find.byType(TextField)),
+          )
+          .keyboardType,
       const TextInputType.numberWithOptions(decimal: false),
     );
     await tester.enterText(totalField, '12,5');

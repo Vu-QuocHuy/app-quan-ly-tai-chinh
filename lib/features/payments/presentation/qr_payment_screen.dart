@@ -375,7 +375,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Ưu tiên app hỗ trợ điền sẵn. Thông tin chuyển khoản được gửi qua VietQR.io. Hãy kiểm tra người nhận và số tiền trong app ngân hàng trước khi xác nhận.',
+                        'App hỗ trợ điền sẵn sẽ mở qua trang chuyển tiếp VietQR. Hãy kiểm tra người nhận và số tiền trong app ngân hàng.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -396,7 +396,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                         ),
                         title: Text(app.name),
                         subtitle: Text(
-                          '${app.bankName}\n${app.supportsAutofill ? 'Hỗ trợ điền sẵn chuyển khoản' : 'Chỉ mở app; cần nhập hoặc quét lại'}',
+                          '${app.bankName}\n${app.supportsAutofill ? 'Điền sẵn qua trang chuyển tiếp' : 'Chỉ mở app; cần nhập hoặc quét lại'}',
                         ),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => Navigator.pop(sheetContext, app),
@@ -414,7 +414,10 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
 
   Future<void> _launchBankApp(VietQrBankApp app) async {
     if (!_validateForm() || _isLaunchingBank) return;
-    if (!app.supportsAutofill) {
+    final isAndroid =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    final openDirectly = isAndroid && !app.supportsAutofill;
+    if (openDirectly) {
       final proceed = await showConfirmDialog(
         context,
         title: '${app.name} chưa hỗ trợ điền sẵn',
@@ -428,28 +431,18 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
     setState(() => _isLaunchingBank = true);
     final draft = _draftFromFields(bankAppId: app.id);
     try {
-      final banks = await _directory.loadBanks();
+      final banks = openDirectly ? _banks : await _directory.loadBanks();
       if (!mounted) return;
       final receivingBank = banks
           .where((bank) => bank.bin == draft.bankBin)
           .firstOrNull;
-      if (receivingBank == null) {
+      if (receivingBank == null && !openDirectly) {
         _showMessage(
           'Chưa xác định được ngân hàng nhận từ mã QR. Hãy kiểm tra kết nối và thử lại; chưa mở app để tránh mất thông tin chuyển khoản.',
         );
         return;
       }
       setState(() => _banks = banks);
-      final launchUri = app.launchUri(
-        bankCode: receivingBank.code,
-        accountNumber: draft.accountNumber,
-        amountVnd: draft.amountVnd,
-        transferDescription: draft.memo,
-        recipientName: draft.recipientName,
-        returnUri: kIsWeb
-            ? Uri.base.replace(path: '/', query: '', fragment: '/qr-payment')
-            : null,
-      );
       await _store.writeDraft(draft);
       if (!mounted) return;
       ref.invalidate(pendingQrPaymentDraftProvider);
@@ -461,20 +454,41 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
         _awaitingBankReturn = true;
         _leftForBank = false;
       });
-      final opened = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+      final launchUri = openDirectly
+          ? null
+          : app.launchUri(
+              bankCode: receivingBank?.code,
+              accountNumber: draft.accountNumber,
+              amountVnd: draft.amountVnd,
+              transferDescription: draft.memo,
+              recipientName: draft.recipientName,
+              returnUri: kIsWeb
+                  ? Uri.base.replace(
+                      path: '/',
+                      query: '',
+                      fragment: '/qr-payment',
+                    )
+                  : null,
+            );
+      final opened = openDirectly
+          ? await const MethodChannel(
+                  'hoadoninsight/bank_apps',
+                ).invokeMethod<bool>('openBankApp', {'appId': app.id}) ??
+                false
+          : isAndroid
           ? await const MethodChannel(
                   'hoadoninsight/bank_apps',
                 ).invokeMethod<bool>('openPaymentPage', {
                   'url': launchUri.toString(),
                 }) ??
                 false
-          : await launchUrl(launchUri, mode: LaunchMode.externalApplication);
+          : await launchUrl(launchUri!, mode: LaunchMode.externalApplication);
       if (!mounted) return;
       if (opened) {
         _showMessage(
-          app.supportsAutofill
-              ? 'Đã mở trang chuyển tiếp tới ${app.name}. Hoàn tất bước mở ngân hàng trên trang này và kiểm tra thông tin chuyển khoản.'
-              : 'Đã mở trang chuyển tiếp tới ${app.name}. App này cần nhập hoặc quét lại thông tin chuyển khoản.',
+          openDirectly
+              ? 'Đã mở ${app.name} trực tiếp; giao dịch chưa được điền sẵn.'
+              : 'Đã mở trang chuyển tiếp tới ${app.name}. Kiểm tra thông tin chuyển khoản.',
         );
         unawaited(_syncPreferredBankApp(app.id));
         final scanRecorded = await (_scanEventFuture ?? Future.value(true));
@@ -491,7 +505,9 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
           _leftForBank = false;
         });
         _showMessage(
-          'Không tìm thấy trình duyệt để mở trang chuyển tiếp. Hãy bật hoặc cài Chrome, Samsung Internet, Firefox hay Edge rồi thử lại.',
+          isAndroid
+              ? 'Không mở được ${app.name} trên thiết bị này. Bản nháp vẫn được giữ.'
+              : 'Không mở được trang chuyển khoản. Bản nháp vẫn được giữ.',
         );
       }
     } on Object {
