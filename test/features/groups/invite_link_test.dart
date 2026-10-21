@@ -3,7 +3,12 @@ import 'package:hoadon_insight/features/groups/domain/invite_link.dart';
 
 String? _groupCode(String raw) => switch (InviteLink.parse(raw)) {
   GroupInviteLink(:final code) => code,
-  null => null,
+  BillInviteLink() || null => null,
+};
+
+String? _billCode(String raw) => switch (InviteLink.parse(raw)) {
+  BillInviteLink(:final code) => code,
+  GroupInviteLink() || null => null,
 };
 
 void main() {
@@ -42,5 +47,43 @@ void main() {
     final uri = InviteLink.groupUri('ABCD1234');
     expect(uri, 'hoadoninsight://join-group?code=ABCD1234');
     expect(_groupCode(uri), 'ABCD1234');
+  });
+
+  test('đọc mã từ URI mời vào bill', () {
+    expect(
+      _billCode('hoadoninsight://join-bill?code=ABCDEF1234'),
+      'ABCDEF1234',
+    );
+    expect(
+      _billCode('hoadoninsight://join-bill?code=abcdef1234'),
+      'ABCDEF1234',
+    );
+  });
+
+  test('mã trơn 10 ký tự là mã bill, không phải mã nhóm', () {
+    expect(_billCode('  abcdef1234 \n'), 'ABCDEF1234');
+    expect(_groupCode('ABCDEF1234'), isNull);
+  });
+
+  test('mã bill 9 hoặc 11 ký tự bị từ chối', () {
+    expect(InviteLink.parse('ABCDEF123'), isNull);
+    expect(InviteLink.parse('ABCDEF12345'), isNull);
+    expect(_billCode('hoadoninsight://join-bill?code=ABCD1234'), isNull);
+    expect(_billCode('hoadoninsight://join-bill?code=ABCDEF12345'), isNull);
+    expect(_billCode('hoadoninsight://join-bill?code=ABCDEF123G'), isNull);
+  });
+
+  test('URI nhóm vẫn ra GroupInviteLink', () {
+    expect(
+      InviteLink.parse('hoadoninsight://join-group?code=ABCD1234'),
+      isA<GroupInviteLink>(),
+    );
+    expect(_groupCode('hoadoninsight://join-group?code=ABCDEF1234'), isNull);
+  });
+
+  test('billUri rồi parse cho lại đúng mã', () {
+    final uri = InviteLink.billUri('ABCDEF1234');
+    expect(uri, 'hoadoninsight://join-bill?code=ABCDEF1234');
+    expect(_billCode(uri), 'ABCDEF1234');
   });
 }
