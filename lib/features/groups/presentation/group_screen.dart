@@ -17,7 +17,7 @@ import '../../sharing/domain/shared_bill_models.dart';
 import '../data/group_service.dart';
 import '../domain/group_balance_calculator.dart';
 import '../domain/group_models.dart';
-import '../domain/group_split_calculator.dart';
+import 'group_expense_dialog.dart';
 
 class GroupScreen extends ConsumerStatefulWidget {
   const GroupScreen({super.key});
@@ -357,9 +357,9 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   }
 
   Future<void> _addExpense(GroupDetails details) async {
-    final draft = await showDialog<_NewExpenseDraft>(
+    final draft = await showDialog<GroupExpenseDraft>(
       context: context,
-      builder: (context) => _NewExpenseDialog(members: details.members),
+      builder: (context) => GroupExpenseDialog(members: details.members),
     );
     if (draft == null) return;
     await _runGroupAction(() async {
@@ -389,10 +389,10 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   }
 
   Future<void> _editExpense(GroupDetails details, GroupExpense expense) async {
-    final draft = await showDialog<_NewExpenseDraft>(
+    final draft = await showDialog<GroupExpenseDraft>(
       context: context,
       builder: (context) =>
-          _NewExpenseDialog(members: details.members, initialExpense: expense),
+          GroupExpenseDialog(members: details.members, initialExpense: expense),
     );
     if (draft == null || !mounted) return;
     await _runGroupAction(() async {
@@ -1304,20 +1304,6 @@ class _ExpenseCard extends StatelessWidget {
   }
 }
 
-class _NewExpenseDraft {
-  const _NewExpenseDraft({
-    required this.description,
-    required this.totalMinor,
-    required this.memberIds,
-    this.splitAmounts,
-  });
-
-  final String description;
-  final int totalMinor;
-  final List<String> memberIds;
-  final Map<String, int>? splitAmounts;
-}
-
 class _InvoiceAllocationDraft {
   const _InvoiceAllocationDraft(this.splitAmounts);
 
@@ -1501,270 +1487,5 @@ class _InvoiceAllocationDialogState extends State<_InvoiceAllocationDialog> {
       return;
     }
     Navigator.pop(context, _InvoiceAllocationDraft(splitAmounts));
-  }
-}
-
-class _NewExpenseDialog extends StatefulWidget {
-  const _NewExpenseDialog({required this.members, this.initialExpense});
-
-  final List<GroupMember> members;
-  final GroupExpense? initialExpense;
-
-  @override
-  State<_NewExpenseDialog> createState() => _NewExpenseDialogState();
-}
-
-class _NewExpenseDialogState extends State<_NewExpenseDialog> {
-  late final TextEditingController _descriptionController;
-  late final TextEditingController _amountController;
-  final Map<String, TextEditingController> _splitControllers = {};
-  late final Set<String> _selectedIds;
-  late GroupSplitMode? _customMode;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    final initial = widget.initialExpense;
-    _descriptionController = TextEditingController(text: initial?.description);
-    _amountController = TextEditingController(
-      text: initial?.totalMinor.toString(),
-    );
-    _selectedIds = initial == null
-        ? widget.members.map((item) => item.userId).toSet()
-        : initial.splits
-              .map((split) => split.userId)
-              .whereType<String>()
-              .toSet();
-    _customMode = initial == null ? null : GroupSplitMode.exact;
-    if (initial != null) {
-      for (final split in initial.splits) {
-        final userId = split.userId;
-        if (userId != null) {
-          _splitControllers[userId] = TextEditingController(
-            text: split.amountMinor.toString(),
-          );
-        }
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _descriptionController.dispose();
-    _amountController.dispose();
-    for (final controller in _splitControllers.values) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        widget.initialExpense == null ? 'Thêm khoản chi' : 'Sửa khoản chi',
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _descriptionController,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Nội dung chi'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _amountController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Tổng tiền',
-                suffixText: '₫',
-              ),
-            ),
-            const SizedBox(height: 16),
-            SegmentedButton<GroupSplitMode?>(
-              segments: const [
-                ButtonSegment(value: null, label: Text('Đều')),
-                ButtonSegment(
-                  value: GroupSplitMode.exact,
-                  label: Text('Số tiền'),
-                ),
-                ButtonSegment(
-                  value: GroupSplitMode.percentage,
-                  label: Text('%'),
-                ),
-              ],
-              selected: {_customMode},
-              onSelectionChanged: (value) => setState(() {
-                _customMode = value.first;
-                _error = null;
-              }),
-            ),
-            const SizedBox(height: 12),
-            Text(_customMode == null ? 'Chia đều cho' : 'Phần của từng người'),
-            for (final member in widget.members) _buildMemberRow(member),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: _cancel, child: const Text('Hủy')),
-        FilledButton(
-          onPressed: _submit,
-          child: Text(
-            widget.initialExpense == null ? 'Tạo bản ghi' : 'Lưu thay đổi',
-          ),
-        ),
-      ],
-    );
-  }
-
-  bool get _hasChanges {
-    final initial = widget.initialExpense;
-    final initialMemberIds = initial == null
-        ? widget.members.map((item) => item.userId).toSet()
-        : initial.splits
-              .map((split) => split.userId)
-              .whereType<String>()
-              .toSet();
-    if (_descriptionController.text != (initial?.description ?? '') ||
-        _amountController.text != (initial?.totalMinor.toString() ?? '') ||
-        _customMode != (initial == null ? null : GroupSplitMode.exact) ||
-        _selectedIds.length != initialMemberIds.length ||
-        !_selectedIds.containsAll(initialMemberIds)) {
-      return true;
-    }
-
-    final initialSplitAmounts = {
-      if (initial != null)
-        for (final split in initial.splits)
-          if (split.userId != null) split.userId!: split.amountMinor,
-    };
-    return _splitControllers.entries.any(
-      (entry) =>
-          entry.value.text !=
-          (initialSplitAmounts[entry.key]?.toString() ?? ''),
-    );
-  }
-
-  Future<void> _cancel() async {
-    if (_hasChanges) {
-      final discard = await showDiscardChangesDialog(context);
-      if (!discard || !mounted) return;
-    }
-    Navigator.pop(context);
-  }
-
-  Widget _buildMemberRow(GroupMember member) {
-    final controller = _splitControllers.putIfAbsent(
-      member.userId,
-      TextEditingController.new,
-    );
-    return Row(
-      children: [
-        Expanded(
-          child: CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _selectedIds.contains(member.userId),
-            title: Text(member.displayName),
-            onChanged: (value) => setState(() {
-              if (value == true) {
-                _selectedIds.add(member.userId);
-              } else {
-                _selectedIds.remove(member.userId);
-              }
-              _error = null;
-            }),
-          ),
-        ),
-        if (_customMode != null)
-          SizedBox(
-            width: 92,
-            child: TextField(
-              controller: controller,
-              enabled: _selectedIds.contains(member.userId),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                suffixText: _customMode == GroupSplitMode.percentage
-                    ? '%'
-                    : '₫',
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  void _submit() {
-    final total = int.tryParse(
-      _amountController.text.replaceAll(RegExp(r'[^0-9]'), ''),
-    );
-    final description = _descriptionController.text.trim();
-    if (description.length < 2 ||
-        total == null ||
-        total <= 0 ||
-        _selectedIds.isEmpty) {
-      setState(
-        () => _error = 'Hãy nhập nội dung, tổng tiền và chọn thành viên.',
-      );
-      return;
-    }
-    Map<String, int>? splitAmounts;
-    if (_customMode != null) {
-      splitAmounts = _parseSplits(total);
-      if (splitAmounts == null) return;
-    }
-    Navigator.pop(
-      context,
-      _NewExpenseDraft(
-        description: description,
-        totalMinor: total,
-        memberIds: _selectedIds.toList(growable: false),
-        splitAmounts: widget.initialExpense == null
-            ? splitAmounts
-            : splitAmounts!,
-      ),
-    );
-  }
-
-  Map<String, int>? _parseSplits(int total) {
-    final values = <String, double>{};
-    for (final id in _selectedIds) {
-      final value = double.tryParse(
-        _splitControllers[id]!.text.trim().replaceAll(',', '.'),
-      );
-      if (value == null || value < 0) {
-        setState(() => _error = 'Hãy nhập phần chia hợp lệ cho mọi người.');
-        return null;
-      }
-      values[id] = value;
-    }
-    final amounts = GroupSplitCalculator.calculate(
-      totalMinor: total,
-      memberIds: _selectedIds,
-      values: values,
-      mode: _customMode!,
-    );
-    if (amounts == null) {
-      setState(
-        () => _error = _customMode == GroupSplitMode.percentage
-            ? 'Tổng tỷ lệ phải bằng 100%.'
-            : 'Tổng các phần tiền phải bằng tổng khoản chi.',
-      );
-      return null;
-    }
-    return amounts;
   }
 }
