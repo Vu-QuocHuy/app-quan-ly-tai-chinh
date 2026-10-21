@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/config/feature_flags.dart';
 import '../../core/constants/app_constants.dart';
@@ -47,7 +47,6 @@ class _AppShellState extends ConsumerState<AppShell>
   bool _initialSyncComplete = false;
   bool _initialSyncStarted = false;
   String? _initialSyncLoadingFor;
-  bool _canUseCachedData = false;
   String? _initialSyncUserId;
   String? _initialSyncError;
   bool _syncRequestedWhileRunning = false;
@@ -57,6 +56,7 @@ class _AppShellState extends ConsumerState<AppShell>
   final _importQueue = ImportQueueController();
   Timer? _retryTimer;
   Timer? _autoSyncTimer;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   DateTime? _lastAutoSyncAt;
 
   PendingImportStore get _pendingImportStore =>
@@ -66,6 +66,9 @@ class _AppShellState extends ConsumerState<AppShell>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
+      _onConnectivityChanged,
+    );
     _startAutoSyncTimer();
   }
 
@@ -74,6 +77,7 @@ class _AppShellState extends ConsumerState<AppShell>
     WidgetsBinding.instance.removeObserver(this);
     _retryTimer?.cancel();
     _autoSyncTimer?.cancel();
+    _connectivitySubscription?.cancel();
     super.dispose();
   }
 
@@ -84,11 +88,23 @@ class _AppShellState extends ConsumerState<AppShell>
       if (_initialSyncComplete) {
         unawaited(_syncCloud());
         unawaited(_processDueRecurringIncomes());
+      } else if (_initialSyncStarted) {
+        unawaited(_loadInitialData());
       }
       if (!kIsWeb) unawaited(_resumePendingImports());
     } else {
       _autoSyncTimer?.cancel();
       _autoSyncTimer = null;
+    }
+  }
+
+  void _onConnectivityChanged(List<ConnectivityResult> results) {
+    if (!results.any((result) => result != ConnectivityResult.none)) return;
+    ref.read(sharedGroupRefreshSignalProvider.notifier).state++;
+    if (_initialSyncComplete) {
+      _requestAutoSync();
+    } else if (_initialSyncUserId != null) {
+      unawaited(_loadInitialData());
     }
   }
 
@@ -150,31 +166,14 @@ class _AppShellState extends ConsumerState<AppShell>
         if (!result.hasMore) {
           if (!mounted || userId != _initialSyncUserId) return;
           setState(() => _initialSyncComplete = true);
-          try {
-            final preferences = await SharedPreferences.getInstance();
-            await preferences.setBool('initial_sync_complete.$userId', true);
-          } on Object {
-            // Cached data still works; the offline shortcut is unavailable.
-          }
           unawaited(_processDueRecurringIncomes());
           if (!kIsWeb) unawaited(_resumePendingImports());
           return;
         }
       }
     } on Object catch (error) {
-      var canUseCachedData = false;
-      try {
-        final preferences = await SharedPreferences.getInstance();
-        canUseCachedData =
-            preferences.getBool('initial_sync_complete.$userId') ?? false;
-      } on Object {
-        // No cached sync marker is available on this device.
-      }
       if (mounted && userId == _initialSyncUserId) {
-        setState(() {
-          _canUseCachedData = canUseCachedData;
-          _initialSyncError = friendlyMessage(error);
-        });
+        setState(() => _initialSyncError = friendlyMessage(error));
       }
     } finally {
       if (_initialSyncLoadingFor == userId) _initialSyncLoadingFor = null;
@@ -247,7 +246,6 @@ class _AppShellState extends ConsumerState<AppShell>
       _initialSyncStarted = false;
       _initialSyncComplete = false;
       _initialSyncError = null;
-      _canUseCachedData = false;
     }
     if (userId != null && !_initialSyncStarted) {
       _initialSyncStarted = true;
@@ -255,7 +253,7 @@ class _AppShellState extends ConsumerState<AppShell>
         if (mounted) unawaited(_loadInitialData());
       });
     }
-    if (!_initialSyncComplete) {
+    if (userId == null && !_initialSyncComplete) {
       return Scaffold(
         body: Center(
           child: Padding(
@@ -278,12 +276,6 @@ class _AppShellState extends ConsumerState<AppShell>
                     onPressed: _loadInitialData,
                     child: const Text('Thử tải lại'),
                   ),
-                  if (_canUseCachedData)
-                    TextButton(
-                      onPressed: () =>
-                          setState(() => _initialSyncComplete = true),
-                      child: const Text('Dùng dữ liệu đã lưu trên máy'),
-                    ),
                 ],
               ],
             ),
@@ -338,6 +330,20 @@ class _AppShellState extends ConsumerState<AppShell>
           SafeArea(
             child: Column(
               children: [
+                if (!_initialSyncComplete && _initialSyncError == null)
+                  const LinearProgressIndicator(minHeight: 2),
+                if (_initialSyncError != null)
+                  MaterialBanner(
+                    content: Text(
+                      'Chưa tải được dữ liệu tài khoản: $_initialSyncError',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: _loadInitialData,
+                        child: const Text('Thử lại'),
+                      ),
+                    ],
+                  ),
                 if (pendingQrPayment.valueOrNull != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(

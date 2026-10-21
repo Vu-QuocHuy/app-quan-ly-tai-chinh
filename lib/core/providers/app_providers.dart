@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -47,7 +49,7 @@ import '../utils/month_utils.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final cloudConfigured = ref.watch(supabaseClientProvider) != null;
-  final userId = ref.watch(authUserProvider).value?.id;
+  final userId = ref.watch(authUserProvider.select((user) => user.value?.id));
   final database = AppDatabase(
     null,
     LocalDatabaseScope.databaseName(
@@ -164,6 +166,50 @@ final expenseGroupServiceProvider = Provider<ExpenseGroupService?>((ref) {
   return client == null ? null : ExpenseGroupService(client);
 });
 
+final sharedGroupRefreshSignalProvider = StateProvider<int>((ref) => 0);
+
+final sharedGroupRealtimeProvider = Provider.autoDispose<void>((ref) {
+  final client = ref.watch(supabaseClientProvider);
+  final userId = ref.watch(authUserProvider.select((user) => user.value?.id));
+  if (client == null || userId == null) return;
+
+  Timer? refreshTimer;
+  var wasSubscribed = false;
+  void requestRefresh() {
+    refreshTimer?.cancel();
+    refreshTimer = Timer(const Duration(milliseconds: 200), () {
+      ref.read(sharedGroupRefreshSignalProvider.notifier).state++;
+    });
+  }
+
+  final channel = client.channel('shared-groups:$userId');
+  for (final table in const [
+    'expense_groups',
+    'expense_group_members',
+    'group_expenses',
+    'group_expense_splits',
+    'group_audit_events',
+    'group_fund_entries',
+  ]) {
+    channel.onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: table,
+      callback: (_) => requestRefresh(),
+    );
+  }
+  channel.subscribe((status, _) {
+    if (status == RealtimeSubscribeStatus.subscribed && wasSubscribed) {
+      requestRefresh();
+    }
+    if (status == RealtimeSubscribeStatus.subscribed) wasSubscribed = true;
+  });
+  ref.onDispose(() {
+    refreshTimer?.cancel();
+    unawaited(client.removeChannel(channel).then<void>((_) {}));
+  });
+});
+
 final sharedBillServiceProvider = Provider<SharedBillService?>((ref) {
   final client = ref.watch(supabaseClientProvider);
   return client == null ? null : SharedBillService(client);
@@ -178,12 +224,16 @@ final directBillSharesProvider =
 final expenseGroupsProvider = FutureProvider.autoDispose<List<ExpenseGroup>>((
   ref,
 ) {
+  ref.watch(sharedGroupRealtimeProvider);
+  ref.watch(sharedGroupRefreshSignalProvider);
   final service = ref.watch(expenseGroupServiceProvider);
   return service?.listGroups() ?? const [];
 });
 
 final expenseGroupDetailsProvider = FutureProvider.autoDispose
     .family<GroupDetails, String>((ref, groupId) async {
+      ref.watch(sharedGroupRealtimeProvider);
+      ref.watch(sharedGroupRefreshSignalProvider);
       final service = ref.watch(expenseGroupServiceProvider);
       if (service == null) {
         throw StateError('Nhóm cần kết nối tài khoản.');

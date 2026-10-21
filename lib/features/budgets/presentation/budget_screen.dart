@@ -406,16 +406,13 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
                   tone: context.finance.expense,
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  overBudget.isEmpty
-                      ? 'Danh mục chưa đặt hạn mức được tính là không giới hạn.'
-                      : '${overBudget.length} danh mục vượt hạn mức',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: overBudget.isEmpty
-                        ? scheme.onSurfaceVariant
-                        : context.finance.budgetOver.color,
+                if (overBudget.isNotEmpty)
+                  Text(
+                    '${overBudget.length} danh mục vượt hạn mức',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.finance.budgetOver.color,
+                    ),
                   ),
-                ),
                 if (_expanded) ...[
                   const Divider(height: 24),
                   Text(

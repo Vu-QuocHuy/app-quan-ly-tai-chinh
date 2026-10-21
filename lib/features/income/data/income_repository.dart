@@ -110,6 +110,24 @@ class IncomeRepository {
           .map(_fromRow)
           .toList(growable: false);
 
+  Future<bool> hasPotentialDuplicate(
+    int amountMinor,
+    DateTime receivedAt,
+  ) async {
+    final start = DateTime(receivedAt.year, receivedAt.month, receivedAt.day);
+    final query = _db.select(_db.incomes)
+      ..where(
+        (row) =>
+            row.amountMinor.equals(amountMinor) &
+            row.receivedAt.isBiggerOrEqualValue(start) &
+            row.receivedAt.isSmallerThanValue(
+              start.add(const Duration(days: 1)),
+            ),
+      )
+      ..limit(1);
+    return (await query.get()).isNotEmpty;
+  }
+
   Future<void> save(
     int amountMinor, {
     required IncomeSource source,
