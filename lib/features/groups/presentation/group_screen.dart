@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -12,12 +11,15 @@ import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 import '../../../shared/widgets/app_empty_state.dart';
+import '../../../shared/widgets/qr_scan_screen.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../sharing/domain/shared_bill_models.dart';
 import '../data/group_service.dart';
 import '../domain/group_balance_calculator.dart';
 import '../domain/group_models.dart';
+import '../domain/invite_link.dart';
 import 'group_expense_dialog.dart';
+import 'group_invite_qr_sheet.dart';
 import 'group_split_dialog.dart';
 
 class GroupScreen extends ConsumerStatefulWidget {
@@ -174,18 +176,60 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   }
 
   Future<void> _joinGroup() async {
-    final code = await _askText(
-      title: 'Tham gia nhóm',
-      label: 'Mã mời',
-      hint: 'Nhập mã 8 ký tự',
-      confirmLabel: 'Tham gia',
+    final method = await showModalBottomSheet<_JoinMethod>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner),
+              title: const Text('Quét mã QR'),
+              onTap: () => Navigator.pop(context, _JoinMethod.scan),
+            ),
+            ListTile(
+              leading: const Icon(Icons.keyboard_outlined),
+              title: const Text('Nhập mã mời'),
+              onTap: () => Navigator.pop(context, _JoinMethod.type),
+            ),
+          ],
+        ),
+      ),
     );
+    if (method == null || !mounted) return;
+    final String? code;
+    switch (method) {
+      case _JoinMethod.scan:
+        final raw = await Navigator.of(context).push<String>(
+          MaterialPageRoute(
+            builder: (_) => QrScanScreen(
+              title: 'Quét mã mời nhóm',
+              validate: (raw) => InviteLink.parse(raw) is GroupInviteLink
+                  ? null
+                  : 'Mã QR này không phải mã mời nhóm.',
+            ),
+          ),
+        );
+        code = switch (raw == null ? null : InviteLink.parse(raw)) {
+          GroupInviteLink(code: final value) => value,
+          _ => null,
+        };
+      case _JoinMethod.type:
+        code = await _askText(
+          title: 'Tham gia nhóm',
+          label: 'Mã mời',
+          hint: 'Nhập mã 8 ký tự',
+          confirmLabel: 'Tham gia',
+        );
+    }
     if (code == null) return;
+    final inviteCode = code;
     ExpenseGroup? joinedGroup;
     await _runGroupAction(() async {
       joinedGroup = await ref
           .read(expenseGroupServiceProvider)!
-          .joinGroup(code);
+          .joinGroup(inviteCode);
     });
     final group = joinedGroup;
     if (!mounted || group == null) return;
@@ -330,8 +374,11 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       details: groupDetails,
                       currentUserId: currentUserId,
                       busy: _busy,
-                      onCopyCode: () =>
-                          _copyInviteCode(groupDetails.group.inviteCode),
+                      onShowInviteQr: () => showGroupInviteQrSheet(
+                        context,
+                        groupName: groupDetails.group.name,
+                        inviteCode: groupDetails.group.inviteCode,
+                      ),
                       onSplitMoney: () => _splitMoney(groupDetails),
                       onSettle: _settleShare,
                       onEditExpense: (expense) =>
@@ -535,14 +582,6 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       context.go('/groups');
     }
   }
-
-  Future<void> _copyInviteCode(String code) async {
-    await Clipboard.setData(ClipboardData(text: code));
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Đã sao chép mã mời nhóm.')));
-  }
 }
 
 class _GroupDetails extends StatelessWidget {
@@ -550,7 +589,7 @@ class _GroupDetails extends StatelessWidget {
     required this.details,
     required this.currentUserId,
     required this.busy,
-    required this.onCopyCode,
+    required this.onShowInviteQr,
     required this.onSplitMoney,
     required this.onSettle,
     required this.onEditExpense,
@@ -563,7 +602,7 @@ class _GroupDetails extends StatelessWidget {
   final GroupDetails details;
   final String currentUserId;
   final bool busy;
-  final VoidCallback onCopyCode;
+  final VoidCallback onShowInviteQr;
   final VoidCallback onSplitMoney;
   final Future<void> Function(String expenseId) onSettle;
   final Future<void> Function(GroupExpense expense) onEditExpense;
@@ -598,13 +637,12 @@ class _GroupDetails extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Mã mời: ${details.group.inviteCode}'),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
-                    onPressed: onCopyCode,
-                    icon: const Icon(Icons.copy_outlined),
-                    label: const Text('Sao chép mã mời'),
+                    onPressed: onShowInviteQr,
+                    icon: const Icon(Icons.qr_code_2),
+                    label: const Text('QR mời vào nhóm'),
                   ),
                 ),
                 const Divider(),
@@ -1260,3 +1298,5 @@ class _ExpenseCard extends StatelessWidget {
     );
   }
 }
+
+enum _JoinMethod { scan, type }
