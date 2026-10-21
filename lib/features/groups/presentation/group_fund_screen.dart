@@ -67,7 +67,9 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
       _refreshPending = true;
       return;
     }
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
   }
 
   Future<void> _pullToRefresh() async {
@@ -169,9 +171,10 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
   Future<void> _delete(GroupFundEntry entry) async {
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Xóa giao dịch quỹ?',
-      message: 'Số dư quỹ chung sẽ được tính lại cho mọi thành viên.',
-      confirmLabel: 'Xóa',
+      title: 'Xóa giao dịch ghi nhầm?',
+      message:
+          'Lịch sử quỹ không chỉnh sửa trực tiếp. Sau khi xóa, hãy ghi lại giao dịch với số tiền và nội dung đúng.',
+      confirmLabel: 'Xóa giao dịch sai',
       destructive: true,
     );
     if (!confirmed || !mounted) return;
@@ -336,7 +339,15 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
                 'Lịch sử quỹ',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
+              if (data.entries.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Chỉ xử lý giao dịch tại đây khi ghi nhầm; giao dịch đã xóa có thể được nhập lại cho đúng.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
               if (data.entries.isEmpty)
                 const Card(
                   child: Padding(
@@ -345,45 +356,61 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
                   ),
                 ),
               for (final entry in data.entries)
-                Card(
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      child: Icon(
-                        entry.kind == 'deposit'
-                            ? Icons.south_west
-                            : Icons.north_east,
-                      ),
-                    ),
-                    title: Text(
-                      entry.kind == 'deposit' ? 'Thu vào quỹ' : entry.note,
-                    ),
-                    subtitle: Text(
-                      '${names[entry.actorId] ?? (entry.actorId == null ? 'Tài khoản đã xóa' : 'Thành viên')} · ${entry.createdAt.day}/${entry.createdAt.month}/${entry.createdAt.year}',
-                    ),
-                    trailing: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '${entry.kind == 'deposit' ? '+' : '−'}${MoneyFormatter.format(entry.amountMinor)}',
-                          style: TextStyle(
-                            color: entry.kind == 'deposit'
-                                ? Theme.of(
-                                    context,
-                                  ).extension<AppFinanceColors>()!.income.color
-                                : Theme.of(context)
-                                      .extension<AppFinanceColors>()!
-                                      .expense
-                                      .color,
-                          ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Card(
+                    child: ListTile(
+                      minVerticalPadding: 12,
+                      leading: CircleAvatar(
+                        child: Icon(
+                          entry.kind == 'deposit'
+                              ? Icons.south_west
+                              : Icons.north_east,
                         ),
-                        if (entry.actorId == currentUserId ||
-                            data.details.group.ownerId == currentUserId)
-                          InkWell(
-                            onTap: _busy ? null : () => _delete(entry),
-                            child: const Text('Xóa'),
+                      ),
+                      title: Text(
+                        entry.kind == 'deposit'
+                            ? (entry.note.isEmpty ? 'Thu vào quỹ' : entry.note)
+                            : entry.note,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        '${names[entry.actorId] ?? (entry.actorId == null ? 'Tài khoản đã xóa' : 'Chưa đặt tên')} · ${entry.createdAt.day}/${entry.createdAt.month}/${entry.createdAt.year}',
+                      ),
+                      trailing: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '${entry.kind == 'deposit' ? '+' : '−'}${MoneyFormatter.format(entry.amountMinor)}',
+                            style: TextStyle(
+                              color: entry.kind == 'deposit'
+                                  ? Theme.of(context)
+                                        .extension<AppFinanceColors>()!
+                                        .income
+                                        .color
+                                  : Theme.of(context)
+                                        .extension<AppFinanceColors>()!
+                                        .expense
+                                        .color,
+                            ),
                           ),
-                      ],
+                          if (entry.actorId == currentUserId ||
+                              data.details.group.ownerId == currentUserId)
+                            PopupMenuButton<String>(
+                              enabled: !_busy,
+                              tooltip: 'Xử lý giao dịch ghi nhầm',
+                              onSelected: (_) => _delete(entry),
+                              itemBuilder: (context) => const [
+                                PopupMenuItem(
+                                  value: 'incorrect',
+                                  child: Text('Xóa giao dịch ghi nhầm'),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

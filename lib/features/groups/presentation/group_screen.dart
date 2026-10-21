@@ -398,6 +398,8 @@ class GroupDetailScreen extends ConsumerStatefulWidget {
 
 class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   bool _busy = false;
+  bool _showAllMembers = false;
+  bool _showAllExpenses = false;
 
   @override
   Widget build(BuildContext context) {
@@ -417,6 +419,23 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
             onPressed: _refresh,
             icon: const Icon(Icons.refresh),
           ),
+          if (details.asData?.value case final groupDetails?)
+            if (groupDetails.group.ownerId == service?.currentUserId ||
+                groupDetails.members.length == 1)
+              PopupMenuButton<String>(
+                tooltip: 'Tùy chọn nhóm',
+                onSelected: (_) => _leaveGroup(groupDetails),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'leave',
+                    child: Text(
+                      groupDetails.group.ownerId == service?.currentUserId
+                          ? 'Xóa nhóm'
+                          : 'Rời nhóm',
+                    ),
+                  ),
+                ],
+              ),
         ],
       ),
       body: Column(
@@ -484,7 +503,13 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                           userId,
                           displayName,
                         ),
-                        onLeaveGroup: () => _leaveGroup(groupDetails),
+                        showAllMembers: _showAllMembers,
+                        onToggleMembers: () =>
+                            setState(() => _showAllMembers = !_showAllMembers),
+                        showAllExpenses: _showAllExpenses,
+                        onToggleExpenses: () => setState(
+                          () => _showAllExpenses = !_showAllExpenses,
+                        ),
                       ),
                     ],
                   ),
@@ -730,7 +755,10 @@ class _GroupDetails extends StatelessWidget {
     required this.onDeleteExpense,
     required this.onSetMemberRole,
     required this.onRemoveMember,
-    required this.onLeaveGroup,
+    required this.showAllMembers,
+    required this.onToggleMembers,
+    required this.showAllExpenses,
+    required this.onToggleExpenses,
   });
 
   final GroupDetails details;
@@ -744,7 +772,10 @@ class _GroupDetails extends StatelessWidget {
   final Future<void> Function(GroupExpense expense) onDeleteExpense;
   final Future<void> Function(String userId, String role) onSetMemberRole;
   final Future<void> Function(String userId, String displayName) onRemoveMember;
-  final VoidCallback onLeaveGroup;
+  final bool showAllMembers;
+  final VoidCallback onToggleMembers;
+  final bool showAllExpenses;
+  final VoidCallback onToggleExpenses;
 
   @override
   Widget build(BuildContext context) {
@@ -754,7 +785,7 @@ class _GroupDetails extends StatelessWidget {
         for (final split in expense.splits)
           if (split.userId != null && split.participantName != null)
             split.userId!: split.participantName!,
-      for (final member in details.members) member.userId: member.displayName,
+      for (final member in details.members) member.userId: _memberName(member),
     };
     final balances = _balances();
     final transfers = GroupBalanceCalculator.calculateSettlementTransfers(
@@ -763,109 +794,164 @@ class _GroupDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.account_balance_wallet_outlined),
-            title: const Text('Quỹ chung', maxLines: 3),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/groups/${details.group.id}/fund'),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    context.push('/groups/${details.group.id}/fund'),
+                icon: const Icon(Icons.account_balance_wallet_outlined),
+                label: const Text('Quỹ chung'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: busy ? null : onSplitMoney,
+                icon: const Icon(Icons.call_split_outlined),
+                label: const Text('Chia tiền'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+              ),
+            ),
+          ],
         ),
+        const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: onShowInviteQr,
-                    icon: const Icon(Icons.qr_code_2),
-                    label: const Text('QR mời vào nhóm'),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Thành viên (${details.members.length})',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton.filledTonal(
+                      tooltip: 'Mời thành viên bằng QR',
+                      onPressed: onShowInviteQr,
+                      icon: const Icon(Icons.qr_code_2),
+                    ),
+                  ],
                 ),
-                const Divider(),
-                Text(
-                  'Thành viên (${details.members.length})',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                for (final member in details.members)
+                const SizedBox(height: 8),
+                for (final member
+                    in details.members
+                        .take(showAllMembers ? details.members.length : 4)
+                        .toList()
+                        .asMap()
+                        .entries) ...[
+                  if (member.key > 0) const Divider(indent: 48, height: 1),
                   _MemberTile(
-                    member: member,
+                    member: member.value,
                     currentUserId: currentUserId,
                     isGroupOwner: details.group.ownerId == currentUserId,
-                    balanceLabel: _balanceLabel(balances[member.userId] ?? 0),
+                    balanceLabel: _balanceLabel(
+                      balances[member.value.userId] ?? 0,
+                    ),
                     onSetRole: onSetMemberRole,
                     onRemove: onRemoveMember,
+                  ),
+                ],
+                if (details.members.length > 4)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: onToggleMembers,
+                      child: Text(
+                        showAllMembers
+                            ? 'Thu gọn thành viên'
+                            : 'Xem tất cả ${details.members.length} thành viên',
+                      ),
+                    ),
                   ),
               ],
             ),
           ),
         ),
         if (transfers.isNotEmpty)
-          _SettlementSuggestions(transfers: transfers, names: names),
-        if (details.group.ownerId != currentUserId ||
-            details.members.length == 1)
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              onPressed: onLeaveGroup,
-              icon: Icon(
-                details.group.ownerId == currentUserId
-                    ? Icons.delete_outline
-                    : Icons.logout_outlined,
-              ),
-              label: Text(
-                details.group.ownerId == currentUserId
-                    ? 'Xóa nhóm'
-                    : 'Rời nhóm',
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: _SettlementSuggestions(transfers: transfers, names: names),
+          ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Chia tiền (${details.expenses.length})',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
-          ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: busy ? null : onSplitMoney,
-          icon: const Icon(Icons.call_split_outlined),
-          label: const Text('Chia tiền'),
+            if (details.expenses.length > 3)
+              TextButton(
+                onPressed: onToggleExpenses,
+                child: Text(
+                  showAllExpenses
+                      ? 'Thu gọn'
+                      : 'Xem tất cả (${details.expenses.length})',
+                ),
+              ),
+          ],
         ),
-        const SizedBox(height: 20),
-        Text('Chia tiền', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         if (details.expenses.isEmpty)
           const Text('Chưa có lần chia tiền nào trong nhóm.'),
-        for (final expense in details.expenses)
-          _ExpenseCard(
-            expense: expense,
-            names: names,
-            memberIds: {for (final m in details.members) m.userId},
-            currentUserId: currentUserId,
-            onSettle: onSettle,
-            canManage:
-                expense.payerId == currentUserId ||
-                details.group.ownerId == currentUserId,
-            onShowBillQr: () => onShowBillQr(expense),
-            onEdit: () => onEditExpense(expense),
-            onDelete: () => onDeleteExpense(expense),
+        for (final expense in details.expenses.take(
+          showAllExpenses ? details.expenses.length : 3,
+        ))
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _ExpenseCard(
+              expense: expense,
+              names: names,
+              memberIds: {for (final m in details.members) m.userId},
+              currentUserId: currentUserId,
+              onSettle: onSettle,
+              canManage:
+                  expense.payerId == currentUserId ||
+                  details.group.ownerId == currentUserId,
+              onShowBillQr: () => onShowBillQr(expense),
+              onEdit: () => onEditExpense(expense),
+              onDelete: () => onDeleteExpense(expense),
+            ),
           ),
         if (details.auditEvents.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          Text(
-            'Lịch sử hoạt động',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          for (final event in details.auditEvents)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
+          const SizedBox(height: 12),
+          Card(
+            child: ExpansionTile(
               leading: const Icon(Icons.history_outlined),
-              title: Text(_auditLabel(event, names)),
-              subtitle: Text(_formatAuditDate(event.createdAt)),
+              title: Text('Lịch sử hoạt động (${details.auditEvents.length})'),
+              children: [
+                for (final event in details.auditEvents)
+                  ListTile(
+                    dense: true,
+                    title: Text(_auditLabel(event, names)),
+                    subtitle: Text(_formatAuditDate(event.createdAt)),
+                  ),
+              ],
             ),
+          ),
         ],
       ],
     );
+  }
+
+  String _memberName(GroupMember member) => _hasMemberName(member.displayName)
+      ? member.displayName.trim()
+      : 'Chưa đặt tên';
+
+  bool _hasMemberName(String value) {
+    final name = value.trim().toLowerCase();
+    return name.isNotEmpty && name != 'thành viên' && name != 'chủ nhóm';
   }
 
   String _auditLabel(GroupAuditEvent event, Map<String, String> names) {
@@ -1284,14 +1370,14 @@ class _MemberTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canManage = isGroupOwner && member.userId != currentUserId;
+    final hasName = _hasMemberName(member.displayName);
+    final displayName = hasName ? member.displayName.trim() : 'Chưa đặt tên';
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      dense: true,
+      minVerticalPadding: 10,
       leading: const Icon(Icons.person_outline),
       title: Text(
-        member.userId == currentUserId
-            ? '${member.displayName} (Bạn)'
-            : member.displayName,
+        member.userId == currentUserId ? '$displayName (Bạn)' : displayName,
       ),
       subtitle: Text(
         [
@@ -1302,7 +1388,16 @@ class _MemberTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(balanceLabel),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 132),
+            child: Text(
+              balanceLabel,
+              textAlign: TextAlign.end,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
           if (canManage)
             PopupMenuButton<String>(
               tooltip: 'Quản lý thành viên',
@@ -1331,6 +1426,11 @@ class _MemberTile extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  bool _hasMemberName(String value) {
+    final name = value.trim().toLowerCase();
+    return name.isNotEmpty && name != 'thành viên' && name != 'chủ nhóm';
   }
 }
 
@@ -1437,33 +1537,45 @@ class _ExpenseCard extends StatelessWidget {
                   ],
                 ),
               ),
-            if (hasSettlement)
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Text(
-                  'Đã có thanh toán: không thể sửa hoặc xóa. Hãy tạo khoản điều chỉnh mới nếu cần.',
+            if (expense.splits.isNotEmpty) ...[
+              const Divider(height: 20),
+              for (var index = 0; index < expense.splits.length; index++) ...[
+                if (index > 0) const Divider(height: 16, indent: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _splitName(expense.splits[index]),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (expense.splits[index].userId != null &&
+                                expense.splits[index].participantName != null &&
+                                !memberIds.contains(
+                                  expense.splits[index].userId,
+                                ))
+                              Text(
+                                'Khách',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '${MoneyFormatter.format(expense.splits[index].amountMinor)}${expense.splits[index].isSettled ? ' · Đã trả' : ''}',
+                        textAlign: TextAlign.end,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            for (final split in expense.splits)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: Text(
-                  split.userId == null
-                      ? 'Tài khoản đã xóa'
-                      : names[split.userId!] ??
-                            split.participantName ??
-                            'Thành viên',
-                ),
-                subtitle:
-                    split.participantName == null ||
-                        memberIds.contains(split.userId)
-                    ? null
-                    : const Text('Khách'),
-                trailing: Text(
-                  '${MoneyFormatter.format(split.amountMinor)}${split.isSettled ? ' · Đã trả' : ''}',
-                ),
-              ),
+              ],
+            ],
             if (canSettle)
               Align(
                 alignment: Alignment.centerRight,
@@ -1477,6 +1589,11 @@ class _ExpenseCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _splitName(GroupExpenseSplit split) {
+    if (split.userId == null) return 'Tài khoản đã xóa';
+    return names[split.userId!] ?? split.participantName ?? 'Chưa đặt tên';
   }
 }
 

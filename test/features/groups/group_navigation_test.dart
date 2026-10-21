@@ -77,7 +77,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.arrow_back), findsOneWidget);
-    expect(find.text('QR mời vào nhóm'), findsOneWidget);
+    expect(find.byTooltip('Mời thành viên bằng QR'), findsOneWidget);
     expect(find.text('Chủ nhóm · 0912345678'), findsOneWidget);
     expect(find.text('Nhóm của tôi'), findsNothing);
 
@@ -162,7 +162,7 @@ void main() {
     final detailsBefore = service.detailCalls;
 
     await tester.fling(
-      find.text('QR mời vào nhóm'),
+      find.byTooltip('Mời thành viên bằng QR'),
       const Offset(0, 400),
       1000,
     );

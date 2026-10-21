@@ -112,7 +112,7 @@ void main() {
     await _typeCode(tester, 'ABCDEF1234');
 
     expect(service.calls, ['joinBill ABCDEF1234', 'groupOf bill-9']);
-    expect(find.text('QR mời vào nhóm'), findsOneWidget);
+    expect(find.byTooltip('Mời thành viên bằng QR'), findsOneWidget);
   });
 
   testWidgets('mã 8 ký tự vẫn vào nhóm', (tester) async {
@@ -121,7 +121,7 @@ void main() {
     await _typeCode(tester, 'abcd1234');
 
     expect(service.calls, ['joinGroup ABCD1234']);
-    expect(find.text('QR mời vào nhóm'), findsOneWidget);
+    expect(find.byTooltip('Mời thành viên bằng QR'), findsOneWidget);
   });
 
   testWidgets('mã 9 hoặc 11 ký tự báo lỗi tại chỗ, không gọi server', (

@@ -107,6 +107,8 @@ void main() {
 
       expect(find.text('Dũng'), findsOneWidget);
       expect(find.text('Khách'), findsOneWidget);
+      await tester.tap(find.textContaining('Lịch sử hoạt động'));
+      await tester.pumpAndSettle();
       expect(find.text('Dũng đã vào bill “Ăn tối”'), findsOneWidget);
       expect(find.text('Khách đã rời bill “Ăn tối”'), findsOneWidget);
       expect(find.textContaining('Tài khoản đã xóa'), findsNothing);
