@@ -117,6 +117,42 @@ void main() {
     expect(draft.splitAmounts, isNull);
   });
 
+  testWidgets('sửa rồi chuyển sang Đều thì submit trả số tiền chia đều', (
+    tester,
+  ) async {
+    final key = GlobalKey<GroupExpenseFormState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: GroupExpenseForm(
+              key: key,
+              members: _members,
+              initialExpense: GroupExpense(
+                id: 'e1',
+                groupId: 'g1',
+                payerId: 'u1',
+                description: 'Ăn trưa',
+                totalMinor: 50001,
+                createdAt: DateTime(2026, 10, 20),
+                splits: const [
+                  GroupExpenseSplit(userId: 'u1', amountMinor: 30000),
+                  GroupExpenseSplit(userId: 'u2', amountMinor: 20001),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Đều'));
+    await tester.pump();
+    final draft = key.currentState!.submit()!;
+    expect(draft.splitAmounts, isNotNull);
+    expect(draft.splitAmounts!.values.reduce((a, b) => a + b), 50001);
+    expect(draft.splitAmounts!.values.toList()..sort(), [25000, 25001]);
+  });
+
   test('mô tả từ hóa đơn có tên, không tên, và tên quá dài', () {
     expect(receiptExpenseDescription('  Highlands  '), 'Hóa đơn Highlands');
     expect(receiptExpenseDescription('   '), 'Hóa đơn');

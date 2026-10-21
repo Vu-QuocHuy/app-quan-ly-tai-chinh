@@ -200,6 +200,14 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
     if (_customMode != null) {
       splitAmounts = _parseSplits(total);
       if (splitAmounts == null) return null;
+    } else if (widget.initialExpense != null) {
+      // Sửa cần số tiền tường minh: chia đều, người đầu nhận phần dư.
+      final n = _selectedIds.length;
+      var i = 0;
+      splitAmounts = {
+        for (final id in _selectedIds)
+          id: total ~/ n + (i++ < total % n ? 1 : 0),
+      };
     }
     return GroupExpenseDraft(
       description: description,
