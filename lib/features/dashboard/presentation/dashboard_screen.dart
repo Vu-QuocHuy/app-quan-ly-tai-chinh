@@ -15,7 +15,6 @@ import '../../../shared/widgets/app_callout.dart';
 import '../../../shared/widgets/app_empty_state.dart';
 import '../../../shared/widgets/app_error_state.dart';
 import '../../../shared/widgets/app_skeleton.dart';
-import '../../../shared/widgets/budget_meter.dart';
 import '../../../shared/widgets/money_text.dart';
 import '../../../shared/widgets/status_pill.dart';
 import '../../../shared/widgets/month_selector.dart';
@@ -23,7 +22,6 @@ import '../../invoices/domain/invoice_models.dart';
 import '../../invoices/domain/invoice_filters.dart';
 import '../../income/data/income_repository.dart';
 import '../../income/presentation/income_entry_sheet.dart';
-import '../../planning/domain/plan_models.dart';
 import '../../../shared/widgets/section_header.dart';
 import 'cash_flow_trend_card.dart';
 import 'monthly_transaction_calendar.dart';
@@ -56,7 +54,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final dashboard = ref.watch(dashboardProvider);
     final incomes = ref.watch(incomesProvider);
-    final plans = ref.watch(plansProvider).valueOrNull ?? const <PlanItem>[];
     final categories = ref.watch(categoriesProvider).value ?? const [];
     final incomeCategories =
         ref.watch(incomeCategoriesProvider).value ?? const [];
@@ -165,10 +162,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   _BudgetCard(
                     snapshot: snapshot,
                     month: selectedMonth,
-                    upcomingBillsMinor: _pendingBillsMinor(
-                      plans,
-                      selectedMonth,
-                    ),
                     onViewBudgets: () => context.go('/budgets'),
                   ),
                   const SizedBox(height: AppSpacing.xl),
@@ -458,73 +451,31 @@ class _CashFlowMetric extends StatelessWidget {
   }
 }
 
-int _pendingBillsMinor(Iterable<PlanItem> plans, DateTime month) {
-  final monthKey = MonthUtils.key(month);
-  var total = 0;
-  for (final bill in plans.whereType<RecurringBill>()) {
-    var occurrence = bill;
-    for (
-      var index = 0;
-      index < 6 && MonthUtils.key(occurrence.nextDueDate) == monthKey;
-      index++
-    ) {
-      if (total > maxPlanMoney - occurrence.amountMinor) return maxPlanMoney;
-      total += occurrence.amountMinor;
-      occurrence = occurrence.copyWith(
-        nextDueDate: occurrence.followingDueDate,
-      );
-    }
-  }
-  return total;
-}
-
+/// Thẻ ngân sách chỉ cảnh báo theo từng danh mục; danh mục chưa đặt hạn mức
+/// là không giới hạn nên không có cảnh báo tổng tháng.
 class _BudgetCard extends StatelessWidget {
   const _BudgetCard({
     required this.snapshot,
     required this.month,
-    required this.upcomingBillsMinor,
     required this.onViewBudgets,
   });
 
+  static const _maxWarnings = 3;
+
   final DashboardSnapshot snapshot;
   final DateTime month;
-  final int upcomingBillsMinor;
   final VoidCallback onViewBudgets;
 
   @override
   Widget build(BuildContext context) {
-    final hasBudget = snapshot.budgetLimitMinor > 0;
+    final hasBudget = snapshot.categoryBudgets.isNotEmpty;
+    final overBudget = snapshot.overBudgetCategories;
+    final hasOver = overBudget.isNotEmpty;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final finance = theme.extension<AppFinanceColors>()!;
-    final usedPercent = hasBudget
-        ? (snapshot.totalMinor / snapshot.budgetLimitMinor * 100).round()
-        : 0;
-    final isOverBudget =
-        hasBudget && snapshot.totalMinor > snapshot.budgetLimitMinor;
-    final isNearLimit = hasBudget && usedPercent >= 80 && !isOverBudget;
-    final remaining = snapshot.budgetLimitMinor - snapshot.totalMinor;
-    final now = DateTime.now();
-    final isCurrentMonth = MonthUtils.key(month) == MonthUtils.key(now);
-    final daysLeft =
-        DateUtils.getDaysInMonth(now.year, now.month) - now.day + 1;
-    final freeAfterBills = remaining - upcomingBillsMinor;
-    final dailyAllowance = freeAfterBills > 0 ? freeAfterBills ~/ daysLeft : 0;
-    final statusTone = isOverBudget
-        ? StatusTone.danger
-        : isNearLimit
-        ? StatusTone.warn
-        : StatusTone.safe;
-    final statusColor = isOverBudget
-        ? finance.budgetOver
-        : isNearLimit
-        ? finance.budgetWarn
-        : finance.budgetSafe;
-    final statusLabel = isOverBudget
-        ? 'Vượt hạn mức'
-        : isNearLimit
-        ? 'Sắp chạm'
-        : 'Trong hạn mức';
+    final statusColor = hasOver ? finance.budgetOver : finance.budgetSafe;
+    final hiddenCount = overBudget.length - _maxWarnings;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -570,108 +521,46 @@ class _BudgetCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.lg),
           if (hasBudget) ...[
             Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Đã sử dụng',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        '$usedPercent%',
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          color: statusColor.color,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    hasOver
+                        ? 'Danh mục vượt hạn mức nhiều nhất'
+                        : 'Các danh mục có hạn mức đều chưa vượt.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
                 StatusPill(
-                  icon: isOverBudget
-                      ? Icons.error_outline
-                      : isNearLimit
+                  icon: hasOver
                       ? Icons.warning_amber_rounded
                       : Icons.check_circle_outline,
-                  label: statusLabel,
-                  tone: statusTone,
+                  label: hasOver
+                      ? '${overBudget.length} mục vượt'
+                      : 'Trong hạn mức',
+                  tone: hasOver ? StatusTone.danger : StatusTone.safe,
                   dense: true,
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
-            BudgetMeter(
-              spentMinor: snapshot.totalMinor,
-              limitMinor: snapshot.budgetLimitMinor,
-              showLabel: false,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Row(
-              children: [
-                Expanded(
-                  child: _BudgetAmount(
-                    label: 'Hạn mức',
-                    amount: snapshot.budgetLimitMinor,
-                    emphasis: MoneyEmphasis.body,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: _BudgetAmount(
-                    label: isOverBudget ? 'Đã vượt' : 'Còn lại',
-                    amount: remaining.abs(),
-                    emphasis: MoneyEmphasis.body,
-                    tone: statusColor,
-                  ),
-                ),
-              ],
-            ),
-            if (isCurrentMonth) ...[
-              if (upcomingBillsMinor > 0) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Đã tính trước ${MoneyFormatter.format(upcomingBillsMinor)} khoản định kỳ chưa ghi.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+            for (final item in overBudget.take(_maxWarnings)) ...[
               const SizedBox(height: AppSpacing.md),
-              Divider(color: scheme.outlineVariant),
+              _OverBudgetRow(item: item),
+            ],
+            if (hiddenCount > 0) ...[
               const SizedBox(height: AppSpacing.sm),
-              Row(
-                children: [
-                  Icon(
-                    Icons.today_outlined,
-                    color: statusColor.color,
-                    size: AppIconSizes.md,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      'Có thể chi mỗi ngày · $daysLeft ngày còn lại',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  MoneyText(
-                    dailyAllowance,
-                    emphasis: MoneyEmphasis.body,
-                    tone: statusColor,
-                  ),
-                ],
+              Text(
+                'và $hiddenCount mục khác vượt hạn mức',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ],
           ] else
             Text(
-              'Thiết lập hạn mức để theo dõi số đã chi và số còn lại trong tháng.',
+              'Đặt hạn mức cho từng danh mục để được cảnh báo khi chi vượt. '
+              'Danh mục chưa đặt hạn mức là không giới hạn.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -682,40 +571,61 @@ class _BudgetCard extends StatelessWidget {
   }
 }
 
-class _BudgetAmount extends StatelessWidget {
-  const _BudgetAmount({
-    required this.label,
-    required this.amount,
-    required this.emphasis,
-    this.tone,
-  });
+class _OverBudgetRow extends StatelessWidget {
+  const _OverBudgetRow({required this.item});
 
-  final String label;
-  final int amount;
-  final MoneyEmphasis emphasis;
-  final FinanceTone? tone;
+  final CategoryBudgetStatus item;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final over = theme.extension<AppFinanceColors>()!.budgetOver;
     return DecoratedBox(
       decoration: ShapeDecoration(
-        color: tone?.container ?? scheme.insetSurface,
+        color: over.container,
         shape: AppShapes.control,
       ),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Text(
-              label,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+            Icon(
+              Icons.warning_amber_rounded,
+              size: AppIconSizes.md,
+              color: over.onContainer,
             ),
-            const SizedBox(height: AppSpacing.xs),
-            MoneyText(amount, emphasis: emphasis, fitToWidth: true, tone: tone),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.categoryName,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: over.onContainer,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    '${MoneyFormatter.format(item.spentMinor)} / '
+                    '${MoneyFormatter.format(item.limitMinor)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              'Vượt ${MoneyFormatter.format(item.overMinor)}',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: over.onContainer,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
       ),

@@ -6,38 +6,50 @@ class BudgetAlertDecision {
   const BudgetAlertDecision({
     required this.level,
     required this.monthKey,
-    required this.spentMinor,
-    required this.limitMinor,
+    this.categories = const [],
   });
 
   final BudgetAlertLevel level;
   final String monthKey;
-  final int spentMinor;
-  final int limitMinor;
+
+  /// Danh mục gây ra cảnh báo ở [level], vượt/gần chạm nhiều nhất trước.
+  final List<CategoryBudgetStatus> categories;
 
   bool get shouldNotify => level != BudgetAlertLevel.none;
-  String get deduplicationKey => '$monthKey:${level.name}';
+
+  /// Đổi khi có thêm danh mục chạm ngưỡng để người dùng được báo lại.
+  String get deduplicationKey {
+    final ids = categories.map((item) => item.categoryId).toList()..sort();
+    return '$monthKey:${level.name}:${ids.join(',')}';
+  }
 }
 
+/// Chỉ cảnh báo theo từng danh mục có hạn mức; không cảnh báo theo tổng tháng.
 class BudgetAlertPolicy {
   const BudgetAlertPolicy({this.approachingThreshold = 0.8});
 
   final double approachingThreshold;
 
   BudgetAlertDecision evaluate(DashboardSnapshot snapshot) {
-    final progress = snapshot.budgetProgress;
-    final level = snapshot.budgetLimitMinor <= 0
-        ? BudgetAlertLevel.none
-        : progress > 1
-        ? BudgetAlertLevel.exceeded
-        : progress >= approachingThreshold
-        ? BudgetAlertLevel.approaching
-        : BudgetAlertLevel.none;
+    final exceeded = snapshot.overBudgetCategories;
+    if (exceeded.isNotEmpty) {
+      return BudgetAlertDecision(
+        level: BudgetAlertLevel.exceeded,
+        monthKey: snapshot.monthKey,
+        categories: exceeded,
+      );
+    }
+    final approaching =
+        snapshot.categoryBudgets
+            .where((item) => item.progress >= approachingThreshold)
+            .toList()
+          ..sort((a, b) => b.progress.compareTo(a.progress));
     return BudgetAlertDecision(
-      level: level,
+      level: approaching.isEmpty
+          ? BudgetAlertLevel.none
+          : BudgetAlertLevel.approaching,
       monthKey: snapshot.monthKey,
-      spentMinor: snapshot.totalMinor,
-      limitMinor: snapshot.budgetLimitMinor,
+      categories: approaching,
     );
   }
 }

@@ -34,6 +34,14 @@ void main() {
       },
       dailyTotals: {},
       budgetLimitMinor: 500000,
+      categoryBudgets: [
+        CategoryBudgetStatus(
+          categoryId: 'category-1',
+          categoryName: 'Danh mục 1',
+          limitMinor: 500000,
+          spentMinor: 70000,
+        ),
+      ],
     );
     const insights = SpendingInsights(
       monthKey: monthKey,
@@ -112,12 +120,12 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('56%'),
+      find.text('Trong hạn mức'),
       400,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Trong hạn mức'), findsOneWidget);
-    expect(find.textContaining('Còn lại'), findsOneWidget);
+    expect(find.textContaining('Vượt'), findsNothing);
 
     await tester.scrollUntilVisible(
       find.text('Chi tiêu theo ngày'),
@@ -198,6 +206,84 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Danh mục 7'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('budget card warns about the top 3 most over-limit categories', (
+    tester,
+  ) async {
+    CategoryBudgetStatus budget(String id, int spent) => CategoryBudgetStatus(
+      categoryId: id,
+      categoryName: 'Mục $id',
+      limitMinor: 100000,
+      spentMinor: spent,
+    );
+    final snapshot = DashboardSnapshot(
+      monthKey: '2026-09',
+      totalMinor: 900000,
+      invoiceCount: 5,
+      categoryTotals: const {},
+      dailyTotals: const {},
+      budgetLimitMinor: 500000,
+      categoryBudgets: [
+        budget('a', 110000),
+        budget('b', 250000),
+        budget('c', 50000),
+        budget('d', 180000),
+        budget('e', 140000),
+      ],
+    );
+    const insights = SpendingInsights(
+      monthKey: '2026-09',
+      forecastTotalMinor: 0,
+      currentTotalMinor: 0,
+      recurringExpenses: [],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          selectedMonthProvider.overrideWith((ref) => DateTime(2026, 9)),
+          incomesProvider.overrideWith((ref) => Stream.value(const [])),
+          monthlyExpenseTotalsProvider.overrideWith(
+            (ref) => Stream.value(const <String, int>{}),
+          ),
+          dashboardProvider.overrideWith((ref) => Stream.value(snapshot)),
+          spendingInsightsProvider.overrideWith(
+            (ref) => Stream.value(insights),
+          ),
+          categoriesProvider.overrideWith((ref) => Stream.value(const [])),
+          incomeCategoriesProvider.overrideWith(
+            (ref) => Stream.value(const []),
+          ),
+          budgetAlertsEnabledProvider.overrideWith((ref) async => false),
+          dismissedAnomalyIdsProvider.overrideWith((ref) async => const {}),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const DashboardScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('và 1 mục khác vượt hạn mức'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.text('4 mục vượt'), findsOneWidget);
+    expect(find.text('Mục b'), findsOneWidget);
+    expect(find.text('Mục d'), findsOneWidget);
+    expect(find.text('Mục e'), findsOneWidget);
+    expect(find.text('Mục a'), findsNothing);
+    expect(find.text('Mục c'), findsNothing);
+    final topY = [
+      'Mục b',
+      'Mục d',
+      'Mục e',
+    ].map((name) => tester.getTopLeft(find.text(name)).dy).toList();
+    expect(topY[0], lessThan(topY[1]));
+    expect(topY[1], lessThan(topY[2]));
     expect(tester.takeException(), isNull);
   });
 

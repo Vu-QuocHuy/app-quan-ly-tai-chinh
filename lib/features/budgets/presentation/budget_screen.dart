@@ -8,7 +8,6 @@ import '../../../core/utils/month_utils.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../app/theme/finance_colors.dart';
 import '../../../shared/widgets/app_card.dart';
-import '../../../shared/widgets/budget_meter.dart';
 import '../../../shared/widgets/category_avatar.dart';
 import '../../../shared/widgets/month_selector.dart';
 import '../../../shared/widgets/money_text.dart';
@@ -149,7 +148,7 @@ class BudgetScreen extends ConsumerWidget {
           decoration: const InputDecoration(
             labelText: 'Hạn mức tháng',
             suffixText: '₫',
-            helperText: 'Nhập số tiền không có phần thập phân.',
+            helperText: 'Để trống hoặc nhập 0 để không giới hạn.',
           ),
         ),
         actions: [
@@ -159,7 +158,8 @@ class BudgetScreen extends ConsumerWidget {
                 final confirmed = await showConfirmDialog(
                   context,
                   title: 'Xóa hạn mức ngân sách?',
-                  message: 'Hạn mức cho danh mục “${category.name}” sẽ bị xóa.',
+                  message:
+                      'Danh mục “${category.name}” sẽ trở về không giới hạn.',
                   confirmLabel: 'Xóa hạn mức',
                   destructive: true,
                 );
@@ -184,9 +184,18 @@ class BudgetScreen extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () {
+              if (inputValue.trim().isEmpty) {
+                Navigator.pop(context, const _BudgetDialogResult.delete());
+                return;
+              }
               final parsed = MoneyFormatter.tryParse(inputValue);
               if (parsed == null || parsed < 0) return;
-              Navigator.pop(context, _BudgetDialogResult.value(parsed));
+              Navigator.pop(
+                context,
+                parsed == 0
+                    ? const _BudgetDialogResult.delete()
+                    : _BudgetDialogResult.value(parsed),
+              );
             },
             child: const Text('Lưu'),
           ),
@@ -194,8 +203,10 @@ class BudgetScreen extends ConsumerWidget {
       ),
     );
     if (result == null) return;
-    if (result.delete && current != null) {
-      await ref.read(invoiceRepositoryProvider).deleteBudget(current.id);
+    if (result.delete) {
+      if (current != null) {
+        await ref.read(invoiceRepositoryProvider).deleteBudget(current.id);
+      }
       return;
     }
     final value = result.value;
@@ -238,9 +249,12 @@ class _BudgetTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final finance = context.finance;
+    // Danh mục chưa đặt hạn mức (hoặc hạn mức 0) mặc định là không giới hạn.
     final limit = budget?.limitMinor ?? 0;
-    final ratio = limit <= 0 ? 0.0 : spentMinor / limit;
-    final progressColor = ratio >= 1
+    final unlimited = limit <= 0;
+    final ratio = unlimited ? 0.0 : spentMinor / limit;
+    final isOver = !unlimited && spentMinor > limit;
+    final progressColor = isOver
         ? finance.budgetOver.color
         : ratio >= 0.8
         ? finance.budgetWarn.color
@@ -271,6 +285,14 @@ class _BudgetTile extends StatelessWidget {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
+                    if (isOver)
+                      Tooltip(
+                        message: 'Vượt hạn mức',
+                        child: Icon(
+                          Icons.warning_amber_rounded,
+                          color: finance.budgetOver.color,
+                        ),
+                      ),
                     IconButton(
                       tooltip: 'Sửa ngân sách ${category.name}',
                       onPressed: onEdit,
@@ -278,9 +300,9 @@ class _BudgetTile extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (budget == null)
+                if (unlimited)
                   Text(
-                    'Chưa đặt hạn mức · Đã chi ${MoneyFormatter.format(spentMinor)}',
+                    'Không giới hạn · Đã chi ${MoneyFormatter.format(spentMinor)}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -307,13 +329,14 @@ class _BudgetTile extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    remaining >= 0
-                        ? 'Còn lại ${MoneyFormatter.format(remaining)}'
-                        : 'Vượt ${MoneyFormatter.format(-remaining)}',
+                    isOver
+                        ? 'Vượt hạn mức ${MoneyFormatter.format(-remaining)}'
+                        : 'Còn lại ${MoneyFormatter.format(remaining)}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: remaining < 0
+                      color: isOver
                           ? finance.budgetOver.color
                           : scheme.onSurfaceVariant,
+                      fontWeight: isOver ? FontWeight.w600 : null,
                     ),
                   ),
                 ],
@@ -356,44 +379,24 @@ class _BudgetSummary extends StatelessWidget {
               ),
             ],
           ),
-          data: (data) {
-            final hasBudget = data.budgetLimitMinor > 0;
-            final remaining = data.budgetLimitMinor - data.totalMinor;
-            final isOver = hasBudget && remaining < 0;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SectionHeader(
-                  title: 'Đã chi tháng này',
-                  subtitle: '${data.invoiceCount} giao dịch đã ghi nhận',
+          // Chỉ hiển thị tổng đã chi; cảnh báo vượt hạn mức nằm ở từng danh mục.
+          data: (data) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SectionHeader(
+                title: 'Đã chi tháng này',
+                subtitle: '${data.invoiceCount} giao dịch đã ghi nhận',
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              MoneyText(data.totalMinor, emphasis: MoneyEmphasis.title),
+              Text(
+                'Danh mục chưa đặt hạn mức được tính là không giới hạn.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                MoneyText(
-                  data.totalMinor,
-                  emphasis: MoneyEmphasis.title,
-                  tone: isOver ? context.finance.budgetOver : null,
-                ),
-                Text(
-                  hasBudget
-                      ? isOver
-                            ? 'Vượt ngân sách ${MoneyFormatter.format(-remaining)}'
-                            : 'Còn lại ${MoneyFormatter.format(remaining)}'
-                      : 'Chưa đặt tổng hạn mức cho tháng này',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: isOver ? scheme.error : scheme.onSurfaceVariant,
-                  ),
-                ),
-                if (hasBudget) ...[
-                  const SizedBox(height: AppSpacing.lg),
-                  BudgetMeter(
-                    spentMinor: data.totalMinor,
-                    limitMinor: data.budgetLimitMinor,
-                    animate: false,
-                  ),
-                ],
-              ],
-            );
-          },
+              ),
+            ],
+          ),
         ),
       ),
     );

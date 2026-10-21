@@ -95,4 +95,58 @@ void main() {
     expect(find.text('Di chuyển'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('warns only on the over-limit category; unset is unlimited', (
+    tester,
+  ) async {
+    const food = CategoryEntity(
+      id: 'food',
+      name: 'Ăn uống',
+      iconName: 'restaurant',
+      colorValue: 0xff16806a,
+    );
+    const transport = CategoryEntity(
+      id: 'transport',
+      name: 'Di chuyển',
+      iconName: 'directions_car',
+      colorValue: 0xff16806a,
+    );
+    const snapshot = DashboardSnapshot(
+      monthKey: '2026-10',
+      totalMinor: 900000,
+      invoiceCount: 3,
+      categoryTotals: {'food': 600000, 'transport': 300000},
+      dailyTotals: {},
+      budgetLimitMinor: 500000,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          selectedMonthProvider.overrideWith((ref) => DateTime(2026, 10)),
+          categoriesProvider.overrideWith(
+            (ref) => Stream.value([food, transport]),
+          ),
+          budgetsProvider.overrideWith(
+            (ref) => Stream.value(const [
+              BudgetEntity(
+                id: '2026-10-food',
+                monthKey: '2026-10',
+                categoryId: 'food',
+                limitMinor: 500000,
+              ),
+            ]),
+          ),
+          dashboardProvider.overrideWith((ref) => Stream.value(snapshot)),
+        ],
+        child: MaterialApp(theme: AppTheme.light(), home: const BudgetScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Vượt hạn mức'), findsOneWidget);
+    expect(find.byTooltip('Vượt hạn mức'), findsOneWidget);
+    expect(find.textContaining('Không giới hạn'), findsOneWidget);
+    expect(find.textContaining('Vượt ngân sách'), findsNothing);
+  });
 }
