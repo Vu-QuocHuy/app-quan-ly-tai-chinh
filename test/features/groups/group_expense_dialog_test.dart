@@ -160,4 +160,90 @@ void main() {
     expect(long.length, 160);
     expect(long, startsWith('Hóa đơn AAA'));
   });
+
+  testWidgets('sửa bill chia đều có khách: mở ở Đều, giữ khách khi lưu', (
+    tester,
+  ) async {
+    final key = GlobalKey<GroupExpenseFormState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: GroupExpenseForm(
+              key: key,
+              members: const [
+                ..._members,
+                GroupMember(
+                  userId: 'guest',
+                  displayName: 'Dũng (Khách)',
+                  role: 'member',
+                ),
+              ],
+              initialExpense: GroupExpense(
+                id: 'e1',
+                groupId: 'g1',
+                payerId: 'u1',
+                description: 'Ăn tối',
+                totalMinor: 100001,
+                createdAt: DateTime(2026, 10, 21),
+                splitMode: 'equal',
+                splits: const [
+                  GroupExpenseSplit(userId: 'u1', amountMinor: 33334),
+                  GroupExpenseSplit(userId: 'u2', amountMinor: 33334),
+                  GroupExpenseSplit(
+                    userId: 'guest',
+                    amountMinor: 33333,
+                    participantName: 'Dũng',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Chia đều cho'), findsOneWidget);
+    expect(find.text('Dũng (Khách)'), findsOneWidget);
+    expect(key.currentState!.hasChanges, isFalse);
+    final draft = key.currentState!.submit()!;
+    expect(draft.equalSplit, isTrue);
+    expect(draft.splitAmounts!.keys.toSet(), {'u1', 'u2', 'guest'});
+    expect(draft.splitAmounts!.values.reduce((a, b) => a + b), 100001);
+  });
+
+  testWidgets('sửa bill thủ công: mở ở Số tiền, equalSplit = false', (
+    tester,
+  ) async {
+    final key = GlobalKey<GroupExpenseFormState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: GroupExpenseForm(
+              key: key,
+              members: _members,
+              initialExpense: GroupExpense(
+                id: 'e1',
+                groupId: 'g1',
+                payerId: 'u1',
+                description: 'Cà phê',
+                totalMinor: 60000,
+                createdAt: DateTime(2026, 10, 21),
+                splits: const [
+                  GroupExpenseSplit(userId: 'u1', amountMinor: 40000),
+                  GroupExpenseSplit(userId: 'u2', amountMinor: 20000),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Phần của từng người'), findsOneWidget);
+    final draft = key.currentState!.submit()!;
+    expect(draft.equalSplit, isFalse);
+    expect(draft.splitAmounts, {'u1': 40000, 'u2': 20000});
+  });
 }

@@ -18,6 +18,7 @@ import '../data/group_service.dart';
 import '../domain/group_balance_calculator.dart';
 import '../domain/group_models.dart';
 import '../domain/invite_link.dart';
+import 'bill_invite_qr_sheet.dart';
 import 'group_expense_dialog.dart';
 import 'group_invite_qr_sheet.dart';
 import 'group_split_dialog.dart';
@@ -381,6 +382,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                       ),
                       onSplitMoney: () => _splitMoney(groupDetails),
                       onSettle: _settleShare,
+                      onShowBillQr: _showBillQr,
                       onEditExpense: (expense) =>
                           _editExpense(groupDetails, expense),
                       onDeleteExpense: _deleteExpense,
@@ -436,11 +438,44 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     });
   }
 
+  Future<void> _showBillQr(GroupExpense expense) async {
+    String? code;
+    await _runGroupAction(() async {
+      code = await ref
+          .read(expenseGroupServiceProvider)!
+          .openBillInvite(expense.id);
+    });
+    final joinCode = code;
+    if (joinCode == null || !mounted) return;
+    await showBillInviteQrSheet(
+      context,
+      description: expense.description,
+      joinCode: joinCode,
+      onCloseInvite: () => _runGroupAction(() async {
+        await ref
+            .read(expenseGroupServiceProvider)!
+            .closeBillInvite(expense.id);
+      }),
+    );
+  }
+
   Future<void> _editExpense(GroupDetails details, GroupExpense expense) async {
+    final memberIds = {for (final member in details.members) member.userId};
+    final members = [
+      ...details.members,
+      // Người ngoài nhóm đã vào bill: hiện trong dialog để sửa không xóa họ.
+      for (final split in expense.splits)
+        if (split.userId != null && !memberIds.contains(split.userId))
+          GroupMember(
+            userId: split.userId!,
+            displayName: '${split.participantName ?? 'Thành viên'} (Khách)',
+            role: 'member',
+          ),
+    ];
     final draft = await showDialog<GroupExpenseDraft>(
       context: context,
       builder: (context) =>
-          GroupExpenseDialog(members: details.members, initialExpense: expense),
+          GroupExpenseDialog(members: members, initialExpense: expense),
     );
     if (draft == null || !mounted) return;
     await _runGroupAction(() async {
@@ -451,7 +486,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
             description: draft.description,
             totalMinor: draft.totalMinor,
             splitAmounts: draft.splitAmounts!,
-            splitMode: 'custom',
+            splitMode: draft.equalSplit ? 'equal' : 'custom',
           );
     });
   }
@@ -593,6 +628,7 @@ class _GroupDetails extends StatelessWidget {
     required this.onShowInviteQr,
     required this.onSplitMoney,
     required this.onSettle,
+    required this.onShowBillQr,
     required this.onEditExpense,
     required this.onDeleteExpense,
     required this.onSetMemberRole,
@@ -606,6 +642,7 @@ class _GroupDetails extends StatelessWidget {
   final VoidCallback onShowInviteQr;
   final VoidCallback onSplitMoney;
   final Future<void> Function(String expenseId) onSettle;
+  final Future<void> Function(GroupExpense expense) onShowBillQr;
   final Future<void> Function(GroupExpense expense) onEditExpense;
   final Future<void> Function(GroupExpense expense) onDeleteExpense;
   final Future<void> Function(String userId, String role) onSetMemberRole;
@@ -615,6 +652,11 @@ class _GroupDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final names = {
+      // Tên người ngoài nhóm trong bill, để nhật ký không hiện "Tài khoản đã xóa".
+      for (final expense in details.expenses)
+        for (final split in expense.splits)
+          if (split.userId != null && split.participantName != null)
+            split.userId!: split.participantName!,
       for (final member in details.members) member.userId: member.displayName,
     };
     final balances = _balances();
@@ -704,6 +746,7 @@ class _GroupDetails extends StatelessWidget {
             canManage:
                 expense.payerId == currentUserId ||
                 details.group.ownerId == currentUserId,
+            onShowBillQr: () => onShowBillQr(expense),
             onEdit: () => onEditExpense(expense),
             onDelete: () => onDeleteExpense(expense),
           ),
@@ -740,8 +783,26 @@ class _GroupDetails extends StatelessWidget {
       'expense_updated' => '$actor đã sửa khoản chi',
       'expense_deleted' => '$actor đã xóa khoản chi',
       'expense_settled' => '$actor đã xác nhận phần chia',
+      'bill_joined' => _billAuditLabel(event, names, 'đã vào'),
+      'bill_left' => _billAuditLabel(event, names, 'đã rời'),
       _ => 'Có hoạt động mới trong nhóm',
     };
+  }
+
+  String _billAuditLabel(
+    GroupAuditEvent event,
+    Map<String, String> names,
+    String action,
+  ) {
+    // Người ngoài đã rời bill thì không còn tên trong split.
+    final who = names[event.actorId] ?? 'Khách';
+    final description = details.expenses
+        .where((expense) => expense.id == event.expenseId)
+        .firstOrNull
+        ?.description;
+    return description == null
+        ? '$who $action bill'
+        : '$who $action bill “$description”';
   }
 
   String _formatAuditDate(DateTime value) {
@@ -1182,6 +1243,7 @@ class _ExpenseCard extends StatelessWidget {
     required this.currentUserId,
     required this.onSettle,
     required this.canManage,
+    required this.onShowBillQr,
     required this.onEdit,
     required this.onDelete,
   });
@@ -1191,6 +1253,7 @@ class _ExpenseCard extends StatelessWidget {
   final String currentUserId;
   final Future<void> Function(String expenseId) onSettle;
   final bool canManage;
+  final Future<void> Function() onShowBillQr;
   final Future<void> Function() onEdit;
   final Future<void> Function() onDelete;
 
@@ -1226,13 +1289,22 @@ class _ExpenseCard extends StatelessWidget {
                   PopupMenuButton<String>(
                     tooltip: 'Quản lý khoản chi',
                     onSelected: (value) {
-                      if (value == 'edit') {
+                      if (value == 'invite') {
+                        onShowBillQr();
+                      } else if (value == 'edit') {
                         onEdit();
                       } else {
                         onDelete();
                       }
                     },
                     itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'invite',
+                        child: ListTile(
+                          leading: Icon(Icons.qr_code_2),
+                          title: Text('QR mời vào bill'),
+                        ),
+                      ),
                       PopupMenuItem(
                         value: 'edit',
                         child: ListTile(
@@ -1278,8 +1350,13 @@ class _ExpenseCard extends StatelessWidget {
                 title: Text(
                   split.userId == null
                       ? 'Tài khoản đã xóa'
-                      : names[split.userId!] ?? 'Thành viên',
+                      : split.participantName ??
+                            names[split.userId!] ??
+                            'Thành viên',
                 ),
+                subtitle: split.participantName == null
+                    ? null
+                    : const Text('Khách'),
                 trailing: Text(
                   '${MoneyFormatter.format(split.amountMinor)}${split.isSettled ? ' · Đã trả' : ''}',
                 ),
