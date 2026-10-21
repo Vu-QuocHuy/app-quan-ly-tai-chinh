@@ -49,7 +49,29 @@ double contrast(Color a, Color b) {
 void main() {
   late SupabaseClient authClient;
   TestWidgetsFlutterBinding.ensureInitialized();
+  const connectivityChannel = MethodChannel(
+    'dev.fluttercommunity.plus/connectivity_status',
+  );
+  const recorderChannel = MethodChannel('com.llfbandit.record/messages');
   setUpAll(() async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(connectivityChannel, (call) async {
+      if (call.method != 'listen' && call.method != 'cancel') {
+        throw MissingPluginException(
+          'Unexpected connectivity call: ${call.method}',
+        );
+      }
+      return null;
+    });
+    messenger.setMockMethodCallHandler(recorderChannel, (call) async {
+      if (call.method != 'create' && call.method != 'dispose') {
+        throw MissingPluginException(
+          'Unexpected recorder call: ${call.method}',
+        );
+      }
+      return null;
+    });
     authClient = SupabaseClient(
       'https://example.supabase.co',
       'sb_publishable_test',
@@ -75,6 +97,12 @@ void main() {
       loader.addFont(font.readAsBytes().then((b) => ByteData.sublistView(b)));
       await loader.load();
     }
+  });
+  tearDownAll(() {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(connectivityChannel, null);
+    messenger.setMockMethodCallHandler(recorderChannel, null);
   });
 
   test('all reference themes preserve text contrast and clear boundaries', () {

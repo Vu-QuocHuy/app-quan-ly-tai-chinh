@@ -1,12 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/core/providers/app_providers.dart';
 import 'package:hoadon_insight/features/chat/data/chat_history_store.dart';
 import 'package:hoadon_insight/features/chat/domain/local_chat_assistant.dart';
-import 'package:hoadon_insight/features/chat/domain/chat_models.dart';
 import 'package:hoadon_insight/features/chat/presentation/chat_screen.dart';
 import 'package:hoadon_insight/features/income/data/income_repository.dart';
 import 'package:hoadon_insight/features/ingestion/data/ai_extraction_client.dart';
@@ -17,10 +15,30 @@ import 'package:hoadon_insight/shared/widgets/finmi_assistant_button.dart';
 import 'package:hoadon_insight/app/theme/app_theme.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const recorderChannel = MethodChannel('com.llfbandit.record/messages');
+  setUpAll(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(recorderChannel, (call) async {
+          if (call.method != 'create' && call.method != 'dispose') {
+            throw MissingPluginException(
+              'Unexpected recorder call: ${call.method}',
+            );
+          }
+          return null;
+        });
+  });
+  tearDownAll(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(recorderChannel, null);
+  });
+
   testWidgets(
-    'dismissal lets queued history writes finish without using a disposed widget',
+    'closing the assistant starts a fresh chat session',
     (tester) async {
-      final history = _DelayedHistoryStore();
+      SharedPreferences.setMockInitialValues({});
+      const history = ChatHistoryStore();
+      const question = 'Tháng này tôi đã thu bao nhiêu?';
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -43,19 +61,17 @@ void main() {
       );
       await tester.tap(find.text('Mở trợ lý'));
       await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byType(TextField),
-        'Tháng này tôi đã thu bao nhiêu?',
-      );
+      await tester.enterText(find.byType(TextField), question);
       await tester.pump();
       await tester.tap(find.byTooltip('Gửi câu hỏi'));
       await tester.pumpAndSettle();
-      expect(history.messages, hasLength(1));
+      expect(find.textContaining('tổng thu 250.000'), findsOneWidget);
       await tester.tap(find.byTooltip('Đóng trợ lý'));
       await tester.pumpAndSettle();
-      history.gate.complete();
+      await tester.tap(find.text('Mở trợ lý'));
       await tester.pumpAndSettle();
-      expect(history.messages, hasLength(2));
+      expect(find.textContaining('tổng thu 250.000'), findsNothing);
+      expect(await history.loadLocal(), isEmpty);
       expect(tester.takeException(), isNull);
     },
   );
@@ -102,7 +118,7 @@ void main() {
     },
   );
   testWidgets(
-    'text-only chat answers income and saves history without a network',
+    'text-only chat answers income without persisting history',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       const history = ChatHistoryStore();
@@ -131,8 +147,7 @@ void main() {
 
       expect(find.textContaining('tổng thu 250.000'), findsOneWidget);
       final saved = await history.loadLocal();
-      expect(saved, hasLength(2));
-      expect(saved.last.text, contains('tổng thu 250.000'));
+      expect(saved, isEmpty);
     },
   );
   testWidgets('quick prompts stay available after the conversation starts', (
@@ -216,19 +231,6 @@ void main() {
     expect(find.text('Xác nhận lưu'), findsOneWidget);
     expect(find.textContaining('Mình đã tạo bản nháp'), findsNothing);
   });
-}
-
-class _DelayedHistoryStore extends ChatHistoryStore {
-  final gate = Completer<void>();
-  final messages = <ChatMessage>[];
-  @override
-  Future<List<ChatMessage>> load() async => [];
-  @override
-  Future<bool> append(ChatMessage message) async {
-    messages.add(message);
-    if (messages.length == 1) await gate.future;
-    return true;
-  }
 }
 
 class _InvoiceRepository extends Fake implements InvoiceRepository {

@@ -271,18 +271,20 @@ function parseDraftTransaction(body: JsonObject): DraftTransactionRequest {
   if (!Array.isArray(rawCategories) || rawCategories.length > 100) {
     throw new FunctionError(400, "INVALID_CATEGORIES", "Danh sách danh mục không hợp lệ.");
   }
-  const categories = rawCategories.map((raw) => {
-    if (!isObject(raw)) {
-      throw new FunctionError(400, "INVALID_CATEGORIES", "Danh sách danh mục không hợp lệ.");
-    }
-    const id = requiredString(raw, "id", 128);
-    const name = requiredString(raw, "name", 100);
-    const kind = requiredString(raw, "kind", 16);
-    if (kind !== "income" && kind !== "expense") {
-      throw new FunctionError(400, "INVALID_CATEGORIES", "Danh sách danh mục không hợp lệ.");
-    }
-    return {id, name, kind};
-  });
+  const categories = rawCategories.map(
+    (raw): DraftTransactionRequest["categories"][number] => {
+      if (!isObject(raw)) {
+        throw new FunctionError(400, "INVALID_CATEGORIES", "Danh sách danh mục không hợp lệ.");
+      }
+      const id = requiredString(raw, "id", 128);
+      const name = requiredString(raw, "name", 100);
+      const kind = requiredString(raw, "kind", 16);
+      if (kind !== "income" && kind !== "expense") {
+        throw new FunctionError(400, "INVALID_CATEGORIES", "Danh sách danh mục không hợp lệ.");
+      }
+      return {id, name, kind};
+    },
+  );
   if (new Set(categories.map((category) => category.id)).size !== categories.length) {
     throw new FunctionError(400, "INVALID_CATEGORIES", "Danh sách danh mục không hợp lệ.");
   }
@@ -391,7 +393,9 @@ async function transcribeAudio(request: TranscriptionRequest) {
     throw new FunctionError(503, "TRANSCRIPTION_NOT_CONFIGURED", "GROQ_API_KEY chưa được cấu hình trong Supabase Secrets.");
   }
   const form = new FormData();
-  form.append("file", new Blob([request.audio], {type: "audio/wav"}), "voice.wav");
+  const audioBuffer = new ArrayBuffer(request.audio.byteLength);
+  new Uint8Array(audioBuffer).set(request.audio);
+  form.append("file", new Blob([audioBuffer], {type: "audio/wav"}), "voice.wav");
   form.append("model", transcriptionModel);
   form.append("language", "vi");
   form.append("response_format", "json");

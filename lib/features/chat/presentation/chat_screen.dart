@@ -201,7 +201,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildSuggestions(BuildContext context) {
-    if (_messages.length > 1 || _sending || _recording || _transcribing) {
+    if (_sending || _recording || _transcribing) {
       return const SizedBox.shrink();
     }
     const suggestions = chatQuickPrompts;
