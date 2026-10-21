@@ -66,7 +66,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           color: isSignedOut ? const Color(0xFF123D32) : null,
           image: isSignedOut
               ? const DecorationImage(
-                  image: AssetImage('assets/branding/finmi/background-dark.png'),
+                  image: AssetImage(
+                    'assets/branding/finmi/background-dark.png',
+                  ),
                   fit: BoxFit.cover,
                 )
               : null,
