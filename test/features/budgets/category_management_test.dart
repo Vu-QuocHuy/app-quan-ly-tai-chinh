@@ -27,7 +27,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Thu nhập').first);
+    await tester.tap(find.text('Khoản thu').first);
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Thêm danh mục'));
     await tester.pumpAndSettle();

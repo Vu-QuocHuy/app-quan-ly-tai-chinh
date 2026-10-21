@@ -10,6 +10,7 @@ void main() {
   testWidgets('shows one signed net amount per day with semantic colors', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     tester.view.physicalSize = const Size(390, 850);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -54,8 +55,9 @@ void main() {
     final negative = tester.widget<Text>(find.text('−120K'));
     expect(positive.style?.color, AppFinanceColors.light.income.color);
     expect(negative.style?.color, AppTheme.light().colorScheme.error);
-    expect(find.bySemanticsLabel(RegExp(r'Ngày 1, dư')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('Ngày 1, dư 60.000')), findsOneWidget);
     await tester.tap(find.text('−120K'));
     expect(selected, DateTime(2026, 9, 2));
+    semantics.dispose();
   });
 }

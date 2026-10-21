@@ -304,14 +304,10 @@ class _InvoiceDetail extends StatelessWidget {
                       const SizedBox(height: 4),
                       Align(
                         alignment: alignment,
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: alignment,
-                          child: Text(
-                            value,
-                            maxLines: 1,
-                            style: Theme.of(context).textTheme.labelLarge,
-                          ),
+                        child: Text(
+                          value,
+                          maxLines: 1,
+                          style: Theme.of(context).textTheme.labelLarge,
                         ),
                       ),
                     ],
@@ -397,7 +393,9 @@ class _InvoiceDetail extends StatelessWidget {
 final _attachmentSignedUrlProvider = FutureProvider.autoDispose
     .family<Uri, InvoiceAttachment>((ref, attachment) {
       final store = ref.watch(invoiceAttachmentStoreProvider);
-      if (store == null) throw StateError('Supabase chưa được cấu hình.');
+      if (store == null) {
+        throw StateError('Dịch vụ tài khoản chưa được cấu hình.');
+      }
       return store.signedUrl(attachment);
     });
 
@@ -425,7 +423,7 @@ class _OriginalReceiptPreview extends ConsumerWidget {
           error: (error, _) => Card(
             child: ListTile(
               leading: const Icon(Icons.cloud_off_outlined),
-              title: const Text('Không tải được ảnh hóa đơn'),
+              title: const Text('Không tải được ảnh hóa đơn', maxLines: 3),
               subtitle: Text(friendlyMessage(error)),
               trailing: IconButton(
                 tooltip: 'Thử tải lại',
@@ -447,8 +445,11 @@ class _OriginalReceiptPreview extends ConsumerWidget {
               return Card(
                 child: ListTile(
                   leading: const Icon(Icons.receipt_long_outlined),
-                  title: const Text('Ảnh gốc chưa được lưu'),
-                  subtitle: const Text('Mở chứng từ gốc để thêm ảnh hóa đơn.'),
+                  title: const Text('Ảnh gốc chưa được lưu', maxLines: 3),
+                  subtitle: const Text(
+                    'Mở chứng từ gốc để thêm ảnh hóa đơn.',
+                    maxLines: 3,
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/invoices/$invoiceId/attachments'),
                 ),
@@ -486,7 +487,7 @@ class _OriginalReceiptImage extends ConsumerWidget {
         ),
         error: (error, _) => ListTile(
           leading: const Icon(Icons.broken_image_outlined),
-          title: const Text('Không mở được ảnh gốc'),
+          title: const Text('Không mở được ảnh gốc', maxLines: 3),
           subtitle: Text(friendlyMessage(error)),
           onTap: () => context.push('/invoices/$invoiceId/attachments'),
         ),

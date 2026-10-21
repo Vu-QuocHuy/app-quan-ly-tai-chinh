@@ -46,10 +46,7 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
 
   final FinanceTone income;
 
-  /// CHI TIÊU LÀ MỰC, KHÔNG PHẢI MÀU.
-  /// Tiêu tiền là chủ ngữ mặc định của app, không phải một cảnh báo. Map sang
-  /// onSurface (17.14:1 sáng / 12.70:1 tối). Màu error để dành riêng cho lỗi và
-  /// hành động phá hủy, đúng như IMPLEMENTATION.md cam kết.
+  /// Màu khoản chi đi cùng nhãn, biểu tượng hoặc dấu trừ để dễ phân biệt.
   final FinanceTone expense;
 
   final FinanceTone budgetSafe;
@@ -76,7 +73,7 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
   static const _tabular = <FontFeature>[FontFeature.tabularFigures()];
 
   static const _moneyDisplay = TextStyle(
-    fontSize: 36,
+    fontSize: 34,
     height: 1.22,
     fontWeight: FontWeight.w700,
     letterSpacing: 0,
@@ -106,19 +103,19 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
 
   static const light = AppFinanceColors(
     income: FinanceTone(
-      color: Color(0xFF2E5942),
+      color: Color(0xFF236447),
       onColor: Color(0xFFFFFFFF),
       container: Color(0xFFD7E5D8),
       onContainer: Color(0xFF152F20),
     ),
     expense: FinanceTone(
-      color: Color(0xFF1D261F),
+      color: Color(0xFFB23C36),
       onColor: Color(0xFFFFFFFF),
-      container: Color(0xFFE9E7DE),
-      onContainer: Color(0xFF1D261F),
+      container: Color(0xFFFBEDEB),
+      onContainer: Color(0xFF842D28),
     ),
     budgetSafe: FinanceTone(
-      color: Color(0xFF2E5942),
+      color: Color(0xFF236447),
       onColor: Color(0xFFFFFFFF),
       container: Color(0xFFD7E5D8),
       onContainer: Color(0xFF152F20),
@@ -130,8 +127,8 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
       onContainer: Color(0xFF3E2D18),
     ),
     cashFlowBalance: FinanceTone(
-      color: Color(0xFFD4A017),
-      onColor: Color(0xFF241900),
+      color: Color(0xFF896329),
+      onColor: Color(0xFFFFFFFF),
       container: Color(0xFFFFE8A0),
       onContainer: Color(0xFF3B2A00),
     ),
@@ -142,7 +139,7 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
       onContainer: Color(0xFF410E0B),
     ),
     confidenceHigh: FinanceTone(
-      color: Color(0xFF2E5942),
+      color: Color(0xFF236447),
       onColor: Color(0xFFFFFFFF),
       container: Color(0xFFD7E5D8),
       onContainer: Color(0xFF152F20),
@@ -154,7 +151,7 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
       onContainer: Color(0xFF3E2D18),
     ),
     syncOk: FinanceTone(
-      color: Color(0xFF2E5942),
+      color: Color(0xFF236447),
       onColor: Color(0xFFFFFFFF),
       container: Color(0xFFD7E5D8),
       onContainer: Color(0xFF152F20),
@@ -185,7 +182,7 @@ class AppFinanceColors extends ThemeExtension<AppFinanceColors> {
       onContainer: Color(0xFFE1ECE0),
     ),
     expense: FinanceTone(
-      color: Color(0xFFE2E8E0),
+      color: Color(0xFFFFBBB4),
       onColor: Color(0xFF111813),
       container: Color(0xFF29362C),
       onContainer: Color(0xFFE2E8E0),

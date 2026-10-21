@@ -2083,6 +2083,16 @@ class $IncomesTable extends Incomes with TableInfo<$IncomesTable, IncomeRow> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2091,6 +2101,7 @@ class $IncomesTable extends Incomes with TableInfo<$IncomesTable, IncomeRow> {
     categoryId,
     receivedAt,
     updatedAt,
+    note,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2148,6 +2159,12 @@ class $IncomesTable extends Incomes with TableInfo<$IncomesTable, IncomeRow> {
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
     return context;
   }
 
@@ -2181,6 +2198,10 @@ class $IncomesTable extends Incomes with TableInfo<$IncomesTable, IncomeRow> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      )!,
     );
   }
 
@@ -2197,6 +2218,7 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
   final String categoryId;
   final DateTime receivedAt;
   final DateTime updatedAt;
+  final String note;
   const IncomeRow({
     required this.id,
     required this.amountMinor,
@@ -2204,6 +2226,7 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
     required this.categoryId,
     required this.receivedAt,
     required this.updatedAt,
+    required this.note,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2214,6 +2237,7 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
     map['category_id'] = Variable<String>(categoryId);
     map['received_at'] = Variable<DateTime>(receivedAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['note'] = Variable<String>(note);
     return map;
   }
 
@@ -2225,6 +2249,7 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
       categoryId: Value(categoryId),
       receivedAt: Value(receivedAt),
       updatedAt: Value(updatedAt),
+      note: Value(note),
     );
   }
 
@@ -2240,6 +2265,7 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
       categoryId: serializer.fromJson<String>(json['categoryId']),
       receivedAt: serializer.fromJson<DateTime>(json['receivedAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      note: serializer.fromJson<String>(json['note']),
     );
   }
   @override
@@ -2252,6 +2278,7 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
       'categoryId': serializer.toJson<String>(categoryId),
       'receivedAt': serializer.toJson<DateTime>(receivedAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'note': serializer.toJson<String>(note),
     };
   }
 
@@ -2262,6 +2289,7 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
     String? categoryId,
     DateTime? receivedAt,
     DateTime? updatedAt,
+    String? note,
   }) => IncomeRow(
     id: id ?? this.id,
     amountMinor: amountMinor ?? this.amountMinor,
@@ -2269,6 +2297,7 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
     categoryId: categoryId ?? this.categoryId,
     receivedAt: receivedAt ?? this.receivedAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    note: note ?? this.note,
   );
   IncomeRow copyWithCompanion(IncomesCompanion data) {
     return IncomeRow(
@@ -2284,6 +2313,7 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
           ? data.receivedAt.value
           : this.receivedAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      note: data.note.present ? data.note.value : this.note,
     );
   }
 
@@ -2295,14 +2325,22 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
           ..write('source: $source, ')
           ..write('categoryId: $categoryId, ')
           ..write('receivedAt: $receivedAt, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('note: $note')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, amountMinor, source, categoryId, receivedAt, updatedAt);
+  int get hashCode => Object.hash(
+    id,
+    amountMinor,
+    source,
+    categoryId,
+    receivedAt,
+    updatedAt,
+    note,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2312,7 +2350,8 @@ class IncomeRow extends DataClass implements Insertable<IncomeRow> {
           other.source == this.source &&
           other.categoryId == this.categoryId &&
           other.receivedAt == this.receivedAt &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.note == this.note);
 }
 
 class IncomesCompanion extends UpdateCompanion<IncomeRow> {
@@ -2322,6 +2361,7 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
   final Value<String> categoryId;
   final Value<DateTime> receivedAt;
   final Value<DateTime> updatedAt;
+  final Value<String> note;
   final Value<int> rowid;
   const IncomesCompanion({
     this.id = const Value.absent(),
@@ -2330,6 +2370,7 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
     this.categoryId = const Value.absent(),
     this.receivedAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.note = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   IncomesCompanion.insert({
@@ -2339,6 +2380,7 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
     this.categoryId = const Value.absent(),
     required DateTime receivedAt,
     required DateTime updatedAt,
+    this.note = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        amountMinor = Value(amountMinor),
@@ -2351,6 +2393,7 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
     Expression<String>? categoryId,
     Expression<DateTime>? receivedAt,
     Expression<DateTime>? updatedAt,
+    Expression<String>? note,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2360,6 +2403,7 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
       if (categoryId != null) 'category_id': categoryId,
       if (receivedAt != null) 'received_at': receivedAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (note != null) 'note': note,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2371,6 +2415,7 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
     Value<String>? categoryId,
     Value<DateTime>? receivedAt,
     Value<DateTime>? updatedAt,
+    Value<String>? note,
     Value<int>? rowid,
   }) {
     return IncomesCompanion(
@@ -2380,6 +2425,7 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
       categoryId: categoryId ?? this.categoryId,
       receivedAt: receivedAt ?? this.receivedAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      note: note ?? this.note,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2405,6 +2451,9 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2420,6 +2469,7 @@ class IncomesCompanion extends UpdateCompanion<IncomeRow> {
           ..write('categoryId: $categoryId, ')
           ..write('receivedAt: $receivedAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('note: $note, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9515,6 +9565,7 @@ typedef $$IncomesTableCreateCompanionBuilder =
       Value<String> categoryId,
       required DateTime receivedAt,
       required DateTime updatedAt,
+      Value<String> note,
       Value<int> rowid,
     });
 typedef $$IncomesTableUpdateCompanionBuilder =
@@ -9525,6 +9576,7 @@ typedef $$IncomesTableUpdateCompanionBuilder =
       Value<String> categoryId,
       Value<DateTime> receivedAt,
       Value<DateTime> updatedAt,
+      Value<String> note,
       Value<int> rowid,
     });
 
@@ -9581,6 +9633,11 @@ class $$IncomesTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9642,6 +9699,11 @@ class $$IncomesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$CategoriesTableOrderingComposer get categoryId {
     final $$CategoriesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -9693,6 +9755,9 @@ class $$IncomesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
 
   $$CategoriesTableAnnotationComposer get categoryId {
     final $$CategoriesTableAnnotationComposer composer = $composerBuilder(
@@ -9752,6 +9817,7 @@ class $$IncomesTableTableManager
                 Value<String> categoryId = const Value.absent(),
                 Value<DateTime> receivedAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<String> note = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => IncomesCompanion(
                 id: id,
@@ -9760,6 +9826,7 @@ class $$IncomesTableTableManager
                 categoryId: categoryId,
                 receivedAt: receivedAt,
                 updatedAt: updatedAt,
+                note: note,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -9770,6 +9837,7 @@ class $$IncomesTableTableManager
                 Value<String> categoryId = const Value.absent(),
                 required DateTime receivedAt,
                 required DateTime updatedAt,
+                Value<String> note = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => IncomesCompanion.insert(
                 id: id,
@@ -9778,6 +9846,7 @@ class $$IncomesTableTableManager
                 categoryId: categoryId,
                 receivedAt: receivedAt,
                 updatedAt: updatedAt,
+                note: note,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

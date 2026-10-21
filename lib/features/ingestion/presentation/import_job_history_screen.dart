@@ -18,7 +18,7 @@ class ImportJobHistoryScreen extends ConsumerWidget {
     final jobs = ref.watch(importJobsProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Lịch sử nhập hóa đơn'),
+        title: const Text('Lịch sử nhập hóa đơn', maxLines: 3),
         actions: [
           IconButton(
             tooltip: 'Thử lại tất cả tác vụ thất bại',
@@ -38,7 +38,7 @@ class ImportJobHistoryScreen extends ConsumerWidget {
                 child: ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.cleaning_services_outlined),
-                  title: Text('Xóa lịch sử hoàn tất'),
+                  title: Text('Xóa lịch sử hoàn tất', maxLines: 3),
                 ),
               ),
             ],

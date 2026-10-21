@@ -3,10 +3,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants/app_constants.dart';
+import '../shared/widgets/finmi_responsive_theme.dart';
 import 'router/app_router.dart';
 import 'theme/app_scroll_behavior.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_mode_provider.dart';
+import 'theme/finmi_appearance.dart';
 
 class HoaDonInsightApp extends ConsumerWidget {
   const HoaDonInsightApp({super.key});
@@ -16,8 +18,13 @@ class HoaDonInsightApp extends ConsumerWidget {
     return MaterialApp.router(
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
+      builder: (context, child) => FinmiResponsiveTheme(child: child!),
+      theme: ref.watch(finmiAppearanceProvider).isDark
+          ? AppTheme.light()
+          : AppTheme.forAppearance(ref.watch(finmiAppearanceProvider)),
+      darkTheme: ref.watch(finmiAppearanceProvider).isDark
+          ? AppTheme.forAppearance(ref.watch(finmiAppearanceProvider))
+          : AppTheme.dark(),
       themeMode: ref.watch(themeModeProvider),
       // Toàn bộ app là tiếng Việt nhưng trước đây không có delegate nào, nên
       // showDatePicker và semantics của widget Material render bằng tiếng Anh.

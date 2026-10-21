@@ -158,8 +158,11 @@ void main() {
         }
       });
 
-      test('$name — expense là MỰC, không phải màu cảnh báo', () {
-        expect(finance.expense.color, scheme.onSurface);
+      test('$name — khoản chi có màu ngữ nghĩa tương phản rõ', () {
+        expect(
+          ratio(finance.expense.color, scheme.cardSurface),
+          greaterThanOrEqualTo(4.5),
+        );
       });
     }
   });

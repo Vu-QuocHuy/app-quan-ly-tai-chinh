@@ -1,6 +1,10 @@
+import '../../../shared/widgets/finmi_page_header.dart';
+import '../../../shared/widgets/category_avatar.dart';
+import '../../../app/theme/finmi_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/finmi_assistant_button.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -14,11 +18,10 @@ import '../../../core/utils/month_utils.dart';
 import '../../../shared/formatting/app_date_format.dart';
 import '../../../shared/formatting/category_lookup.dart';
 import '../../../shared/widgets/app_error_state.dart';
+import '../../../shared/widgets/app_refresh.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
-import '../../../shared/widgets/app_list_section.dart';
 import '../../../shared/widgets/app_skeleton.dart';
-import '../../../shared/widgets/category_avatar.dart';
 import '../../../shared/widgets/entity_list_row.dart';
 import '../../../shared/widgets/money_text.dart';
 import '../../../shared/widgets/reading_pane.dart';
@@ -151,259 +154,272 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
     final canPop = Navigator.of(context).canPop();
     return Scaffold(
       body: ReadingPane(
-        child: CustomScrollView(
-          slivers: [
-            SliverAppBar(
-              pinned: true,
-              title: Text(
-                _selectionMode
-                    ? 'Đã chọn ${_selectedInvoiceIds.length}'
-                    : 'Giao dịch',
-              ),
-              leading: IconButton(
-                tooltip: _selectionMode
-                    ? 'Hủy chọn'
-                    : canPop
-                    ? 'Quay lại'
-                    : 'Về Tổng quan',
-                onPressed: _selectionMode
-                    ? _leaveSelectionMode
-                    : () => canPop ? context.pop() : context.go('/'),
-                icon: Icon(_selectionMode ? Icons.close : Icons.arrow_back),
-              ),
-              actions: [
-                if (!_selectionMode) ...[
-                  IconButton(
-                    tooltip: 'Chọn nhiều khoản chi',
-                    onPressed: _enterSelectionMode,
-                    icon: const Icon(Icons.checklist_rounded),
-                  ),
+        child: AppRefreshIndicator(
+          onRefresh: () => refreshFromCloud(context, ref),
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverAppBar(
+                pinned: true,
+                centerTitle: true,
+                title: Text(
+                  _selectionMode
+                      ? 'Đã chọn ${_selectedInvoiceIds.length}'
+                      : 'Lịch sử thu chi',
+                ),
+                leading: IconButton(
+                  tooltip: _selectionMode
+                      ? 'Hủy chọn'
+                      : canPop
+                      ? 'Quay lại'
+                      : 'Về Tổng quan',
+                  onPressed: _selectionMode
+                      ? _leaveSelectionMode
+                      : () => canPop ? context.pop() : context.go('/'),
+                  icon: Icon(_selectionMode ? Icons.close : Icons.chevron_left),
+                ),
+                actions: [
+                  if (!_selectionMode) ...[
+                    FinmiHeaderAction(
+                      tooltip: 'Chọn nhiều khoản chi',
+                      onPressed: _enterSelectionMode,
+                      icon: Icons.checklist_rounded,
+                    ),
+                  ],
+                  const SizedBox(width: 8),
                 ],
-                const SizedBox(width: 8),
-              ],
-            ),
-            if (!_selectionMode)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                  child: _FilterHeader(
-                    controller: _searchController,
-                    query: _query,
-                    filterCount: activeFilterCount,
-                    kind: _kind,
-                    reviewSelected: _status == InvoiceStatus.needsReview,
-                    onReviewTap: _toggleReviewFilter,
-                    currentMonthSelected:
-                        _month != null &&
-                        MonthUtils.key(_month!) ==
-                            MonthUtils.key(DateTime.now()),
-                    onCurrentMonthTap: _toggleCurrentMonth,
-                    onKindChanged: _changeKind,
-                    onQueryChanged: _onQueryChanged,
-                    onFilterTap: () => _showFilters(categories),
-                    onClear:
-                        filter.hasActiveFilters || _kind != _TransactionKind.all
-                        ? _clearFilters
-                        : null,
-                  ),
-                ),
               ),
-            if (_selectionMode)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
-                  child: Text(
-                    'Chọn các khoản chi đã xác nhận hoặc cần kiểm tra.',
-                  ),
-                ),
-              ),
-            if (!_selectionMode &&
-                reviewPending &&
-                _status != InvoiceStatus.needsReview)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: AppCallout(
-                    title: 'Giao dịch cần kiểm tra',
-                    message:
-                        'Có khoản chi chưa được xác nhận. Kiểm tra trước khi tính vào báo cáo và ngân sách.',
-                    tone: CalloutTone.warning,
-                    icon: Icons.fact_check_outlined,
-                    actions: [
-                      TextButton(
-                        onPressed: _showReviewOnly,
-                        child: const Text('Xem các khoản cần kiểm tra'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            if (_kind != _TransactionKind.expense && incomes.isLoading)
-              const SliverPadding(
-                padding: EdgeInsets.all(16),
-                sliver: SliverToBoxAdapter(child: SkeletonListRows(count: 3)),
-              )
-            else if (_kind != _TransactionKind.expense && incomes.hasError)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: AppErrorState(
-                  error: incomes.error!,
-                  stackTrace: incomes.stackTrace,
-                  title: 'Không tải được khoản thu',
-                  onRetry: () => ref.invalidate(incomesProvider),
-                ),
-              )
-            else
-              invoiceResults.when(
-                loading: () => const SliverPadding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 112),
-                  sliver: SliverToBoxAdapter(child: SkeletonListRows(count: 6)),
-                ),
-                // Trước đây nhánh này là ngõ cụt hoàn toàn: một câu có nội suy
-                // exception, không nút nào.
-                error: (error, stack) => SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: AppErrorState(
-                    error: error,
-                    stackTrace: stack,
-                    title: 'Không tải được lịch sử giao dịch',
-                    onRetry: () => ref.invalidate(
-                      filteredInvoiceSummariesProvider(
-                        InvoiceListQuery(filter: filter, limit: _limit + 1),
-                      ),
+              if (!_selectionMode)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+                    child: _FilterHeader(
+                      controller: _searchController,
+                      query: _query,
+                      filterCount: activeFilterCount,
+                      kind: _kind,
+                      reviewSelected: _status == InvoiceStatus.needsReview,
+                      onReviewTap: _toggleReviewFilter,
+                      currentMonthSelected:
+                          _month != null &&
+                          MonthUtils.key(_month!) ==
+                              MonthUtils.key(DateTime.now()),
+                      onCurrentMonthTap: _toggleCurrentMonth,
+                      onKindChanged: _changeKind,
+                      onQueryChanged: _onQueryChanged,
+                      onFilterTap: () => _showFilters(categories),
+                      onClear:
+                          filter.hasActiveFilters ||
+                              _kind != _TransactionKind.all
+                          ? _clearFilters
+                          : null,
                     ),
                   ),
                 ),
-                data: (items) {
-                  final hasMore =
-                      _kind != _TransactionKind.income && items.length > _limit;
-                  final visibleInvoices = hasMore
-                      ? items.take(_limit).toList(growable: false)
-                      : items;
-                  final selectableIds = visibleInvoices
-                      .where(
-                        (invoice) =>
-                            invoice.status == InvoiceStatus.confirmed ||
-                            invoice.status == InvoiceStatus.needsReview,
-                      )
-                      .map((invoice) => invoice.id)
-                      .toSet();
-                  final records =
-                      <
-                          ({
-                            InvoiceEntity? invoice,
-                            IncomeEntry? income,
-                            DateTime date,
-                          })
-                        >[
-                          if (_kind != _TransactionKind.income)
-                            for (final invoice in visibleInvoices)
-                              (
-                                invoice: invoice,
-                                income: null,
-                                date: invoice.issuedAt ?? invoice.createdAt,
-                              ),
-                          if (_kind != _TransactionKind.expense &&
-                              _status == null)
-                            for (final income
-                                in incomes.valueOrNull ?? const <IncomeEntry>[])
-                              if ((_categoryId == null ||
-                                      income.categoryId == _categoryId) &&
-                                  (_month == null ||
-                                      MonthUtils.key(income.receivedAt) ==
-                                          MonthUtils.key(_month!)) &&
-                                  _matchesIncome(income, incomeCategories))
-                                (
-                                  invoice: null,
-                                  income: income,
-                                  date: income.receivedAt,
-                                ),
-                        ]
-                        ..sort((a, b) => b.date.compareTo(a.date));
-                  if (records.isEmpty) {
-                    return SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _InvoiceEmptyState(
-                        incomeOnly: _kind == _TransactionKind.income,
-                        reviewOnly: _status == InvoiceStatus.needsReview,
-                        filtered:
-                            filter.hasActiveFilters ||
-                            _kind != _TransactionKind.all,
-                        query: _query,
-                        onClear:
-                            filter.hasActiveFilters ||
-                                _kind != _TransactionKind.all
-                            ? _clearFilters
-                            : null,
-                      ),
-                    );
-                  }
-                  return SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 112),
-                    sliver: SliverMainAxisGroup(
-                      slivers: [
-                        if (_selectionMode && selectableIds.isNotEmpty)
-                          SliverToBoxAdapter(
-                            child: Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: () => _selectVisible(selectableIds),
-                                child: Text(
-                                  _selectedInvoiceIds.containsAll(
-                                            selectableIds,
-                                          ) &&
-                                          _selectedInvoiceIds.isNotEmpty
-                                      ? 'Bỏ chọn các khoản đang hiển thị'
-                                      : 'Chọn các khoản đang hiển thị',
-                                ),
-                              ),
-                            ),
-                          ),
-                        // MỘT thẻ với các dòng có kẻ tóc, thay vì 50 thẻ chồng lên
-                        // nhau — xoá 49 viền khỏi cuộn dài nhất của app.
-                        SliverAppListSection(
-                          itemCount: records.length,
-                          itemBuilder: (context, index) {
-                            final record = records[index];
-                            final income = record.income;
-                            if (income != null) {
-                              return _IncomeRow(entry: income);
-                            }
-                            final invoice = record.invoice!;
-                            return _InvoiceRow(
-                              invoice: invoice,
-                              selectionMode: _selectionMode,
-                              selected: _selectedInvoiceIds.contains(
-                                invoice.id,
-                              ),
-                              onSelect: () =>
-                                  _toggleInvoiceSelection(invoice.id),
-                              category: findCategory(
-                                categories,
-                                invoice.categoryId,
-                              ),
-                            );
-                          },
+              if (_selectionMode)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
+                    child: Text(
+                      'Chọn các khoản chi đã xác nhận hoặc cần kiểm tra.',
+                    ),
+                  ),
+                ),
+              if (!_selectionMode &&
+                  reviewPending &&
+                  _status != InvoiceStatus.needsReview)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: AppCallout(
+                      title: 'Giao dịch cần kiểm tra',
+                      message:
+                          'Có khoản chi chưa được xác nhận. Kiểm tra trước khi tính vào báo cáo và ngân sách.',
+                      tone: CalloutTone.warning,
+                      icon: Icons.fact_check_outlined,
+                      actions: [
+                        TextButton(
+                          onPressed: _showReviewOnly,
+                          child: const Text('Xem các khoản cần kiểm tra'),
                         ),
-                        if (hasMore)
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 16),
-                              child: Center(
-                                child: OutlinedButton.icon(
-                                  onPressed: () => setState(() => _limit += 50),
-                                  icon: const Icon(Icons.expand_more),
-                                  label: const Text('Tải thêm giao dịch'),
-                                ),
-                              ),
-                            ),
-                          ),
                       ],
                     ),
-                  );
-                },
-              ),
-          ],
+                  ),
+                ),
+              if (_kind != _TransactionKind.expense && incomes.isLoading)
+                const SliverPadding(
+                  padding: EdgeInsets.all(16),
+                  sliver: SliverToBoxAdapter(child: SkeletonListRows(count: 3)),
+                )
+              else if (_kind != _TransactionKind.expense && incomes.hasError)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: AppErrorState(
+                    error: incomes.error!,
+                    stackTrace: incomes.stackTrace,
+                    title: 'Không tải được khoản thu',
+                    onRetry: () => ref.invalidate(incomesProvider),
+                  ),
+                )
+              else
+                invoiceResults.when(
+                  loading: () => const SliverPadding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 112),
+                    sliver: SliverToBoxAdapter(
+                      child: SkeletonListRows(count: 6),
+                    ),
+                  ),
+                  // Trước đây nhánh này là ngõ cụt hoàn toàn: một câu có nội suy
+                  // exception, không nút nào.
+                  error: (error, stack) => SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: AppErrorState(
+                      error: error,
+                      stackTrace: stack,
+                      title: 'Không tải được lịch sử giao dịch',
+                      onRetry: () => ref.invalidate(
+                        filteredInvoiceSummariesProvider(
+                          InvoiceListQuery(filter: filter, limit: _limit + 1),
+                        ),
+                      ),
+                    ),
+                  ),
+                  data: (items) {
+                    final hasMore =
+                        _kind != _TransactionKind.income &&
+                        items.length > _limit;
+                    final visibleInvoices = hasMore
+                        ? items.take(_limit).toList(growable: false)
+                        : items;
+                    final selectableIds = visibleInvoices
+                        .where(
+                          (invoice) =>
+                              invoice.status == InvoiceStatus.confirmed ||
+                              invoice.status == InvoiceStatus.needsReview,
+                        )
+                        .map((invoice) => invoice.id)
+                        .toSet();
+                    final records =
+                        <
+                            ({
+                              InvoiceEntity? invoice,
+                              IncomeEntry? income,
+                              DateTime date,
+                            })
+                          >[
+                            if (_kind != _TransactionKind.income)
+                              for (final invoice in visibleInvoices)
+                                (
+                                  invoice: invoice,
+                                  income: null,
+                                  date: invoice.issuedAt ?? invoice.createdAt,
+                                ),
+                            if (_kind != _TransactionKind.expense &&
+                                _status == null)
+                              for (final income
+                                  in incomes.valueOrNull ??
+                                      const <IncomeEntry>[])
+                                if ((_categoryId == null ||
+                                        income.categoryId == _categoryId) &&
+                                    (_month == null ||
+                                        MonthUtils.key(income.receivedAt) ==
+                                            MonthUtils.key(_month!)) &&
+                                    _matchesIncome(income, incomeCategories))
+                                  (
+                                    invoice: null,
+                                    income: income,
+                                    date: income.receivedAt,
+                                  ),
+                          ]
+                          ..sort((a, b) => b.date.compareTo(a.date));
+                    if (records.isEmpty) {
+                      return SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _InvoiceEmptyState(
+                          incomeOnly: _kind == _TransactionKind.income,
+                          reviewOnly: _status == InvoiceStatus.needsReview,
+                          filtered:
+                              filter.hasActiveFilters ||
+                              _kind != _TransactionKind.all,
+                          query: _query,
+                          onClear:
+                              filter.hasActiveFilters ||
+                                  _kind != _TransactionKind.all
+                              ? _clearFilters
+                              : null,
+                        ),
+                      );
+                    }
+                    return SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 112),
+                      sliver: SliverMainAxisGroup(
+                        slivers: [
+                          if (_selectionMode && selectableIds.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: () =>
+                                      _selectVisible(selectableIds),
+                                  child: Text(
+                                    _selectedInvoiceIds.containsAll(
+                                              selectableIds,
+                                            ) &&
+                                            _selectedInvoiceIds.isNotEmpty
+                                        ? 'Bỏ chọn các khoản đang hiển thị'
+                                        : 'Chọn các khoản đang hiển thị',
+                                  ),
+                                ),
+                              ),
+                            ),
+                          // MỘT thẻ với các dòng có kẻ tóc, thay vì 50 thẻ chồng lên
+                          // nhau — xoá 49 viền khỏi cuộn dài nhất của app.
+                          SliverList.separated(
+                            separatorBuilder: (_, _) => const SizedBox.shrink(),
+                            itemCount: records.length,
+                            itemBuilder: (context, index) {
+                              final record = records[index];
+                              final income = record.income;
+                              if (income != null) {
+                                return _IncomeRow(entry: income);
+                              }
+                              final invoice = record.invoice!;
+                              return _InvoiceRow(
+                                invoice: invoice,
+                                selectionMode: _selectionMode,
+                                selected: _selectedInvoiceIds.contains(
+                                  invoice.id,
+                                ),
+                                onSelect: () =>
+                                    _toggleInvoiceSelection(invoice.id),
+                                category: findCategory(
+                                  categories,
+                                  invoice.categoryId,
+                                ),
+                              );
+                            },
+                          ),
+                          if (hasMore)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 16),
+                                child: Center(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () =>
+                                        setState(() => _limit += 50),
+                                    icon: const Icon(Icons.expand_more),
+                                    label: const Text('Tải thêm giao dịch'),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: _selectionMode
@@ -441,12 +457,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
           : null,
       floatingActionButton: _selectionMode
           ? null
-          : FloatingActionButton(
-              heroTag: 'invoices-chat',
-              tooltip: 'Mở trợ lý chi tiêu',
-              onPressed: () => context.push('/chat'),
-              child: const Icon(Icons.chat_bubble_outline),
-            ),
+          : const FinmiAssistantButton(),
     );
   }
 
@@ -792,7 +803,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.calendar_month_outlined),
-                        title: const Text('Tháng'),
+                        title: const Text('Tháng', maxLines: 3),
                         subtitle: Text(
                           month == null
                               ? 'Tất cả các tháng'
@@ -896,20 +907,70 @@ class _FilterHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final search = SearchBar(
+      constraints: const BoxConstraints(minHeight: 56),
+      controller: controller,
+      hintText: 'Tìm giao dịch thu hoặc chi',
+      leading: const Icon(Icons.search),
+      onChanged: onQueryChanged,
+      trailing: [
+        if (query.isNotEmpty)
+          IconButton(
+            tooltip: 'Xóa nội dung tìm kiếm',
+            onPressed: () {
+              controller.clear();
+              onQueryChanged('');
+            },
+            icon: const Icon(Icons.clear),
+          ),
+      ],
+    );
+    final filter = OutlinedButton.icon(
+      key: const ValueKey('transaction-filter-button'),
+      onPressed: onFilterTap,
+      icon: Badge(
+        isLabelVisible: filterCount > 0,
+        label: Text('$filterCount'),
+        child: const Icon(Icons.tune),
+      ),
+      label: const Text('Lọc'),
+    );
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Loại giao dịch', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        SegmentedButton<_TransactionKind>(
-          segments: const [
-            ButtonSegment(value: _TransactionKind.all, label: Text('Tất cả')),
-            ButtonSegment(value: _TransactionKind.income, label: Text('Thu')),
-            ButtonSegment(value: _TransactionKind.expense, label: Text('Chi')),
-          ],
-          selected: {kind},
-          onSelectionChanged: (value) => onKindChanged(value.first),
-        ),
+        if (context.needsStackedLayout)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final option in const [
+                (_TransactionKind.all, 'Tất cả'),
+                (_TransactionKind.expense, 'Khoản chi'),
+                (_TransactionKind.income, 'Khoản thu'),
+              ])
+                ChoiceChip(
+                  label: Text(option.$2),
+                  selected: kind == option.$1,
+                  onSelected: (_) => onKindChanged(option.$1),
+                ),
+            ],
+          )
+        else
+          SegmentedButton<_TransactionKind>(
+            segments: const [
+              ButtonSegment(value: _TransactionKind.all, label: Text('Tất cả')),
+              ButtonSegment(
+                value: _TransactionKind.expense,
+                label: Text('Khoản chi'),
+              ),
+              ButtonSegment(
+                value: _TransactionKind.income,
+                label: Text('Khoản thu'),
+              ),
+            ],
+            selected: {kind},
+            onSelectionChanged: (value) => onKindChanged(value.first),
+          ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
@@ -930,48 +991,18 @@ class _FilterHeader extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: SearchBar(
-                constraints: const BoxConstraints(minHeight: 56),
-                controller: controller,
-                hintText: switch (kind) {
-                  _TransactionKind.income => 'Tìm danh mục, ngày hoặc số tiền',
-                  _TransactionKind.expense =>
-                    'Tìm người bán, ký hiệu hoặc ghi chú',
-                  _TransactionKind.all => 'Tìm giao dịch thu hoặc chi',
-                },
-                leading: const Icon(Icons.search),
-                onChanged: onQueryChanged,
-                trailing: [
-                  if (query.isNotEmpty)
-                    IconButton(
-                      tooltip: 'Xóa nội dung tìm kiếm',
-                      onPressed: () {
-                        controller.clear();
-                        onQueryChanged('');
-                      },
-                      icon: const Icon(Icons.clear),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            OutlinedButton.icon(
-              key: const ValueKey('transaction-filter-button'),
-              onPressed: onFilterTap,
-              icon: Badge(
-                isLabelVisible: filterCount > 0,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                textColor: Theme.of(context).colorScheme.onPrimary,
-                label: Text('$filterCount'),
-                child: const Icon(Icons.tune),
-              ),
-              label: const Text('Lọc'),
-            ),
-          ],
-        ),
+        if (context.needsStackedLayout) ...[
+          search,
+          const SizedBox(height: 12),
+          Align(alignment: Alignment.centerRight, child: filter),
+        ] else
+          Row(
+            children: [
+              Expanded(child: search),
+              const SizedBox(width: 12),
+              filter,
+            ],
+          ),
         if (onClear != null)
           Align(
             alignment: Alignment.centerRight,
@@ -997,20 +1028,16 @@ class _IncomeRow extends ConsumerWidget {
         .firstOrNull;
     final categoryName = category?.name ?? 'Chưa phân loại';
     return EntityListRow(
-      leading: category == null
-          ? CircleAvatar(
-              radius: 20,
-              backgroundColor: finance.income.container,
-              child: Icon(Icons.add, color: finance.income.onContainer),
-            )
-          : CategoryAvatar(category: category),
-      title: categoryName,
-      subtitle: 'Khoản thu · ${AppDateFormat.shortDate(entry.receivedAt)}',
+      leading: null,
+      outlined: true,
+      title: entry.note.isEmpty ? categoryName : entry.note,
+      subtitle:
+          'Khoản thu · $categoryName · ${AppDateFormat.shortDate(entry.receivedAt)}',
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text('+', style: TextStyle(color: finance.income.color)),
-          MoneyText(entry.amountMinor, tone: finance.income, compact: true),
+          Flexible(child: MoneyText(entry.amountMinor, tone: finance.income)),
         ],
       ),
       semanticLabel:
@@ -1061,7 +1088,8 @@ class _InvoiceRow extends StatelessWidget {
               value: selected,
               onChanged: canSelect ? (_) => onSelect() : null,
             )
-          : CategoryAvatar(category: category),
+          : null,
+      outlined: true,
       title: seller,
       subtitle: '$categoryName · ${AppDateFormat.shortDate(date)}',
       badge: needsReview
@@ -1077,7 +1105,7 @@ class _InvoiceRow extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text('−'),
-          MoneyText(invoice.totalMinor),
+          Flexible(child: MoneyText(invoice.totalMinor)),
           const SizedBox(width: 6),
           // Nguồn import xuống hạng thành glyph nhỏ ở đuôi — nhưng chữ của nó
           // phải sống tiếp trong semanticLabel bên dưới, nếu không người dùng
@@ -1153,14 +1181,14 @@ class _InvoiceEmptyState extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             incomeOnly
-                ? 'Nhấn “Giao dịch” để ghi khoản thu bằng số tiền.'
+                ? 'Chọn Thêm thu/chi trong Tiện ích để ghi khoản thu.'
                 : reviewOnly
                 ? 'Các khoản chi mới cần xác nhận sẽ xuất hiện tại đây.'
                 : filtered
                 ? (query.trim().isEmpty
                       ? 'Thử bỏ bớt bộ lọc để xem thêm kết quả.'
                       : 'Không có kết quả cho “${query.trim()}”. Hãy thử từ khóa khác.')
-                : 'Nhấn “Giao dịch” để ghi khoản thu, chụp hóa đơn hoặc nhập khoản chi.',
+                : 'Chọn Thêm thu/chi hoặc Quét ở trang Tổng quan để bắt đầu.',
             textAlign: TextAlign.center,
           ),
           if (filtered && onClear != null) ...[

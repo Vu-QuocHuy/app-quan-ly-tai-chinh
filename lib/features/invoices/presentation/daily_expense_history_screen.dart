@@ -11,6 +11,7 @@ import '../../../shared/formatting/category_lookup.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_empty_state.dart';
 import '../../../shared/widgets/app_error_state.dart';
+import '../../../shared/widgets/app_refresh.dart';
 import '../../../shared/widgets/app_list_section.dart';
 import '../../../shared/widgets/category_avatar.dart';
 import '../../../shared/widgets/entity_list_row.dart';
@@ -74,7 +75,10 @@ class DailyExpenseHistoryScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Thu chi ngày ${AppDateFormat.shortDate(date)}'),
+        title: Text(
+          'Thu chi ngày ${AppDateFormat.shortDate(date)}',
+          maxLines: 3,
+        ),
       ),
       body: history.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -98,6 +102,7 @@ class DailyExpenseHistoryScreen extends ConsumerWidget {
             incomes: incomes,
             categories: categories,
             incomeCategories: incomeCategories,
+            onRefresh: () => refreshFromCloud(context, ref),
           ),
         ),
       ),
@@ -110,12 +115,24 @@ class DailyExpenseHistoryScreen extends ConsumerWidget {
     required List<IncomeEntry> incomes,
     required List<CategoryEntity> categories,
     required List<CategoryEntity> incomeCategories,
+    required Future<void> Function() onRefresh,
   }) {
     if (expenses.isEmpty && incomes.isEmpty) {
-      return const AppEmptyState(
-        icon: Icons.receipt_long_outlined,
-        title: 'Không có giao dịch trong ngày này',
-        message: 'Khoản thu và chi của ngày sẽ được hiển thị tại đây.',
+      return AppRefreshIndicator(
+        onRefresh: onRefresh,
+        child: const CustomScrollView(
+          physics: AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: AppEmptyState(
+                icon: Icons.receipt_long_outlined,
+                title: 'Không có giao dịch trong ngày này',
+                message: 'Khoản thu và chi của ngày sẽ được hiển thị tại đây.',
+              ),
+            ),
+          ],
+        ),
       );
     }
     final expenseTotal = expenses.fold<int>(
@@ -129,88 +146,95 @@ class DailyExpenseHistoryScreen extends ConsumerWidget {
     final finance = Theme.of(context).extension<AppFinanceColors>()!;
     final net = incomeTotal - expenseTotal;
 
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: AppCard(
-              child: Row(
-                children: [
-                  _DailyTotal(
-                    label: 'Thu',
-                    amount: incomeTotal,
-                    tone: finance.income,
-                  ),
-                  _DailyTotal(
-                    label: 'Chi',
-                    amount: expenseTotal,
-                    tone: finance.expense,
-                  ),
-                  _DailyTotal(
-                    label: net > 0
-                        ? 'Dư'
-                        : net < 0
-                        ? 'Thiếu'
-                        : 'Cân bằng',
-                    amount: net.abs(),
-                    tone: net > 0
-                        ? finance.income
-                        : net < 0
-                        ? finance.budgetOver
-                        : finance.expense,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        if (incomes.isNotEmpty) ...[
+    return AppRefreshIndicator(
+      onRefresh: onRefresh,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Text(
-                'Khoản thu (${incomes.length})',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            sliver: SliverAppListSection(
-              itemCount: incomes.length,
-              itemBuilder: (context, index) => _DailyIncomeRow(
-                income: incomes[index],
-                category: findCategory(
-                  incomeCategories,
-                  incomes[index].categoryId,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: AppCard(
+                child: Row(
+                  children: [
+                    _DailyTotal(
+                      label: 'Thu',
+                      amount: incomeTotal,
+                      tone: finance.income,
+                    ),
+                    _DailyTotal(
+                      label: 'Chi',
+                      amount: expenseTotal,
+                      tone: finance.expense,
+                    ),
+                    _DailyTotal(
+                      label: net > 0
+                          ? 'Dư'
+                          : net < 0
+                          ? 'Thiếu'
+                          : 'Cân bằng',
+                      amount: net.abs(),
+                      tone: net > 0
+                          ? finance.income
+                          : net < 0
+                          ? finance.budgetOver
+                          : finance.expense,
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-        ],
-        if (expenses.isNotEmpty) ...[
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Text(
-                'Khoản chi (${expenses.length})',
-                style: Theme.of(context).textTheme.titleMedium,
+          if (incomes.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  'Khoản thu (${incomes.length})',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ),
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-            sliver: SliverAppListSection(
-              itemCount: expenses.length,
-              itemBuilder: (context, index) => _DailyExpenseRow(
-                invoice: expenses[index],
-                category: findCategory(categories, expenses[index].categoryId),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              sliver: SliverAppListSection(
+                itemCount: incomes.length,
+                itemBuilder: (context, index) => _DailyIncomeRow(
+                  income: incomes[index],
+                  category: findCategory(
+                    incomeCategories,
+                    incomes[index].categoryId,
+                  ),
+                ),
               ),
             ),
-          ),
+          ],
+          if (expenses.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  'Khoản chi (${expenses.length})',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+              sliver: SliverAppListSection(
+                itemCount: expenses.length,
+                itemBuilder: (context, index) => _DailyExpenseRow(
+                  invoice: expenses[index],
+                  category: findCategory(
+                    categories,
+                    expenses[index].categoryId,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -257,8 +281,8 @@ class _DailyIncomeRow extends StatelessWidget {
     final categoryName = category?.name ?? 'Chưa phân loại';
     return EntityListRow(
       leading: CategoryAvatar(category: category),
-      title: categoryName,
-      subtitle: '${income.source.label} · $time',
+      title: income.note.isEmpty ? categoryName : income.note,
+      subtitle: '$categoryName · ${income.source.label} · $time',
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

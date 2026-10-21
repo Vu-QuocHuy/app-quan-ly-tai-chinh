@@ -43,7 +43,7 @@ class _CloudProfileSettingsScreenState
     final preferences = _preferences;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Khôi phục tùy chỉnh')),
+      appBar: AppBar(title: const Text('Khôi phục tùy chỉnh', maxLines: 3)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
@@ -56,7 +56,10 @@ class _CloudProfileSettingsScreenState
           if (user == null || store == null)
             Card(
               child: ListTile(
-                title: const Text('Cần đăng nhập để khôi phục tùy chỉnh.'),
+                title: const Text(
+                  'Cần đăng nhập để khôi phục tùy chỉnh.',
+                  maxLines: 3,
+                ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => context.push('/settings/account'),
               ),
@@ -66,7 +69,10 @@ class _CloudProfileSettingsScreenState
           else if (preferences == null)
             Card(
               child: ListTile(
-                title: const Text('Không tải được tùy chỉnh đã lưu'),
+                title: const Text(
+                  'Không tải được tùy chỉnh đã lưu',
+                  maxLines: 3,
+                ),
                 subtitle: Text(_error ?? 'Kiểm tra kết nối rồi thử lại.'),
                 trailing: IconButton(
                   tooltip: 'Thử lại',
@@ -81,7 +87,7 @@ class _CloudProfileSettingsScreenState
                 children: [
                   ListTile(
                     leading: const Icon(Icons.brightness_6_outlined),
-                    title: const Text('Giao diện đã lưu'),
+                    title: const Text('Giao diện đã lưu', maxLines: 3),
                     subtitle: Text(switch (_themeFromName(
                       preferences.themeMode,
                     )) {
@@ -92,7 +98,7 @@ class _CloudProfileSettingsScreenState
                   ),
                   ListTile(
                     leading: const Icon(Icons.notifications_active_outlined),
-                    title: const Text('Cảnh báo ngân sách đã lưu'),
+                    title: const Text('Cảnh báo ngân sách đã lưu', maxLines: 3),
                     subtitle: Text(
                       preferences.budgetAlertsEnabled ? 'Bật' : 'Tắt',
                     ),

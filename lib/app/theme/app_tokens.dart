@@ -16,8 +16,7 @@ import 'package:flutter/material.dart';
 /// * `shimmer` / `skeletonizer` — cùng lý do. Skeleton trong app này là khối
 ///   tĩnh `surfaceContainerHigh`, crossfade bằng `AnimatedSwitcher`.
 ///
-/// Nếu thiết kế đòi cảm giác "kính mờ", câu trả lời là `LinearGradient` dọc ~4%
-/// trong `ShapeDecoration` (miễn phí về shader), không phải blur.
+/// Finmi dùng nền đặc và viền rõ; không dùng gradient hoặc hiệu ứng kính mờ.
 abstract final class AppSpacing {
   /// Lưới 4pt nghiêm ngặt. Thay 11 độ lớn spacing và 139 `SizedBox` hardcode.
   static const double xs = 4;
@@ -42,8 +41,8 @@ abstract final class AppSpacing {
 abstract final class AppShapes {
   static const double xs = 8; // chip dày đặc, đầu cột biểu đồ
   static const double sm = 12; // input, button, ink của list tile, snackbar
-  static const double md = 20; // thẻ, dialog, menu (M3 "large")
-  static const double lg = 28; // bottom sheet, hero (M3 "extra-large")
+  static const double md = 18; // thẻ, dialog, menu (M3 "large")
+  static const double lg = 22; // bottom sheet, hero (M3 "extra-large")
 
   static const BorderRadius cardRadius = BorderRadius.all(Radius.circular(md));
   static const BorderRadius controlRadius = BorderRadius.all(

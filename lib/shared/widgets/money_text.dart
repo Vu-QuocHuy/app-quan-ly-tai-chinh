@@ -27,14 +27,13 @@ class MoneyText extends StatelessWidget {
   final MoneyEmphasis emphasis;
   final String currencyCode;
 
-  /// Lấy màu từ `AppFinanceColors`. Mặc định `expense` = MỰC, không phải màu.
+  /// Lấy màu ngữ nghĩa từ `AppFinanceColors`.
   final FinanceTone? tone;
 
   /// Dùng `MoneyFormatter.compact` -> "12,5 tr ₫". Cho trục biểu đồ.
   final bool compact;
 
-  /// BẮT BUỘC cho hero: "1.234.567.890 ₫" ở 36sp trong ~280dp khả dụng sẽ
-  /// xuống dòng chỉ còn ký hiệu ₫ nếu không có nó.
+  /// Giữ tương thích với các caller cũ; số tiền luôn giữ cỡ chữ người dùng.
   final bool fitToWidth;
 
   final TextAlign? textAlign;
@@ -75,27 +74,19 @@ class MoneyText extends StatelessWidget {
         : MoneyFormatter.format(value, currencyCode: currencyCode);
 
     final label = Text(
-      text,
+      emphasis == MoneyEmphasis.display
+          ? text.replaceAll('.', '.\u200B')
+          : text,
       textAlign: textAlign,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+      softWrap: true,
+      overflow: TextOverflow.visible,
       style: style.copyWith(color: color),
       // Chuỗi đã có dấu phân nhóm; đọc màn hình nên đọc nguyên văn.
       semanticsLabel: text,
     );
 
-    if (!fitToWidth) return label;
-
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: textAlign == TextAlign.right
-          ? Alignment.centerRight
-          : Alignment.centerLeft,
-      child: DefaultTextStyle.merge(
-        style: TextStyle(color: color),
-        child: label,
-      ),
-    );
+    // Preserve the user's text size. Money may wrap at grouping boundaries.
+    return label;
   }
 
   /// Dùng khi cần màu nền tương phản (ví dụ trên `tone.container`).
