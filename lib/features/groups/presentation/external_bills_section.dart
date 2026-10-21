@@ -94,6 +94,7 @@ class ExternalBillsSection extends ConsumerWidget {
         ).showSnackBar(SnackBar(content: Text(friendlyMessage(error))));
       }
     }
+    if (!context.mounted) return;
     ref.invalidate(externalBillsProvider);
   }
 

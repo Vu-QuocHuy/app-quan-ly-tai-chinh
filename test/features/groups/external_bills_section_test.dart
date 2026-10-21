@@ -44,9 +44,10 @@ ExternalBill _bill({
 
 Future<_FakeExpenseGroupService> _pump(
   WidgetTester tester,
-  List<ExternalBill> bills,
-) async {
-  final service = _FakeExpenseGroupService(bills);
+  List<ExternalBill> bills, {
+  bool failSettle = false,
+}) async {
+  final service = _FakeExpenseGroupService(bills, failSettle: failSettle);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [expenseGroupServiceProvider.overrideWithValue(service)],
@@ -116,6 +117,16 @@ void main() {
     expect(service.calls, ['list', 'settle bill-1', 'list']);
   });
 
+  testWidgets('settle lỗi thì báo lỗi và vẫn tải lại', (tester) async {
+    final service = await _pump(tester, [_bill()], failSettle: true);
+
+    await tester.tap(find.text('Tôi đã thanh toán'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(service.calls, ['list', 'settle bill-1', 'list']);
+  });
+
   testWidgets('bấm vào bill hiện danh sách người tham gia', (tester) async {
     await _pump(tester, [_bill()]);
 
@@ -128,7 +139,9 @@ void main() {
 }
 
 class _FakeExpenseGroupService implements ExpenseGroupService {
-  _FakeExpenseGroupService(this.bills);
+  _FakeExpenseGroupService(this.bills, {this.failSettle = false});
+
+  final bool failSettle;
 
   final List<ExternalBill> bills;
   final calls = <String>[];
@@ -142,6 +155,7 @@ class _FakeExpenseGroupService implements ExpenseGroupService {
   @override
   Future<void> settleMyShare(String expenseId) async {
     calls.add('settle $expenseId');
+    if (failSettle) throw Exception('boom');
   }
 
   @override
