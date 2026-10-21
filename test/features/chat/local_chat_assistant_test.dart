@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/core/database/app_database.dart';
 import 'package:hoadon_insight/features/chat/domain/local_chat_assistant.dart';
+import 'package:hoadon_insight/features/chat/presentation/chat_screen.dart';
 import 'package:hoadon_insight/features/income/data/income_repository.dart';
 import 'package:hoadon_insight/features/invoices/data/drift_invoice_repository.dart';
 import 'package:hoadon_insight/features/invoices/domain/invoice_models.dart';
@@ -18,6 +19,19 @@ void main() {
   });
 
   tearDown(() => database.close());
+
+  test('every quick prompt is understood by the offline assistant', () async {
+    final assistant = LocalChatAssistant(repository, incomes);
+    for (final prompt in chatQuickPrompts) {
+      final reply = await assistant.answer(prompt, now: DateTime(2026, 8, 20));
+      expect(
+        reply.text,
+        isNot(contains('Bạn có thể hỏi cụ thể hơn')),
+        reason: prompt,
+      );
+      expect(reply.text, isNot(contains('Hãy nêu số tiền')), reason: prompt);
+    }
+  });
 
   test('answers monthly total from local SQL aggregates', () async {
     final date = DateTime(2026, 8, 12);
