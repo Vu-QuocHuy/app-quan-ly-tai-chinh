@@ -74,7 +74,10 @@ class DailyExpenseHistoryScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Thu chi ngày ${AppDateFormat.shortDate(date)}'),
+        title: Text(
+          'Thu chi ngày ${AppDateFormat.shortDate(date)}',
+          maxLines: 3,
+        ),
       ),
       body: history.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -257,8 +260,8 @@ class _DailyIncomeRow extends StatelessWidget {
     final categoryName = category?.name ?? 'Chưa phân loại';
     return EntityListRow(
       leading: CategoryAvatar(category: category),
-      title: categoryName,
-      subtitle: '${income.source.label} · $time',
+      title: income.note.isEmpty ? categoryName : income.note,
+      subtitle: '$categoryName · ${income.source.label} · $time',
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

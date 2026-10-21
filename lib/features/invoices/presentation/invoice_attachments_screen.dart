@@ -32,7 +32,7 @@ class _InvoiceAttachmentsScreenState
     final attachments = ref.watch(invoiceAttachmentsProvider(widget.invoiceId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Chứng từ gốc')),
+      appBar: AppBar(title: const Text('Chứng từ gốc', maxLines: 3)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
@@ -98,7 +98,7 @@ class _InvoiceAttachmentsScreenState
               error: (error, _) => Card(
                 child: ListTile(
                   leading: const Icon(Icons.cloud_off_outlined),
-                  title: const Text('Không tải được chứng từ'),
+                  title: const Text('Không tải được chứng từ', maxLines: 3),
                   subtitle: Text(friendlyMessage(error)),
                   trailing: IconButton(
                     tooltip: 'Thử tải lại',
@@ -173,7 +173,9 @@ class _InvoiceAttachmentsScreenState
       final bytes = await file.readAsBytes();
       if (!mounted) return;
       final store = ref.read(invoiceAttachmentStoreProvider);
-      if (store == null) throw StateError('Supabase chưa được cấu hình.');
+      if (store == null) {
+        throw StateError('Dịch vụ tài khoản chưa được cấu hình.');
+      }
       await store.upload(
         invoiceId: widget.invoiceId,
         fileName: file.name,
@@ -195,7 +197,9 @@ class _InvoiceAttachmentsScreenState
   Future<void> _open(InvoiceAttachment attachment) async {
     try {
       final store = ref.read(invoiceAttachmentStoreProvider);
-      if (store == null) throw StateError('Supabase chưa được cấu hình.');
+      if (store == null) {
+        throw StateError('Dịch vụ tài khoản chưa được cấu hình.');
+      }
       final uri = await store.signedUrl(attachment);
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened) throw StateError('Không mở được tệp trên thiết bị này.');
@@ -213,7 +217,7 @@ class _InvoiceAttachmentsScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Xóa chứng từ?'),
+        title: const Text('Xóa chứng từ?', maxLines: 3),
         content: Text('Tệp “${attachment.fileName}” sẽ bị xóa khỏi cloud.'),
         actions: [
           TextButton(
@@ -230,7 +234,9 @@ class _InvoiceAttachmentsScreenState
     if (confirmed != true || !mounted) return;
     try {
       final store = ref.read(invoiceAttachmentStoreProvider);
-      if (store == null) throw StateError('Supabase chưa được cấu hình.');
+      if (store == null) {
+        throw StateError('Dịch vụ tài khoản chưa được cấu hình.');
+      }
       await store.delete(attachment);
       ref.invalidate(invoiceAttachmentsProvider(widget.invoiceId));
     } on Object catch (error) {
@@ -265,7 +271,10 @@ class _AttachmentTile extends StatelessWidget {
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: Text('$date · ${_formatSize(attachment.sizeBytes)}'),
+      subtitle: Text(
+        '$date · ${_formatSize(attachment.sizeBytes)}',
+        maxLines: 3,
+      ),
       onTap: onOpen,
       trailing: IconButton(
         tooltip: 'Xóa chứng từ',

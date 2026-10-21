@@ -1,3 +1,4 @@
+import '../../../shared/widgets/finmi_text_field.dart';
 import 'dart:async';
 
 import 'package:camera/camera.dart';
@@ -24,11 +25,13 @@ import '../domain/qr_payment_draft.dart';
 class QrPaymentScreen extends ConsumerStatefulWidget {
   const QrPaymentScreen({
     this.showScanTabs = false,
+    this.initialScanTab = 0,
     this.onOcrImageReady,
     super.key,
   });
 
   final bool showScanTabs;
+  final int initialScanTab;
   final Future<void> Function(XFile image)? onOcrImageReady;
 
   @override
@@ -75,6 +78,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   @override
   void initState() {
     super.initState();
+    _activeScanTab = widget.initialScanTab;
     _store = ref.read(qrPaymentDraftStoreProvider);
     WidgetsBinding.instance.addObserver(this);
     _amountController = TextEditingController();
@@ -131,6 +135,9 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
         _returnedFromBank = draft.bankAppId != null;
       }
     });
+    if (draft == null && _activeScanTab == 1 && widget.showScanTabs) {
+      unawaited(_startOcrCamera());
+    }
     if (draft != null) {
       unawaited(_loadBanks());
       if (draft.bankAppId != null) {
@@ -698,10 +705,22 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
           bottom: widget.showScanTabs && draft == null && !_loadingDraft
               ? TabBar(
                   tabs: [
-                    Tab(icon: Icon(Icons.qr_code_scanner), text: 'QR'),
                     Tab(
-                      icon: Icon(Icons.document_scanner_outlined),
-                      text: 'OCR',
+                      height:
+                          64 *
+                          (MediaQuery.textScalerOf(context).scale(14) / 14),
+                      icon: const Icon(Icons.qr_code_scanner),
+                      child: const Text(
+                        'QR thanh toán',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    Tab(
+                      height:
+                          64 *
+                          (MediaQuery.textScalerOf(context).scale(14) / 14),
+                      icon: const Icon(Icons.document_scanner_outlined),
+                      child: const Text('Hóa đơn', textAlign: TextAlign.center),
                     ),
                   ],
                   onTap: _onScanTabSelected,
@@ -1032,7 +1051,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
           const SizedBox(height: 12),
           _DetailRow(label: 'Ngân hàng nhận', value: _bankLabel(draft)),
           const SizedBox(height: 12),
-          TextFormField(
+          FinmiTextField(
             controller: _accountController,
             textCapitalization: TextCapitalization.characters,
             maxLength: 34,
@@ -1053,7 +1072,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
             },
           ),
           const SizedBox(height: 8),
-          TextFormField(
+          FinmiTextField(
             controller: _recipientController,
             maxLength: 140,
             textCapitalization: TextCapitalization.words,
@@ -1064,7 +1083,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
             ),
           ),
           const SizedBox(height: 8),
-          TextFormField(
+          FinmiTextField(
             controller: _amountController,
             keyboardType: const TextInputType.numberWithOptions(decimal: false),
             inputFormatters: [
@@ -1115,7 +1134,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
             ),
           ],
           const SizedBox(height: 8),
-          TextFormField(
+          FinmiTextField(
             controller: _memoController,
             maxLength: 140,
             decoration: InputDecoration(

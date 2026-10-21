@@ -54,8 +54,7 @@ class MonthSelector extends ConsumerWidget {
                       Flexible(
                         child: Text(
                           label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          softWrap: true,
                           style: Theme.of(context).textTheme.titleSmall
                               ?.copyWith(color: scheme.onSurface),
                         ),

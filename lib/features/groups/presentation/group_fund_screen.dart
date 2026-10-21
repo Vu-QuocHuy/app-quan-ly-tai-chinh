@@ -176,7 +176,7 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Quỹ chung'),
+      title: const Text('Quỹ chung', maxLines: 3),
       actions: [
         IconButton(
           onPressed: _refresh,

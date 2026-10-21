@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme/app_tokens.dart';
 import '../../../app/theme/finance_colors.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
@@ -14,6 +13,7 @@ class MonthlyTransactionCalendar extends StatelessWidget {
     required this.snapshot,
     required this.incomes,
     required this.onSelectDay,
+    this.selectedDay,
     super.key,
   });
 
@@ -21,6 +21,7 @@ class MonthlyTransactionCalendar extends StatelessWidget {
   final DashboardSnapshot snapshot;
   final List<IncomeEntry> incomes;
   final ValueChanged<DateTime> onSelectDay;
+  final DateTime? selectedDay;
 
   @override
   Widget build(BuildContext context) {
@@ -41,62 +42,98 @@ class MonthlyTransactionCalendar extends StatelessWidget {
     final daysInMonth = DateUtils.getDaysInMonth(month.year, month.month);
     final finance = Theme.of(context).extension<AppFinanceColors>()!;
 
+    final scale = MediaQuery.textScalerOf(context).scale(12) / 12;
+    final rows = ((leadingDays + daysInMonth) / 7).ceil();
     return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.sm),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                for (final weekday in const [
-                  'T2',
-                  'T3',
-                  'T4',
-                  'T5',
-                  'T6',
-                  'T7',
-                  'CN',
-                ])
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        weekday,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+      padding: const EdgeInsets.all(6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final minimumWidth = 48.0 * scale * 7;
+              final width = constraints.maxWidth > minimumWidth
+                  ? constraints.maxWidth
+                  : minimumWidth;
+              return SizedBox(
+                height: rows * 68 * scale + 28 * scale + 8,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: width,
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          height: 28 * scale,
+                          child: Row(
+                            children: [
+                              for (final weekday in const [
+                                'T2',
+                                'T3',
+                                'T4',
+                                'T5',
+                                'T6',
+                                'T7',
+                                'CN',
+                              ])
+                                Expanded(
+                                  child: Center(
+                                    child: Text(
+                                      weekday,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.labelSmall,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 8),
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: leadingDays + daysInMonth,
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 7,
+                                mainAxisExtent: 68 * scale,
+                              ),
+                          itemBuilder: (context, index) {
+                            if (index < leadingDays) {
+                              return const SizedBox.shrink();
+                            }
+                            final day = index - leadingDays + 1;
+                            final date = DateTime(month.year, month.month, day);
+                            return _CalendarDay(
+                              date: date,
+                              selected: DateUtils.isSameDay(selectedDay, date),
+                              net:
+                                  (incomeByDay[day] ?? 0) -
+                                  (snapshot.dailyTotals[day] ?? 0),
+                              positiveColor: finance.income.color,
+                              negativeColor: Theme.of(
+                                context,
+                              ).colorScheme.error,
+                              onTap: () => onSelectDay(date),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
-              ],
+                ),
+              );
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text(
+              '+ Thu nhiều hơn chi · − Chi nhiều hơn thu\nK = nghìn · M = triệu · B = tỷ\nChạm ngày để xem thống kê. Vuốt ngang để xem đủ tuần.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: AppSpacing.sm),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: leadingDays + daysInMonth,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7,
-                crossAxisSpacing: AppSpacing.xs,
-                mainAxisSpacing: AppSpacing.xs,
-                mainAxisExtent: 64,
-              ),
-              itemBuilder: (context, index) {
-                if (index < leadingDays) return const SizedBox.shrink();
-                final day = index - leadingDays + 1;
-                final date = DateTime(month.year, month.month, day);
-                return _CalendarDay(
-                  date: date,
-                  net:
-                      (incomeByDay[day] ?? 0) -
-                      (snapshot.dailyTotals[day] ?? 0),
-                  positiveColor: finance.income.color,
-                  negativeColor: Theme.of(context).colorScheme.error,
-                  onTap: () => onSelectDay(date),
-                );
-              },
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -109,6 +146,7 @@ class _CalendarDay extends StatelessWidget {
     required this.positiveColor,
     required this.negativeColor,
     required this.onTap,
+    required this.selected,
   });
 
   final DateTime date;
@@ -116,15 +154,16 @@ class _CalendarDay extends StatelessWidget {
   final Color positiveColor;
   final Color negativeColor;
   final VoidCallback onTap;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isToday = DateUtils.isSameDay(date, DateTime.now());
     final shape = RoundedRectangleBorder(
-      borderRadius: AppShapes.controlRadius,
+      borderRadius: BorderRadius.circular(6),
       side: BorderSide(
-        color: isToday
+        color: selected || isToday
             ? theme.colorScheme.primary
             : theme.colorScheme.outlineVariant,
       ),
@@ -140,9 +179,12 @@ class _CalendarDay extends StatelessWidget {
 
     return Semantics(
       button: true,
+      excludeSemantics: true,
+      onTap: onTap,
+      selected: selected,
       label: label,
       child: Material(
-        color: isToday
+        color: selected
             ? theme.colorScheme.primaryContainer
             : theme.colorScheme.surfaceContainerLow,
         shape: shape,
@@ -161,21 +203,11 @@ class _CalendarDay extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 const Spacer(),
-                SizedBox(
-                  width: double.infinity,
-                  height: 18,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      net == 0
-                          ? '—'
-                          : '${net > 0 ? '+' : '−'}${_calendarAmount(net.abs())}',
-                      maxLines: 1,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                Text(
+                  compactNet(net),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const Spacer(),
@@ -186,17 +218,29 @@ class _CalendarDay extends StatelessWidget {
       ),
     );
   }
+}
 
-  String _calendarAmount(int amount) {
-    if (amount >= 1000000) {
-      return MoneyFormatter.compact(
-        amount,
-      ).replaceAll(' tr ₫', 'tr').replaceAll(' tỷ ₫', 'tỷ');
+/// Compact calendar labels; semantics and the daily list retain exact amounts.
+String compactNet(int amount) {
+  if (amount == 0) return '0';
+  final value = amount.abs();
+  final units = [
+    (1000000000000000, 'P'),
+    (1000000000000, 'T'),
+    (1000000000, 'B'),
+    (1000000, 'M'),
+    (1000, 'K'),
+  ];
+  for (final unit in units) {
+    if (value >= unit.$1) {
+      final scaled = value / unit.$1;
+      final text = scaled
+          .toStringAsFixed(
+            scaled < 10 && scaled != scaled.roundToDouble() ? 1 : 0,
+          )
+          .replaceAll('.', ',');
+      return '${amount > 0 ? '+' : '−'}$text${unit.$2}';
     }
-    if (amount < 1000) return '$amount';
-    final tenths = amount ~/ 100;
-    final whole = tenths ~/ 10;
-    final decimal = tenths % 10;
-    return '${decimal == 0 ? whole : '$whole,$decimal'}K';
   }
+  return '${amount > 0 ? '+' : '−'}$value';
 }

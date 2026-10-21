@@ -1,3 +1,4 @@
+import '../../../shared/widgets/finmi_page_header.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -36,20 +37,19 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            pinned: true,
-            title: const Text('Nhóm và quỹ chung'),
+          FinmiSliverHeader(
+            title: 'Nhóm',
             actions: [
-              IconButton(
+              FinmiHeaderAction(
                 tooltip: 'Làm mới nhóm',
                 onPressed: _refresh,
-                icon: const Icon(Icons.refresh),
+                icon: Icons.refresh,
               ),
             ],
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
               child: _buildActions(context, service),
             ),
           ),
@@ -61,7 +61,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
               child: AppEmptyState(
                 icon: Icons.cloud_off_outlined,
                 title: 'Nhóm cần kết nối tài khoản',
-                message: 'Đăng nhập Supabase để tạo hoặc tham gia nhóm.',
+                message: 'Đăng nhập tài khoản để tạo hoặc tham gia nhóm.',
               ),
             )
           else
@@ -80,7 +80,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
               AsyncData(value: final items) => [
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                     child: Text(
                       'Nhóm của tôi',
                       style: Theme.of(context).textTheme.titleMedium,
@@ -88,7 +88,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: SliverList.separated(
                     itemCount: items.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 10),
@@ -145,7 +145,19 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   Widget _buildGroupCard(ExpenseGroup group) {
     return Card(
       child: ListTile(
-        leading: const CircleAvatar(child: Icon(Icons.groups_outlined)),
+        leading: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(
+            Icons.groups_outlined,
+            size: 20,
+            color: Theme.of(context).colorScheme.onPrimary,
+          ),
+        ),
         title: Text(group.name),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => context.push('/groups/${group.id}'),
@@ -616,7 +628,7 @@ class _GroupDetails extends StatelessWidget {
         Card(
           child: ListTile(
             leading: const Icon(Icons.account_balance_wallet_outlined),
-            title: const Text('Quỹ chung'),
+            title: const Text('Quỹ chung', maxLines: 3),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/groups/${details.group.id}/fund'),
           ),
@@ -780,11 +792,11 @@ class _DirectShareInbox extends ConsumerWidget {
     final shares = ref.watch(directBillSharesProvider);
     return shares.when(
       loading: () => const Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
         child: LinearProgressIndicator(),
       ),
       error: (error, _) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
         child: AppCallout(
           tone: CalloutTone.warning,
           message: 'Không tải được hộp thư chia sẻ: ${friendlyMessage(error)}',
@@ -801,7 +813,7 @@ class _DirectShareInbox extends ConsumerWidget {
             .toList(growable: false);
         if (visible.isEmpty) return const SizedBox.shrink();
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
           child: Card(
             color: Theme.of(context).colorScheme.tertiaryContainer,
             child: Padding(
@@ -1241,14 +1253,14 @@ class _ExpenseCard extends StatelessWidget {
                         value: 'edit',
                         child: ListTile(
                           leading: Icon(Icons.edit_outlined),
-                          title: Text('Sửa khoản chi'),
+                          title: Text('Sửa khoản chi', maxLines: 3),
                         ),
                       ),
                       PopupMenuItem(
                         value: 'delete',
                         child: ListTile(
                           leading: Icon(Icons.delete_outline),
-                          title: Text('Xóa khoản chi'),
+                          title: Text('Xóa khoản chi', maxLines: 3),
                         ),
                       ),
                     ],
@@ -1391,7 +1403,7 @@ class _InvoiceAllocationDialogState extends State<_InvoiceAllocationDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Phân chia hóa đơn'),
+      title: const Text('Phân chia hóa đơn', maxLines: 3),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(

@@ -74,7 +74,7 @@ class _InvoiceShareDialogState extends ConsumerState<InvoiceShareDialog> {
   Widget build(BuildContext context) {
     final groups = ref.watch(expenseGroupsProvider);
     return AlertDialog(
-      title: const Text('Chia sẻ hóa đơn'),
+      title: const Text('Chia sẻ hóa đơn', maxLines: 3),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(

@@ -1,3 +1,5 @@
+import 'package:hoadon_insight/app/theme/app_theme.dart';
+import 'package:hoadon_insight/shared/widgets/finmi_brand.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,7 +24,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Cần cấu hình tài khoản'), findsOneWidget);
-    expect(find.textContaining('SUPABASE_URL'), findsOneWidget);
+    expect(find.textContaining('người quản lý ứng dụng'), findsOneWidget);
     expect(find.text('Tiếp tục dùng offline'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -34,7 +36,7 @@ void main() {
     await tester.pumpWidget(_app(client));
     await tester.pump();
 
-    expect(find.text('Làm chủ chi tiêu,\ntừng ngày một.'), findsOneWidget);
+    expect(find.text('Theo dõi chi tiêu mỗi ngày'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Mật khẩu'), findsOneWidget);
     expect(find.byType(AppBar), findsNothing);
@@ -63,7 +65,7 @@ void main() {
     await tester.pumpWidget(_app(client, textScale: 1.5));
     await tester.pump();
 
-    expect(find.text('Làm chủ chi tiêu,\ntừng ngày một.'), findsOneWidget);
+    expect(find.text('Theo dõi chi tiêu mỗi ngày'), findsOneWidget);
     expect(find.byType(Scrollable), findsWidgets);
     expect(tester.takeException(), isNull);
   });
@@ -77,9 +79,12 @@ void main() {
     await tester.pumpWidget(_app(client));
     await tester.pump();
 
-    expect(find.text('Theo dõi thu chi'), findsOneWidget);
-    expect(find.text('Kiểm soát ngân sách'), findsOneWidget);
-    expect(find.text('Nhìn lại thói quen'), findsOneWidget);
+    expect(find.byType(FinmiBrand), findsOneWidget);
+    expect(find.text('Theo dõi chi tiêu mỗi ngày'), findsOneWidget);
+    expect(
+      tester.getRect(find.byType(FinmiBrand)).right,
+      lessThan(tester.getRect(find.byType(TextFormField).first).left),
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -87,8 +92,8 @@ void main() {
     await tester.pumpWidget(_app(client, themeMode: ThemeMode.dark));
     await tester.pump();
 
-    expect(find.text('Làm chủ chi tiêu,\ntừng ngày một.'), findsOneWidget);
-    expect(find.text('CHÀO MỪNG TRỞ LẠI'), findsOneWidget);
+    expect(find.text('Theo dõi chi tiêu mỗi ngày'), findsOneWidget);
+    expect(find.text('Chào mừng trở lại'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -160,12 +165,8 @@ Widget _app(
       authUserProvider.overrideWith((ref) => Stream.value(null)),
     ],
     child: MaterialApp(
-      theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),
-      darkTheme: ThemeData(
-        colorSchemeSeed: Colors.blue,
-        brightness: Brightness.dark,
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       themeMode: themeMode,
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(
