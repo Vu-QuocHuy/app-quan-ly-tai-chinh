@@ -99,7 +99,8 @@ class ChatScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends ConsumerState<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen>
+    with WidgetsBindingObserver {
   static const _maxVoiceRecordingSeconds = 30;
   static const _localAnswerTimeout = Duration(seconds: 2);
   static const _llmAnswerTimeout = Duration(seconds: 30);
@@ -111,6 +112,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   late List<ChatMessage> _messages;
   bool _sending = false;
   bool _recording = false;
+  bool _startingRecording = false;
+  int _voiceSession = 0;
   bool _transcribing = false;
   Timer? _recordingTimer;
   String? _connectionNote;
@@ -123,6 +126,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _messages = [_welcomeMessage()];
     unawaited(
       ref
@@ -134,16 +138,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _voiceSession++;
+    if (_usingWebSpeech) stopWebSpeech();
     _recordingTimer?.cancel();
     _inputController.dispose();
     _scrollController.dispose();
     unawaited(
-      (_recording || _transcribing
+      (_recording || _startingRecording || _transcribing
               ? _audioRecorder.cancel()
               : Future<void>.value())
           .then((_) => _audioRecorder.dispose()),
     );
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      unawaited(_cancelVoiceInput());
+    }
+  }
+
+  Future<void> _cancelVoiceInput() async {
+    _voiceSession++;
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+    if (_usingWebSpeech) {
+      _usingWebSpeech = false;
+      stopWebSpeech();
+      _inputController.text = _webSpeechBaseText;
+    }
+    final wasRecording = _recording || _startingRecording;
+    setState(() {
+      _recording = false;
+      _transcribing = wasRecording;
+    });
+    try {
+      if (wasRecording) await _audioRecorder.cancel();
+    } on Object catch (error) {
+      if (mounted) setState(() => _connectionNote = friendlyMessage(error));
+    } finally {
+      if (mounted) setState(() => _transcribing = false);
+    }
   }
 
   @override
@@ -267,7 +305,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildSuggestions(BuildContext context) {
-    if (_sending || _recording || _transcribing) {
+    if (_sending || _recording || _transcribing || _startingRecording) {
       return const SizedBox.shrink();
     }
     final isEn = context.tr.isEn;
@@ -288,8 +326,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildComposer(BuildContext context) {
-    final canSend = !_sending && _inputController.text.trim().isNotEmpty;
-    final canRecord = !_sending && !_transcribing;
+    final busy = _sending || _transcribing || _startingRecording;
+    final canSend =
+        !busy && !_recording && _inputController.text.trim().isNotEmpty;
+    final canRecord = !busy;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isListening = _recording || _transcribing;
@@ -341,7 +381,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       constraints: const BoxConstraints(minHeight: 44),
                       child: TextField(
                         controller: _inputController,
-                        enabled: !_sending,
+                        enabled: !busy && !_recording,
                         minLines: 1,
                         maxLines: 4,
                         scrollPhysics: const ClampingScrollPhysics(),
@@ -396,6 +436,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       ),
                     ),
                   ),
+                  if (_recording)
+                    IconButton(
+                      tooltip: context.tr.isEn
+                          ? 'Cancel recording'
+                          : 'Xóa bản ghi âm',
+                      onPressed: _cancelVoiceInput,
+                      icon: const Icon(Icons.delete_outline),
+                    ),
                   const SizedBox(width: 8),
                   Semantics(
                     button: true,
@@ -473,7 +521,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       await _finishVoiceInput();
       return;
     }
-    if (_sending || _transcribing) return;
+    if (_sending || _transcribing || _startingRecording) return;
+    final session = ++_voiceSession;
 
     final tr = context.tr;
     if (kIsWeb && isWebSpeechSupported()) {
@@ -491,30 +540,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       startWebSpeech(
         lang: tr.isEn ? 'en-US' : 'vi-VN',
         onResult: (text) {
-          if (!mounted) return;
+          if (!mounted || !_usingWebSpeech) return;
           final combined = _webSpeechBaseText.isEmpty
               ? text
               : '$_webSpeechBaseText $text';
-          _inputController.text = combined;
+          setState(() => _inputController.text = combined);
           _inputController.selection = TextSelection.collapsed(
             offset: combined.length,
           );
         },
         onError: (err) {
-          if (!mounted) return;
+          if (!mounted || !_usingWebSpeech) return;
+          _recordingTimer?.cancel();
+          _usingWebSpeech = false;
           setState(() {
             _recording = false;
             _connectionNote = err;
           });
         },
         onEnd: () {
-          if (!mounted) return;
+          if (!mounted || !_usingWebSpeech) return;
+          _recordingTimer?.cancel();
+          _usingWebSpeech = false;
           setState(() => _recording = false);
         },
       );
       return;
     }
 
+    setState(() => _startingRecording = true);
     try {
       if (!await _audioRecorder.hasPermission()) {
         throw StateError(
@@ -523,18 +577,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               : 'Bạn cần cấp quyền micro để nhập bằng giọng nói.',
         );
       }
+      if (!mounted || session != _voiceSession) return;
       final path = kIsWeb
-          ? ''
+          ? 'voice-${_uuid.v4()}.wav'
           : '${(await getTemporaryDirectory()).path}/voice-${_uuid.v4()}.wav';
+      if (!mounted || session != _voiceSession) return;
       await _audioRecorder.start(
-        RecordConfig(
-          encoder: kIsWeb ? AudioEncoder.opus : AudioEncoder.wav,
+        const RecordConfig(
+          encoder: AudioEncoder.wav,
           sampleRate: 16000,
           numChannels: 1,
         ),
         path: path,
       );
-      if (!mounted) {
+      if (!mounted || session != _voiceSession) {
         await _audioRecorder.cancel();
         return;
       }
@@ -548,6 +604,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
     } on Object catch (error) {
       if (mounted) setState(() => _connectionNote = friendlyMessage(error));
+    } finally {
+      if (mounted) setState(() => _startingRecording = false);
     }
   }
 
@@ -566,6 +624,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
 
+    final session = _voiceSession;
+    final requestLocale = context.tr.isEn ? 'en-US' : 'vi-VN';
     String? recordingPath;
     setState(() {
       _recording = false;
@@ -584,16 +644,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       await _audioRecorder.cancel();
       await deleteVoiceFile(recordingPath);
       recordingPath = null;
+      if (!mounted || session != _voiceSession) return;
       final client = ref.read(supabaseClientProvider);
       if (client == null) throw StateError('Chưa kết nối được dịch vụ AI.');
       final response = await client.functions.invoke(
         'ai-api',
         body: {
           'action': 'transcribe',
+          'locale': requestLocale,
           'requestId': _uuid.v4(),
           'audioBase64': base64Encode(bytes),
         },
       );
+      if (!mounted || session != _voiceSession) return;
       final data = response.data;
       if (data is! Map || data['text'] is! String) {
         throw const FormatException(
@@ -630,7 +693,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> _send(String value) async {
     final question = value.trim();
-    if (question.isEmpty || _sending) return;
+    if (question.isEmpty ||
+        _sending ||
+        _recording ||
+        _startingRecording ||
+        _transcribing)
+      return;
     final effectiveQuestion = _enToViPromptMap[question] ?? question;
     final isBlockedQuestion = ChatPrivacyPolicy.isBlockedQuestion(
       effectiveQuestion,

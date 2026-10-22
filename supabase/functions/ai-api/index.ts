@@ -34,6 +34,7 @@ type DraftTransactionRequest = {
 };
 
 type TranscriptionRequest = {
+  locale: "vi-VN" | "en-US";
   requestId: string;
   audio: Uint8Array;
 };
@@ -332,7 +333,7 @@ function parseTranscription(body: JsonObject): TranscriptionRequest {
   ) {
     throw new FunctionError(400, "INVALID_AUDIO", "Chỉ nhận bản ghi WAV tối đa 15 MB.");
   }
-  return {requestId, audio};
+  return {requestId, audio, locale: body.locale == null ? "vi-VN" : locale(body)};
 }
 
 function parseDraftTransaction(body: JsonObject): DraftTransactionRequest {
@@ -488,7 +489,7 @@ async function transcribeAudio(request: TranscriptionRequest) {
   new Uint8Array(audioBuffer).set(request.audio);
   form.append("file", new Blob([audioBuffer], {type: "audio/wav"}), "voice.wav");
   form.append("model", transcriptionModel);
-  form.append("language", "vi");
+  form.append("language", request.locale === "en-US" ? "en" : "vi");
   form.append("response_format", "json");
   const response = await fetch(`${ninerRouterBaseUrl()}/audio/transcriptions`, {
     method: "POST",
