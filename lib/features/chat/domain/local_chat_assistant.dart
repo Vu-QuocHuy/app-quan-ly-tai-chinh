@@ -14,6 +14,110 @@ class LocalChatAssistant {
   final InvoiceRepository _repository;
   final IncomeRepository _incomes;
 
+  Future<ChatReply> executeTool(ChatToolCall call, {DateTime? now}) async {
+    final reference = now ?? DateTime.now();
+    final match = RegExp(r'^(\d{4})-(0[1-9]|1[0-2])$').firstMatch(call.period);
+    final month = call.period == 'current'
+        ? DateTime(reference.year, reference.month)
+        : match == null
+        ? throw const FormatException('Kỳ dữ liệu không hợp lệ.')
+        : DateTime(int.parse(match.group(1)!), int.parse(match.group(2)!));
+    final tools = LocalChatTools(_repository, _incomes);
+    final monthKey = MonthUtils.key(month);
+    final citation = ChatCitation(
+      label: 'Dữ liệu cá nhân ${MonthUtils.label(month)}',
+      sourceType: 'local',
+      sourceId: monthKey,
+    );
+
+    switch (call.name) {
+      case 'get_cashflow_summary':
+        final dashboard = await tools.monthSummary(monthKey);
+        final income = (await tools.incomeEntries())
+            .where((entry) => MonthUtils.key(entry.receivedAt) == monthKey)
+            .fold<int>(0, (sum, entry) => sum + entry.amountMinor);
+        return ChatReply(
+          text: 'Đã lấy dữ liệu thu chi.',
+          citations: [citation],
+          facts: [
+            ChatFact('period', MonthUtils.label(month)),
+            ChatFact('income_total_minor_vnd', '$income'),
+            ChatFact('total_minor_vnd', '${dashboard.totalMinor}'),
+          ],
+        );
+      case 'get_expense_summary':
+        final dashboard = await tools.monthSummary(monthKey);
+        return ChatReply(
+          text: 'Đã lấy dữ liệu chi tiêu.',
+          citations: [citation],
+          facts: [
+            ..._summaryFacts(dashboard, month),
+            ..._categoryFacts(dashboard),
+          ],
+        );
+      case 'get_income_summary':
+        final entries = (await tools.incomeEntries())
+            .where((entry) => MonthUtils.key(entry.receivedAt) == monthKey)
+            .toList(growable: false);
+        return ChatReply(
+          text: 'Đã lấy dữ liệu khoản thu.',
+          citations: [citation],
+          facts: [
+            ChatFact('period', MonthUtils.label(month)),
+            ChatFact('income_count', '${entries.length}'),
+            ChatFact(
+              'income_total_minor_vnd',
+              '${entries.fold<int>(0, (sum, entry) => sum + entry.amountMinor)}',
+            ),
+          ],
+        );
+      case 'get_budget_status':
+        final result = await tools.budgetStatus(monthKey);
+        return ChatReply(
+          text: 'Đã lấy tình hình ngân sách.',
+          citations: [citation],
+          facts: _budgetFacts(result.dashboard, result.budgets, month),
+        );
+      case 'get_spending_insights':
+        final insights = await tools.spendingInsights(monthKey);
+        return ChatReply(
+          text: 'Đã lấy phân tích chi tiêu.',
+          citations: [citation],
+          facts: [
+            ..._insightFacts(insights, month),
+            ..._recurringFacts(insights),
+          ],
+        );
+      case 'get_recent_invoices':
+        final invoices = (await tools.recentTransactions(limit: 5)).items;
+        return ChatReply(
+          text: 'Đã lấy các hóa đơn gần đây.',
+          citations: _invoiceCitations(citation, invoices),
+          facts: [
+            ..._resultFacts(invoices),
+            for (final (index, invoice) in invoices.indexed) ...[
+              ChatFact(
+                'recent_invoice_${index + 1}_seller',
+                invoice.sellerName,
+              ),
+              ChatFact(
+                'recent_invoice_${index + 1}_date',
+                (invoice.issuedAt ?? invoice.createdAt)
+                    .toIso8601String()
+                    .substring(0, 10),
+              ),
+              ChatFact(
+                'recent_invoice_${index + 1}_amount_minor_vnd',
+                '${invoice.totalMinor}',
+              ),
+            ],
+          ],
+        );
+      default:
+        throw const FormatException('Công cụ chatbot không được phép.');
+    }
+  }
+
   Future<ChatReply> answer(String question, {DateTime? now}) async {
     final tools = LocalChatTools(_repository, _incomes);
     final reference = now ?? DateTime.now();
@@ -57,14 +161,31 @@ class LocalChatAssistant {
       final adjustedSavings = baseSavings + scenario.amountMinor;
       return ChatReply(
         text:
-            'Nếu thay đổi ${MoneyFormatter.format(scenario.amountMinor)} mỗi tháng, '
-            'chênh lệch thu − chi dự kiến là ${MoneyFormatter.format(adjustedSavings)}/tháng; '
-            'sau $months tháng là ${MoneyFormatter.format(adjustedSavings * months)}. '
-            'Đây là phép tính giả định, chưa ghi giao dịch.',
+            'Nếu bạn điều chỉnh ${MoneyFormatter.format(scenario.amountMinor)} mỗi tháng, '
+            'mức tích lũy dự kiến sẽ là ${MoneyFormatter.format(adjustedSavings)}/tháng. '
+            'Sau $months tháng, bạn có thể để dành được khoảng ${MoneyFormatter.format(adjustedSavings * months)} 🎉. '
+            '(Lưu ý: Đây là ước tính giả định, chưa ghi giao dịch vào ứng dụng nhé).',
         citations: [citation],
         facts: [
+          ChatFact('period', MonthUtils.label(month)),
           ChatFact('scenario_monthly_savings_minor_vnd', '$adjustedSavings'),
           ChatFact('scenario_months', '$months'),
+        ],
+      );
+    }
+
+    if (_isCashflowBalanceQuestion(normalized)) {
+      final dashboard = await tools.monthSummary(monthKey);
+      final income = (await tools.incomeEntries())
+          .where((entry) => MonthUtils.key(entry.receivedAt) == monthKey)
+          .fold<int>(0, (sum, entry) => sum + entry.amountMinor);
+      return ChatReply(
+        text: 'Mình đã lấy dữ liệu thu và chi của ${MonthUtils.label(month)}.',
+        citations: [citation],
+        facts: [
+          ChatFact('period', MonthUtils.label(month)),
+          ChatFact('income_total_minor_vnd', '$income'),
+          ChatFact('total_minor_vnd', '${dashboard.totalMinor}'),
         ],
       );
     }
@@ -84,9 +205,18 @@ class LocalChatAssistant {
       );
       String answer;
       if (normalized.contains('gan day') || normalized.contains('moi nhat')) {
-        answer = entries.isEmpty
-            ? 'Chưa có khoản thu nào được lưu trên thiết bị.'
-            : 'Các khoản thu gần đây: ${entries.take(5).map((entry) => '${names[entry.categoryId] ?? 'Chưa phân loại'}: ${MoneyFormatter.format(entry.amountMinor)}').join('; ')}.';
+        if (entries.isEmpty) {
+          answer = 'Bạn chưa có khoản thu nào được ghi nhận trên thiết bị.';
+        } else {
+          final items = entries
+              .take(5)
+              .map(
+                (entry) =>
+                    '• ${names[entry.categoryId] ?? 'Chưa phân loại'}: ${MoneyFormatter.format(entry.amountMinor)}',
+              )
+              .join('\n');
+          answer = 'Mình tìm thấy các khoản thu gần đây này:\n$items';
+        }
       } else if (_isCategoryQuestion(normalized) ||
           _isRankingQuestion(normalized)) {
         final totals = <String, int>{};
@@ -99,12 +229,24 @@ class LocalChatAssistant {
         }
         final ranked = totals.entries.toList()
           ..sort((a, b) => b.value.compareTo(a.value));
-        answer = ranked.isEmpty
-            ? '${MonthUtils.label(month)} chưa có khoản thu nào.'
-            : 'Khoản thu theo danh mục ${MonthUtils.label(month)}: ${ranked.take(5).map((entry) => '${names[entry.key] ?? 'Chưa phân loại'}: ${MoneyFormatter.format(entry.value)}').join('; ')}.';
+        if (ranked.isEmpty) {
+          answer =
+              'Trong ${MonthUtils.label(month)}, bạn chưa có khoản thu nào.';
+        } else {
+          final items = ranked
+              .take(5)
+              .map(
+                (entry) =>
+                    '• ${names[entry.key] ?? 'Chưa phân loại'}: ${MoneyFormatter.format(entry.value)}',
+              )
+              .join('\n');
+          answer =
+              'Các nguồn thu trong ${MonthUtils.label(month)} theo danh mục gồm:\n$items';
+        }
       } else {
         answer =
-            '${MonthUtils.label(month)} bạn đã ghi nhận ${monthly.length} khoản thu, tổng thu ${MoneyFormatter.format(total)}.';
+            'Trong ${MonthUtils.label(month)}, bạn đã ghi nhận ${monthly.length} khoản thu với tổng thu ${MoneyFormatter.format(total)}.'
+            '${total > 0 ? ' 👏 Tiếp tục phát huy nhé!' : ''}';
       }
       return ChatReply(
         text: answer,
@@ -116,6 +258,7 @@ class LocalChatAssistant {
           ),
         ],
         facts: [
+          ChatFact('period', MonthUtils.label(month)),
           ChatFact('income_count', '${monthly.length}'),
           ChatFact('income_total_minor_vnd', '$total'),
         ],
@@ -135,18 +278,18 @@ class LocalChatAssistant {
       return ChatReply(
         text: _recurringAnswer(insights),
         citations: [citation],
-        facts: _insightFacts(insights),
+        facts: _insightFacts(insights, month),
       );
     }
     if (_isForecastQuestion(normalized)) {
       final insights = await tools.spendingInsights(monthKey);
       return ChatReply(
         text:
-            'Dự báo tổng chi ${MonthUtils.label(month)} là '
+            'Dựa trên tốc độ chi tiêu hàng ngày, dự báo tổng chi ${MonthUtils.label(month)} của bạn sẽ vào khoảng '
             '${MoneyFormatter.format(insights.forecastTotalMinor)} '
-            '(đã ghi nhận ${MoneyFormatter.format(insights.currentTotalMinor)}).',
+            '(hiện tại bạn đã ghi nhận ${MoneyFormatter.format(insights.currentTotalMinor)}).',
         citations: [citation],
-        facts: _insightFacts(insights),
+        facts: _insightFacts(insights, month),
       );
     }
     if (_isAnomalyQuestion(normalized)) {
@@ -154,7 +297,7 @@ class LocalChatAssistant {
       return ChatReply(
         text: _anomalyAnswer(insights),
         citations: _anomalyCitations(citation, insights.anomalies),
-        facts: _insightFacts(insights),
+        facts: _insightFacts(insights, month),
       );
     }
     if ((_isCategoryQuestion(normalized) || _isRankingQuestion(normalized)) &&
@@ -172,7 +315,10 @@ class LocalChatAssistant {
           ranking: _isRankingQuestion(normalized),
         ),
         citations: [citation],
-        facts: _summaryFacts(dashboard),
+        facts: [
+          ..._summaryFacts(dashboard, month),
+          ..._categoryFacts(dashboard),
+        ],
       );
     }
     if (_isComparisonQuestion(normalized)) {
@@ -180,7 +326,7 @@ class LocalChatAssistant {
       return ChatReply(
         text: _comparisonAnswer(dashboard, month),
         citations: [citation],
-        facts: _summaryFacts(dashboard),
+        facts: _summaryFacts(dashboard, month),
       );
     }
     if (_isRecentInvoiceQuestion(normalized)) {
@@ -188,6 +334,7 @@ class LocalChatAssistant {
       return ChatReply(
         text: _recentInvoiceAnswer(recentInvoices.items),
         citations: _invoiceCitations(citation, recentInvoices.items),
+        facts: _resultFacts(recentInvoices.items),
       );
     }
     final categories = normalized.contains('danh muc')
@@ -222,30 +369,34 @@ class LocalChatAssistant {
           ),
         ),
         citations: _invoiceCitations(citation, searchedInvoices.items),
+        facts: _resultFacts(searchedInvoices.items),
       );
     }
     if (_isTotalQuestion(normalized)) {
       final dashboard = await tools.monthSummary(monthKey);
+      final count = dashboard.invoiceCount;
+      final total = MoneyFormatter.format(dashboard.totalMinor);
+      final text = count == 0
+          ? 'Trong ${MonthUtils.label(month)}, mình chưa thấy hóa đơn nào được ghi nhận; tổng chi là 0 đ.'
+          : 'Trong ${MonthUtils.label(month)}, bạn đã ghi nhận $count hóa đơn, tổng cộng $total.';
       return ChatReply(
-        text:
-            '${MonthUtils.label(month)} bạn đã ghi nhận '
-            '${dashboard.invoiceCount} hóa đơn, tổng chi '
-            '${MoneyFormatter.format(dashboard.totalMinor)}.',
+        text: text,
         citations: [citation],
-        facts: _summaryFacts(dashboard),
+        facts: _summaryFacts(dashboard, month),
       );
     }
 
     return ChatReply(
       text:
-          'Mình có thể trả lời về tổng thu, tổng chi, ngân sách, danh mục, so sánh '
-          'tháng, dự báo và khoản chi định kỳ. Bạn có thể hỏi cụ thể hơn.',
+          'Mình chưa bắt đúng ý bạn. Bạn thử hỏi về tổng thu, tổng chi, ngân sách, '
+          'danh mục chi tiêu, so sánh các tháng hoặc dự báo chi tiêu nhé.',
       citations: const [],
     );
   }
 
-  List<ChatFact> _summaryFacts(DashboardSnapshot dashboard) {
+  List<ChatFact> _summaryFacts(DashboardSnapshot dashboard, DateTime month) {
     return [
+      ChatFact('period', MonthUtils.label(month)),
       ChatFact('invoice_count', '${dashboard.invoiceCount}'),
       ChatFact('total_minor_vnd', '${dashboard.totalMinor}'),
       ChatFact(
@@ -261,18 +412,67 @@ class LocalChatAssistant {
     DateTime month,
   ) {
     return [
-      ChatFact('period', MonthUtils.label(month)),
-      ..._summaryFacts(dashboard),
+      ..._summaryFacts(dashboard, month),
+      ..._categoryFacts(dashboard),
       ChatFact('budget_count', '${budgets.length}'),
       ChatFact('budget_limit_minor_vnd', '${dashboard.budgetLimitMinor}'),
+      for (final budget in budgets)
+        ChatFact(
+          'budget_${budget.categoryId}_limit_minor_vnd',
+          '${budget.limitMinor}',
+        ),
     ];
   }
 
-  List<ChatFact> _insightFacts(SpendingInsights insights) {
+  List<ChatFact> _insightFacts(SpendingInsights insights, DateTime month) {
     return [
+      ChatFact('period', MonthUtils.label(month)),
       ChatFact('forecast_total_minor_vnd', '${insights.forecastTotalMinor}'),
       ChatFact('recurring_count', '${insights.recurringExpenses.length}'),
       ChatFact('anomaly_count', '${insights.anomalies.length}'),
+    ];
+  }
+
+  List<ChatFact> _recurringFacts(SpendingInsights insights) => [
+    for (final (index, item) in insights.recurringExpenses.take(3).indexed) ...[
+      ChatFact('recurring_${index + 1}_merchant', item.merchant),
+      ChatFact('recurring_${index + 1}_cadence', item.cadenceLabel),
+      ChatFact(
+        'recurring_${index + 1}_average_minor_vnd',
+        '${item.averageMinor}',
+      ),
+    ],
+  ];
+
+  List<ChatFact> _categoryFacts(DashboardSnapshot dashboard) {
+    const ids = [
+      'food',
+      'transport',
+      'shopping',
+      'utilities',
+      'health',
+      'education',
+      'entertainment',
+      'other',
+    ];
+    return [
+      for (final id in ids)
+        if (dashboard.categoryTotals.containsKey(id))
+          ChatFact(
+            'category_${id}_minor_vnd',
+            '${dashboard.categoryTotals[id]}',
+          ),
+    ];
+  }
+
+  List<ChatFact> _resultFacts(Iterable<InvoiceEntity> invoices) {
+    final items = invoices.toList(growable: false);
+    return [
+      ChatFact('result_count', '${items.length}'),
+      ChatFact(
+        'result_total_minor_vnd',
+        '${items.fold<int>(0, (total, invoice) => total + invoice.totalMinor)}',
+      ),
     ];
   }
 
@@ -282,27 +482,32 @@ class LocalChatAssistant {
     DateTime month,
   ) {
     if (budgets.isEmpty || dashboard.budgetLimitMinor <= 0) {
-      return '${MonthUtils.label(month)} chưa có ngân sách được đặt.';
+      return 'Trong ${MonthUtils.label(month)}, bạn chưa đặt hạn mức ngân sách nào.';
     }
     final progress = (dashboard.budgetProgress * 100).toStringAsFixed(1);
-    return '${MonthUtils.label(month)} đã chi '
-        '${MoneyFormatter.format(dashboard.totalMinor)} trên '
-        '${MoneyFormatter.format(dashboard.budgetLimitMinor)} '
-        '($progress%). ${budgets.length} danh mục có hạn mức.';
+    final evaluation = dashboard.budgetProgress >= 1.0
+        ? '⚠️ Chi tiêu đã vượt hạn mức rồi! Bạn hãy cân nhắc thắt chặt chi tiêu trong những ngày tới nhé.'
+        : dashboard.budgetProgress >= 0.8
+        ? '⚠️ Chi tiêu đã chạm mức $progress% ngân sách rồi, bạn nên cẩn thận với các khoản chi lớn.'
+        : '✅ Chi tiêu vẫn đang nằm trong tầm kiểm soát rất tốt!';
+
+    return 'Tình hình ngân sách ${MonthUtils.label(month)}:\n'
+        '• Đã chi ${MoneyFormatter.format(dashboard.totalMinor)} trên tổng ngân sách ${MoneyFormatter.format(dashboard.budgetLimitMinor)} ($progress%).\n'
+        '• Bạn đang theo dõi ${budgets.length} danh mục có hạn mức.\n'
+        '$evaluation';
   }
 
   String _recurringAnswer(SpendingInsights insights) {
     if (insights.recurringExpenses.isEmpty) {
-      return 'Chưa đủ dữ liệu để nhận diện khoản chi định kỳ ổn định.';
+      return 'Hiện tại mình chưa thấy khoản chi nào lặp lại đều đặn để xác định là chi định kỳ cả.';
     }
-    final top = insights.recurringExpenses
+    final items = insights.recurringExpenses
         .take(3)
         .map((item) {
-          return '${item.merchant} (${item.cadenceLabel}, '
-              'trung bình ${MoneyFormatter.format(item.averageMinor)})';
+          return '• ${item.merchant} (${item.cadenceLabel}, trung bình ${MoneyFormatter.format(item.averageMinor)})';
         })
-        .join('; ');
-    return 'Các khoản chi định kỳ nổi bật: $top.';
+        .join('\n');
+    return 'Dưới đây là các khoản chi định kỳ nổi bật của bạn:\n$items';
   }
 
   String _categoryAnswer(
@@ -314,61 +519,69 @@ class LocalChatAssistant {
     final totals = dashboard.categoryTotals.entries.toList()
       ..sort((left, right) => right.value.compareTo(left.value));
     if (totals.isEmpty) {
-      return '${MonthUtils.label(month)} chưa có dữ liệu danh mục.';
+      return 'Trong ${MonthUtils.label(month)}, bạn chưa có dữ liệu chi tiêu theo danh mục.';
     }
     final visible = ranking ? totals.take(3) : totals.take(1);
-    final result = visible
+    if (!ranking) {
+      final top = visible.first;
+      final name = categoryNames[top.key] ?? top.key;
+      return 'Danh mục chi nhiều nhất ${MonthUtils.label(month)} là $name với ${MoneyFormatter.format(top.value)}.';
+    }
+    final items = visible
         .map((entry) {
-          return '${categoryNames[entry.key] ?? entry.key}: '
-              '${MoneyFormatter.format(entry.value)}';
+          return '• ${categoryNames[entry.key] ?? entry.key}: ${MoneyFormatter.format(entry.value)}';
         })
-        .join('; ');
-    return ranking
-        ? 'Các danh mục chi nhiều nhất ${MonthUtils.label(month)}: $result.'
-        : 'Danh mục chi nhiều nhất ${MonthUtils.label(month)} là $result.';
+        .join('\n');
+    return 'Các danh mục chi nhiều nhất ${MonthUtils.label(month)} gồm:\n$items';
   }
 
   String _comparisonAnswer(DashboardSnapshot dashboard, DateTime month) {
     final previous = dashboard.previousMonthTotalMinor;
     if (previous <= 0) {
-      return 'Chưa có dữ liệu tháng trước để so sánh với ${MonthUtils.label(month)}.';
+      return 'Chưa có đủ dữ liệu tháng trước để so sánh với ${MonthUtils.label(month)}.';
     }
     final difference = dashboard.totalMinor - previous;
     final percent = (difference.abs() / previous * 100).toStringAsFixed(1);
     final direction = difference == 0
-        ? 'không thay đổi'
+        ? 'tương đương'
         : difference > 0
         ? 'tăng $percent%'
         : 'giảm $percent%';
-    return 'Chi tiêu ${MonthUtils.label(month)} '
-        '${MoneyFormatter.format(dashboard.totalMinor)}, $direction '
-        'so với tháng trước (${MoneyFormatter.format(previous)}).';
+    final remark = difference < 0
+        ? '👏 Thật tuyệt vời! Bạn đang chi tiêu tiết kiệm hơn tháng trước đấy.'
+        : difference > 0
+        ? '💡 Chi tiêu đang có xu hướng tăng hơn, bạn thử kiểm tra các danh mục phát sinh nhé.'
+        : 'Mức chi tiêu duy trì ổn định so với tháng trước.';
+
+    return 'So sánh chi tiêu với tháng trước (${MoneyFormatter.format(previous)}):\n'
+        'Trong ${MonthUtils.label(month)}, bạn chi ${MoneyFormatter.format(dashboard.totalMinor)}, $direction so với tháng trước.\n'
+        '$remark';
   }
 
   String _recentInvoiceAnswer(List<InvoiceEntity> invoices) {
-    if (invoices.isEmpty) return 'Chưa có hóa đơn nào được lưu trên thiết bị.';
-    final visible = invoices
+    if (invoices.isEmpty) {
+      return 'Bạn chưa có hóa đơn nào được lưu trên thiết bị.';
+    }
+    final items = invoices
         .take(5)
         .map((invoice) {
-          return '${invoice.sellerName}: '
-              '${MoneyFormatter.format(invoice.totalMinor)}';
+          return '• ${invoice.sellerName}: ${MoneyFormatter.format(invoice.totalMinor)}';
         })
-        .join('; ');
-    return 'Các hóa đơn gần đây: $visible.';
+        .join('\n');
+    return 'Mình tìm thấy các hóa đơn gần đây này:\n$items';
   }
 
   String _anomalyAnswer(SpendingInsights insights) {
     if (insights.anomalies.isEmpty) {
-      return 'Chưa phát hiện khoản chi nào cao bất thường so với lịch sử đã lưu.';
+      return 'Mọi thứ đều ổn! Mình chưa phát hiện khoản chi nào cao bất thường so với thói quen hàng ngày của bạn.';
     }
-    final visible = insights.anomalies
+    final items = insights.anomalies
         .take(3)
         .map((item) {
-          return '${item.merchant}: ${MoneyFormatter.format(item.amountMinor)} '
-              '(${item.explanation})';
+          return '• ${item.merchant}: ${MoneyFormatter.format(item.amountMinor)} (${item.explanation})';
         })
-        .join('; ');
-    return 'Các khoản chi cần kiểm tra: $visible.';
+        .join('\n');
+    return 'Mình nhận thấy một số khoản chi cao hơn mức bình thường, bạn kiểm tra lại nhé:\n$items';
   }
 
   List<ChatCitation> _invoiceCitations(
@@ -414,14 +627,16 @@ class LocalChatAssistant {
   }
 
   String _searchAnswer(List<InvoiceEntity> invoices, String query) {
-    if (invoices.isEmpty) return 'Không tìm thấy hóa đơn phù hợp với “$query”.';
-    final visible = invoices
+    if (invoices.isEmpty) {
+      return 'Không tìm thấy hóa đơn nào phù hợp với “$query”.';
+    }
+    final items = invoices
         .take(5)
         .map((invoice) {
-          return '${invoice.sellerName}: ${MoneyFormatter.format(invoice.totalMinor)}';
+          return '• ${invoice.sellerName}: ${MoneyFormatter.format(invoice.totalMinor)}';
         })
-        .join('; ');
-    return 'Tìm thấy ${invoices.length} hóa đơn phù hợp với “$query”: $visible.';
+        .join('\n');
+    return 'Mình tìm thấy ${invoices.length} hóa đơn phù hợp với “$query”:\n$items';
   }
 
   String _searchLabel({
@@ -460,6 +675,11 @@ class LocalChatAssistant {
   bool _isIncomeQuestion(String value) => RegExp(
     r'\b(thu nhap|khoan thu|tong thu|da thu|tien thu|nguon thu|nhan duoc|luong|tien thuong|income|thu)\b',
   ).hasMatch(value);
+
+  bool _isCashflowBalanceQuestion(String value) =>
+      value.contains('chenh lech') &&
+      value.contains('thu') &&
+      value.contains('chi');
 
   bool _isRecurringQuestion(String value) =>
       value.contains('dinh ky') ||

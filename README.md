@@ -7,10 +7,9 @@
 - Flutter + Material 3, Riverpod, GoRouter.
 - Drift/SQLite; tiền lưu bằng số nguyên theo đơn vị nhỏ nhất.
 - Adapter ingestion thống nhất cho XML, PDF text và OCR.
-- Ảnh hóa đơn được gửi trực tiếp tới Gemini VLM qua Supabase; cần kết nối mạng.
-- Supabase Edge Function gọi Gemini Structured Output; secret chỉ ở backend.
-- Trợ lý tài chính trả lời câu hỏi thu chi bằng dữ liệu trên thiết bị, có nguồn đối chiếu và hoạt động offline sau khi đã đăng nhập. Khung chat chỉ nhận văn bản; ảnh hóa đơn được xử lý trong luồng OCR riêng.
-- Màn hình chat không gọi Gemini. API chat ở backend vẫn được giữ để tương thích, nhưng không được ứng dụng hiện tại sử dụng.
+- Ảnh hóa đơn, chatbot và bản nháp giao dịch dùng model `cx/gpt-5.6-luna[1m]` mặc định qua 9Router từ Supabase; cần kết nối mạng.
+- Khóa 9router chỉ được lưu trong Supabase Secrets.
+- Trợ lý tài chính gửi câu hỏi và facts được whitelist từ dữ liệu local tới LLM để trả lời; ảnh hóa đơn được xử lý trong luồng OCR riêng.
 - Connector tỷ giá chỉ gọi provider allowlist ở backend, có timeout và hiển thị nguồn cập nhật.
 - Nhóm chi tiêu dùng Supabase RLS: tạo/tham gia bằng mã mời, chia đều/theo số tiền/theo phần trăm, OCR hóa đơn để gán từng dòng cho thành viên và ghi nhận tất toán.
 - Có thể chia sẻ hóa đơn cá nhân vào team hoặc cho tài khoản khác bằng snapshot tối thiểu; hóa đơn gốc không bị công khai. Chia sẻ trực tiếp có hộp thư chờ chấp nhận và hỗ trợ thu hồi.
@@ -95,21 +94,23 @@ flutter test tool/benchmark_local_database.dart
 
 Thư mục [`ml/receipt_ocr`](ml/receipt_ocr/README.md) giữ pipeline nghiên cứu độc
 lập để chuẩn bị dataset, fine-tune `PP-OCRv5_mobile_rec` và đo CER/WER. Pipeline
-này không được app sử dụng; luồng ảnh hiện gửi trực tiếp tới Gemini VLM và yêu cầu
+này không được app sử dụng; luồng ảnh hiện gửi tới model 9Router được cấu hình
+(mặc định `cx/gpt-5.6-luna[1m]`) và yêu cầu
 kết nối mạng. Không cần fine-tune hay đóng gói model OCR để chạy app.
 
 Hướng dẫn thao tác đầy đủ: [Kaggle OCR runbook](ml/receipt_ocr/KAGGLE_RUNBOOK_VI.md).
 
 ## Bật backend AI bằng Supabase Edge Function
 
-AI chỉ được gọi khi người dùng đã đăng nhập Supabase. Gemini API key không nằm trong APK; key được lưu trong Supabase Secrets.
+AI chỉ được gọi khi người dùng đã đăng nhập Supabase. 9router API key không nằm trong APK; key được lưu trong Supabase Secrets.
 
 Đăng nhập Supabase CLI, liên kết project và đặt secret:
 
 ```bash
 supabase link --project-ref YOUR_PROJECT_REF
 supabase db push
-supabase secrets set GEMINI_API_KEY=your_gemini_key
+supabase secrets set NINER_ROUTER_API_KEY=your_9router_key
+supabase secrets set NINER_ROUTER_BASE_URL=https://your-9router-host/v1
 supabase secrets set AI_MAX_REQUESTS_PER_MINUTE=30
 supabase secrets set AI_MAX_REQUESTS_PER_DAY=500
 supabase secrets set AI_WORKER_SECRET=at-least-32-random-characters
@@ -129,15 +130,15 @@ flutter run --dart-define-from-file=config/supabase.local.json
 Mặc định lệnh trên chạy flavor `dev`. Với staging hoặc production, dùng thêm
 `--flavor staging`/`--flavor production` và đặt `APP_ENV` tương ứng.
 
-Sau khi backend đã cấu hình `GEMINI_API_KEY`, app có thể phân tích ảnh hóa đơn qua luồng OCR. Chat hiện trả lời bằng dữ liệu trên thiết bị: tổng thu, khoản thu theo danh mục/gần đây, tổng chi, ngân sách, so sánh tháng, hóa đơn gần đây và khoản chi định kỳ. Câu hỏi ngoài phạm vi được hỗ trợ sẽ nhận hướng dẫn hỏi lại.
+Chat, bản nháp giao dịch và OCR dùng model `NINER_ROUTER_MODEL` (mặc định `cx/gpt-5.6-luna[1m]`) qua 9Router; phiên âm dùng `openai/gpt-4o-transcribe`. Chat gửi câu hỏi cùng facts đã whitelist từ dữ liệu local cho LLM trả lời.
 
-Connector tỷ giá và API chat vẫn có ở backend để tương thích, nhưng màn hình chat hiện không gọi các endpoint này.
+API chat được gọi trực tiếp từ màn hình trợ lý.
 
 Function `ai-api` bật `verify_jwt = true`; chỉ phiên Supabase hợp lệ mới được gọi AI proxy.
 Khi đưa web lên production, có thể khóa origin bằng `AI_ALLOWED_ORIGINS`, ví dụ
 `https://app.example.com`; nên đặt thêm `AI_REQUIRE_ORIGIN_ALLOWLIST=true` và
 `DELETE_ACCOUNT_REQUIRE_ORIGIN_ALLOWLIST=true` cùng allowlist tương ứng.
-Không đặt API key Gemini hoặc service role vào Flutter.
+Không đặt API key 9router hoặc service role vào Flutter.
 Luồng trích xuất bất đồng bộ dùng `extract_submit/status/cancel/retry`, lưu input
 trong bucket private `ai-inputs`, và cần scheduler gọi `ai-worker` bằng secret nội bộ.
 Có thể dùng GitHub Actions định kỳ trong `.github/workflows/ai-worker.yml`; hãy
@@ -191,7 +192,7 @@ OAuth và khôi phục mật khẩu quay lại đúng nơi.
 
 - XML hóa đơn: parse trực tiếp, namespace-tolerant, ưu tiên độ chính xác.
 - PDF có text layer: đọc tối đa 100 trang; PDF scan được hướng sang camera/ảnh OCR.
-- Ảnh/camera: Gemini VLM phân tích trực tiếp ảnh qua backend; người dùng kiểm tra và sửa trước khi lưu.
+- Ảnh/camera: model `NINER_ROUTER_MODEL` (mặc định `cx/gpt-5.6-luna[1m]`) phân tích ảnh qua backend; người dùng kiểm tra và sửa trước khi lưu.
 - Nhập tay: luôn sẵn sàng khi không có file/ảnh.
 
 ## Quản lý dữ liệu và vận hành

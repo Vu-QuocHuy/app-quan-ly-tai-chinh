@@ -2,11 +2,11 @@
 
 `ai-api` là backend AI tối giản của Quản lý Tài chính. Function nhận các action:
 
-- `chat`: trả lời câu hỏi dựa trên facts local và tỷ giá bên ngoài khi cần.
+- `chat`: model `NINER_ROUTER_MODEL` (mặc định `cx/gpt-5.6-luna[1m]`) trả lời câu hỏi từ facts được whitelist.
 - `draft_transaction`: trích xuất bản nháp thu/chi từ tin nhắn; không ghi dữ liệu cho tới khi người dùng xác nhận trong app.
-- `transcribe`: chuyển WAV tiếng Việt thành văn bản qua OpenAI Audio Transcriptions API.
+- `transcribe`: chuyển WAV tiếng Việt thành văn bản qua 9router STT.
 - `extract`: chuyển OCR text thành hóa đơn có cấu trúc.
-- `classify`: phân loại merchant bằng bộ rule nhẹ, không tốn lượt Gemini.
+- `classify`: phân loại merchant bằng bộ rule nhẹ.
 - `extract_submit`, `extract_status`, `extract_cancel`, `extract_retry`: quản lý job trích xuất bất đồng bộ.
 
 `delete-account` xác minh JWT, xóa các tệp theo thư mục user trong các bucket
@@ -30,7 +30,8 @@ tối đa 500 bản; job chỉ được xóa sau khi input path đã được cl
 `health` là endpoint GET/HEAD công khai, chỉ trả trạng thái sống tối giản và
 không kiểm tra hay tiết lộ secret. Khi đặt `HEALTHCHECK_SECRET` tối thiểu 32 ký
 tự, thêm `?check=readiness` cùng header `X-Health-Secret` để kiểm tra migration
-metrics, bucket `ai-inputs`, Gemini key, worker secret và Supabase anon key;
+metrics, bucket `ai-inputs`, cấu hình 9router (key và HTTPS URL), worker secret
+và Supabase anon key;
 readiness cũng kiểm tra bảng job AI, sync metrics, feature flags, cost budget/usage,
 ba private Storage bucket và telemetry lỗi client; readiness production bắt buộc
 bật origin allowlist cho AI và xóa tài khoản kèm danh sách origin không rỗng.
@@ -42,17 +43,18 @@ check production định kỳ sau khi cấu hình `SUPABASE_FUNCTION_URL`.
 Chatbot trong ứng dụng giữ tin nhắn trong bộ nhớ của phiên hiện tại; đóng trợ lý
 hoặc thoát app sẽ bỏ phiên và app không ghi tin nhắn mới vào thiết bị hay Supabase.
 Các bản chat cũ trên Supabase được giữ nguyên để tránh xóa dữ liệu không thể phục hồi,
-nhưng app không tải hoặc hiển thị chúng. Chat online chỉ nhận facts tổng hợp đã
-whitelist; facts chứa merchant, invoice ID, dòng hóa đơn, kết quả tìm kiếm hoặc
-danh mục tùy chỉnh sẽ bị loại bỏ tại Edge Function. Câu hỏi tài chính vẫn được trả
-lời trực tiếp từ dữ liệu local. Khi nhận diện câu mô tả giao dịch, action
+nhưng app không tải hoặc hiển thị chúng. Chat online chỉ gửi facts được whitelist:
+số liệu tổng hợp, tối đa 3 khoản định kỳ và tối đa 5 hóa đơn gần đây (tên, ngày,
+số tiền). Invoice ID, dòng hóa đơn, kết quả tìm kiếm và danh mục tùy chỉnh không
+được gửi. Câu hỏi tài chính được trả lời bằng model `NINER_ROUTER_MODEL` (mặc định
+`cx/gpt-5.6-luna[1m]`). Khi nhận diện câu mô tả giao dịch, action
 `draft_transaction` gửi nội dung câu đó cùng ngày hiện tại và tên/mã danh mục cần
-thiết tới Gemini; bản nháp không được lưu trong chat hay database. App chỉ ghi
-khoản thu/chi vào local outbox để đồng bộ Supabase sau khi người dùng xác nhận.
+thiết tới 9Router; bản nháp không được lưu trong chat hay database. App chỉ ghi
+khoản thu/chi vào local outbox sau khi người dùng xác nhận.
 
-`transcribe` nhận WAV tối đa 15 MB, gửi trong bộ nhớ tới Groq Speech-to-Text với
-model `whisper-large-v3` và ngôn ngữ tiếng Việt. File âm thanh không được lưu vào
-Storage hay database. Khóa Groq chỉ nằm trong secret của Edge Function.
+`transcribe` nhận WAV tối đa 15 MB, gửi trong bộ nhớ tới 9router STT với model
+`openai/gpt-4o-transcribe` và ngôn ngữ tiếng Việt. File âm thanh không được lưu
+vào Storage hay database. Khóa 9router chỉ nằm trong secret của Edge Function.
 
 ## Deploy
 
@@ -61,9 +63,8 @@ Không ghi API key vào file hoặc Git:
 ```bash
 supabase login
 supabase link --project-ref YOUR_PROJECT_REF
-supabase secrets set GEMINI_API_KEY=your_gemini_key
-supabase secrets set GEMINI_MODEL=gemini-3.8-flash
-supabase secrets set GROQ_API_KEY=your_groq_api_key
+supabase secrets set NINER_ROUTER_API_KEY=your_9router_key
+supabase secrets set NINER_ROUTER_BASE_URL=https://your-9router-host/v1
 supabase secrets set AI_WORKER_SECRET=at-least-32-random-characters
 supabase secrets set HEALTHCHECK_SECRET=another-at-least-32-random-characters
 supabase functions deploy ai-api
@@ -81,8 +82,8 @@ bị từ chối.
 
 `verify_jwt = true` được khai báo trong `supabase/config.toml`, vì vậy app phải
 đăng nhập Supabase mới gọi được AI online và mở các route dữ liệu khi cloud đã
-cấu hình. Bản build không có cloud vẫn giữ OCR ML Kit, SQLite và chatbot local
-theo chế độ local-first.
+cấu hình. Bản build không có cloud vẫn giữ OCR ML Kit và SQLite; các tính năng AI
+cần kết nối Supabase.
 
 Giới hạn mặc định là 30 yêu cầu AI mỗi user mỗi phút. Sau khi deploy migration,
 quota được ghi atomically trong bảng Supabase và có thể thay đổi bằng Secret
@@ -199,6 +200,6 @@ supabase functions serve ai-api
 ```
 
 Lệnh local cần Docker theo yêu cầu của Supabase CLI. Gửi yêu cầu bằng phiên đăng
-nhập Supabase như khi chạy ứng dụng. Khi test local, đặt `GEMINI_API_KEY` và
-`GEMINI_MODEL` trong môi trường chạy function; model mặc định là
-`gemini-3.8-flash`. Không commit `.env`.
+nhập Supabase như khi chạy ứng dụng. Khi test local, đặt `NINER_ROUTER_API_KEY`
+và `NINER_ROUTER_BASE_URL` trong môi trường chạy function. Chat và OCR dùng
+model `NINER_ROUTER_MODEL` (mặc định `cx/gpt-5.6-luna[1m]`). Không commit `.env`.

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -289,13 +290,15 @@ class SupabaseSyncGateway implements SyncGateway, SyncPullGateway {
       statusCode = 500;
       rethrow;
     } finally {
-      await _recordMetricSafely(
-        direction: 'push',
-        aggregateType: entry.aggregateType,
-        statusCode: statusCode,
-        durationMs: _durationMs(startedAt),
-        batchSize: 1,
-        errorCode: statusCode == 200 ? null : 'SYNC_FAILED',
+      unawaited(
+        _recordMetricSafely(
+          direction: 'push',
+          aggregateType: entry.aggregateType,
+          statusCode: statusCode,
+          durationMs: _durationMs(startedAt),
+          batchSize: 1,
+          errorCode: statusCode == 200 ? null : 'SYNC_FAILED',
+        ),
       );
     }
   }
@@ -363,13 +366,15 @@ class SupabaseSyncGateway implements SyncGateway, SyncPullGateway {
       statusCode = 500;
       rethrow;
     } finally {
-      await _recordMetricSafely(
-        direction: 'pull',
-        aggregateType: aggregateType,
-        statusCode: statusCode,
-        durationMs: _durationMs(startedAt),
-        batchSize: batchSize,
-        errorCode: statusCode == 200 ? null : 'SYNC_FAILED',
+      unawaited(
+        _recordMetricSafely(
+          direction: 'pull',
+          aggregateType: aggregateType,
+          statusCode: statusCode,
+          durationMs: _durationMs(startedAt),
+          batchSize: batchSize,
+          errorCode: statusCode == 200 ? null : 'SYNC_FAILED',
+        ),
       );
     }
   }

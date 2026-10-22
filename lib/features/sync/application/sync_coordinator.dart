@@ -60,16 +60,43 @@ class SyncCoordinator {
     if (userId == null || download == null) {
       return SyncRunSummary(upload: upload);
     }
-    final invoiceDownload = await download.runOnce(
-      userId: userId,
-      batchSize: batchSize,
-    );
-    final referenceResults = <SyncPullResult>[];
+
+    // Pull categories first so foreign keys exist for invoices, budgets, and rules.
+    SyncPullResult? categoryResult;
+    final otherCoordinators = <SyncPullCoordinator>[];
     for (final coordinator in referenceDownloads) {
-      referenceResults.add(
-        await coordinator.runOnce(userId: userId, batchSize: batchSize),
-      );
+      if (coordinator.aggregateType == 'category') {
+        categoryResult = await coordinator.runOnce(
+          userId: userId,
+          batchSize: batchSize,
+        );
+      } else {
+        otherCoordinators.add(coordinator);
+      }
     }
+
+    // Pull remaining aggregates in parallel to eliminate sequential round-trip latency.
+    final parallelDownloads = await Future.wait([
+      download.runOnce(userId: userId, batchSize: batchSize),
+      ...otherCoordinators.map(
+        (coordinator) =>
+            coordinator.runOnce(userId: userId, batchSize: batchSize),
+      ),
+    ]);
+
+    final invoiceDownload = parallelDownloads.first;
+    final otherResults = parallelDownloads.sublist(1);
+
+    final referenceResults = <SyncPullResult>[];
+    var otherIndex = 0;
+    for (final coordinator in referenceDownloads) {
+      if (coordinator.aggregateType == 'category') {
+        if (categoryResult != null) referenceResults.add(categoryResult);
+      } else {
+        referenceResults.add(otherResults[otherIndex++]);
+      }
+    }
+
     return SyncRunSummary(
       upload: upload,
       download: invoiceDownload,

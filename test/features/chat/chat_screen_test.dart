@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/core/providers/app_providers.dart';
+import 'package:hoadon_insight/features/chat/data/ai_chat_client.dart';
 import 'package:hoadon_insight/features/chat/data/chat_history_store.dart';
+import 'package:hoadon_insight/features/chat/domain/chat_models.dart';
 import 'package:hoadon_insight/features/chat/domain/local_chat_assistant.dart';
 import 'package:hoadon_insight/features/chat/presentation/chat_screen.dart';
 import 'package:hoadon_insight/features/income/data/income_repository.dart';
@@ -162,6 +166,113 @@ void main() {
     final saved = await history.loadLocal();
     expect(saved, isEmpty);
   });
+  testWidgets('LLM still answers when local facts never load', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final aiClient = _AnsweringAiChatClient();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          aiChatClientProvider.overrideWithValue(aiClient),
+          localChatAssistantProvider.overrideWithValue(
+            _PendingLocalChatAssistant(),
+          ),
+          chatHistoryStoreProvider.overrideWithValue(const ChatHistoryStore()),
+        ],
+        child: const MaterialApp(
+          locale: Locale('vi'),
+          supportedLocales: [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ChatScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextField),
+      'Tháng nào chênh lệch thu chi là bao nhiêu?',
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('Gửi câu hỏi'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Câu trả lời từ LLM'), findsOneWidget);
+    expect(aiClient.receivedFacts, isEmpty);
+  });
+  testWidgets('keeps the local loading indicator while AI is pending', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final aiClient = _PendingAiChatClient();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          aiChatClientProvider.overrideWithValue(aiClient),
+          localChatAssistantProvider.overrideWithValue(
+            _PendingLocalChatAssistant(),
+          ),
+          chatHistoryStoreProvider.overrideWithValue(const ChatHistoryStore()),
+        ],
+        child: const MaterialApp(
+          locale: Locale('vi'),
+          supportedLocales: [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ChatScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Tổng chi tháng này?');
+    await tester.pump();
+    await tester.tap(find.byTooltip('Gửi câu hỏi'));
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    aiClient.complete();
+    await tester.pumpAndSettle();
+  });
+  testWidgets('LLM can select one local read-only tool before answering', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final aiClient = _ToolSelectingAiChatClient();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          aiChatClientProvider.overrideWithValue(aiClient),
+          localChatAssistantProvider.overrideWithValue(
+            _ToolExecutingLocalChatAssistant(),
+          ),
+          chatHistoryStoreProvider.overrideWithValue(const ChatHistoryStore()),
+        ],
+        child: const MaterialApp(
+          locale: Locale('vi'),
+          supportedLocales: [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ChatScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextField),
+      'Chênh lệch thu chi tháng này?',
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('Gửi câu hỏi'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(aiClient.calls, 2);
+    expect(
+      aiClient.receivedFacts,
+      contains(const ChatFact('total_minor_vnd', '4424997')),
+    );
+    expect(find.text('Chênh lệch là 1.575.003 đồng.'), findsOneWidget);
+  });
   testWidgets('quick prompts stay available after the conversation starts', (
     tester,
   ) async {
@@ -287,5 +398,79 @@ class _DraftingAiClient extends AiExtractionClient {
     required DateTime today,
     required List<CategoryEntity> categories,
     TransactionDraftResult? previous,
-  }) async => result;
+  }) async {
+    return result;
+  }
+}
+
+class _PendingLocalChatAssistant extends Fake implements LocalChatAssistant {
+  final _pendingReply = Completer<ChatReply>();
+
+  @override
+  Future<ChatReply> answer(String question, {DateTime? now}) =>
+      _pendingReply.future;
+}
+
+class _AnsweringAiChatClient extends Fake implements AiChatClient {
+  List<ChatFact>? receivedFacts;
+
+  @override
+  Future<ChatReply> answer(
+    String question, {
+    required List<ChatFact> facts,
+    bool allowToolCalls = false,
+  }) {
+    receivedFacts = facts;
+    return Future.value(const ChatReply(text: 'Câu trả lời từ LLM'));
+  }
+}
+
+class _PendingAiChatClient extends Fake implements AiChatClient {
+  final _pendingReply = Completer<ChatReply>();
+
+  void complete() => _pendingReply.complete(
+    const ChatReply(text: 'Câu trả lời sau khi suy nghĩ'),
+  );
+
+  @override
+  Future<ChatReply> answer(
+    String question, {
+    required List<ChatFact> facts,
+    bool allowToolCalls = false,
+  }) => _pendingReply.future;
+}
+
+class _ToolSelectingAiChatClient extends Fake implements AiChatClient {
+  int calls = 0;
+  List<ChatFact>? receivedFacts;
+
+  @override
+  Future<ChatReply> answer(
+    String question, {
+    required List<ChatFact> facts,
+    bool allowToolCalls = false,
+  }) async {
+    calls++;
+    if (allowToolCalls) {
+      return const ChatReply(
+        text: 'Đang kiểm tra dữ liệu.',
+        toolCall: ChatToolCall(name: 'get_cashflow_summary', period: 'current'),
+      );
+    }
+    receivedFacts = facts;
+    return const ChatReply(text: 'Chênh lệch là 1.575.003 đồng.');
+  }
+}
+
+class _ToolExecutingLocalChatAssistant extends Fake
+    implements LocalChatAssistant {
+  @override
+  Future<ChatReply> executeTool(ChatToolCall call, {DateTime? now}) async =>
+      const ChatReply(
+        text: 'Đã lấy dữ liệu.',
+        facts: [
+          ChatFact('income_total_minor_vnd', '6000000'),
+          ChatFact('total_minor_vnd', '4424997'),
+        ],
+      );
 }

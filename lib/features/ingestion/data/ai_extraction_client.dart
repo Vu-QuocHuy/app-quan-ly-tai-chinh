@@ -64,6 +64,7 @@ class AiExtractionClient implements InvoiceExtractor {
     Uuid? uuid,
     InvoiceValidator? validator,
     this.enabled = true,
+    this.locale = 'vi-VN',
   }) : _supabaseFunctions = supabaseClient == null
            ? null
            : SupabaseFunctionClient(client: supabaseClient),
@@ -74,6 +75,7 @@ class AiExtractionClient implements InvoiceExtractor {
   final Uuid _uuid;
   final InvoiceValidator _validator;
   final bool enabled;
+  final String locale;
 
   bool get isConfigured => enabled && _supabaseFunctions?.isConfigured == true;
 
@@ -95,7 +97,7 @@ class AiExtractionClient implements InvoiceExtractor {
     final body = {
       'action': 'extract',
       'requestId': _uuid.v4(),
-      'locale': 'vi-VN',
+      'locale': locale,
       'text': input.ocrText,
     };
     final data = await _supabaseFunctions!.invoke(
@@ -111,7 +113,7 @@ class AiExtractionClient implements InvoiceExtractor {
     final body = {
       'action': 'classify',
       'requestId': _uuid.v4(),
-      'locale': 'vi-VN',
+      'locale': locale,
       'merchant': merchant.trim(),
     };
     final data = await _supabaseFunctions!.invoke(
@@ -139,7 +141,7 @@ class AiExtractionClient implements InvoiceExtractor {
     final data = await _supabaseFunctions!.invoke({
       'action': 'draft_transaction',
       'requestId': _uuid.v4(),
-      'locale': 'vi-VN',
+      'locale': locale,
       'text': text.trim(),
       'today': _dateOnly(today),
       'categories': categories
@@ -203,7 +205,7 @@ class AiExtractionClient implements InvoiceExtractor {
     final body = {
       'action': 'extract',
       'requestId': _uuid.v4(),
-      'locale': 'vi-VN',
+      'locale': locale,
       'imageBase64': base64Encode(input.bytes),
       'mimeType': _mimeType(input.fileName),
     };

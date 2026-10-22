@@ -101,6 +101,8 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   static const _maxVoiceRecordingSeconds = 30;
+  static const _localAnswerTimeout = Duration(seconds: 2);
+  static const _llmAnswerTimeout = Duration(seconds: 30);
 
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
@@ -245,6 +247,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Semantics(
+                liveRegion: true,
                 label: context.tr.isEn
                     ? 'Assistant is thinking'
                     : 'Trợ lý đang suy nghĩ',
@@ -629,12 +632,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final question = value.trim();
     if (question.isEmpty || _sending) return;
     final effectiveQuestion = _enToViPromptMap[question] ?? question;
-    final inScope =
-        ChatPrivacyPolicy.isPersonalFinanceQuestion(question) ||
-        ChatPrivacyPolicy.isPersonalFinanceQuestion(effectiveQuestion);
+    final isBlockedQuestion = ChatPrivacyPolicy.isBlockedQuestion(
+      effectiveQuestion,
+    );
+    final isDraftFollowUp =
+        !isBlockedQuestion &&
+        _draftConversation != null &&
+        (_isDraftCancellation(effectiveQuestion) ||
+            _looksLikeDraftAnswer(effectiveQuestion) ||
+            _looksLikeTransactionEntry(effectiveQuestion));
     final draftRequest =
-        _draftConversation != null ||
-        _looksLikeTransactionEntry(effectiveQuestion);
+        (!isBlockedQuestion && _looksLikeTransactionEntry(effectiveQuestion)) ||
+        isDraftFollowUp;
     final userMessage = ChatMessage(
       id: _uuid.v4(),
       role: ChatMessageRole.user,
@@ -649,18 +658,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
     _scrollToEnd();
 
+    if (isBlockedQuestion) {
+      setState(() {
+        _messages = [
+          ..._messages,
+          ChatMessage(
+            id: _uuid.v4(),
+            role: ChatMessageRole.assistant,
+            text: ChatPrivacyPolicy.outOfScopeMessage,
+            createdAt: DateTime.now(),
+          ),
+        ];
+        _sending = false;
+      });
+      _scrollToEnd();
+      return;
+    }
+
     try {
       if (draftRequest) {
-        await _handleTransactionMessage(effectiveQuestion, inScope: inScope);
+        await _handleTransactionMessage(effectiveQuestion);
         return;
       }
-      final reply = inScope
-          ? await ref.read(localChatAssistantProvider).answer(effectiveQuestion)
-          : ChatReply(
-              text: context.tr.isEn
-                  ? 'I can only assist with questions regarding your personal finances in the app, such as income, expenses, invoices, and budgets.'
-                  : ChatPrivacyPolicy.outOfScopeMessage,
-            );
+      final reply = await _answerWithLlm(question);
       final assistantMessage = ChatMessage(
         id: _uuid.v4(),
         role: ChatMessageRole.assistant,
@@ -675,7 +695,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _sending = false;
       });
       _scrollToEnd();
-    } on Object catch (error) {
+    } on Object {
+      if (!mounted) return;
+      final reply = await _answerFallback(
+        effectiveQuestion,
+        draftRequest: draftRequest,
+      );
       if (!mounted) return;
       setState(() {
         _messages = [
@@ -683,10 +708,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ChatMessage(
             id: _uuid.v4(),
             role: ChatMessageRole.assistant,
-            text: draftRequest
-                ? 'Không thể tạo bản nháp giao dịch: ${friendlyMessage(error)}. Chưa có khoản thu/chi nào được lưu.'
-                : 'Không thể đọc dữ liệu local lúc này: ${friendlyMessage(error)}',
+            text: reply.text,
             createdAt: DateTime.now(),
+            citations: reply.citations,
           ),
         ];
         _sending = false;
@@ -695,10 +719,58 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  Future<void> _handleTransactionMessage(
+  Future<ChatReply> _answerFallback(
     String question, {
-    required bool inScope,
+    required bool draftRequest,
   }) async {
+    try {
+      if (ChatPrivacyPolicy.isBlockedQuestion(question)) {
+        return const ChatReply(text: ChatPrivacyPolicy.outOfScopeMessage);
+      }
+      if (!ChatPrivacyPolicy.isPersonalFinanceQuestion(question)) {
+        return const ChatReply(
+          text:
+              'Mình chưa kết nối được AI để xác định đúng phạm vi câu hỏi. '
+              'Bạn có thể hỏi về thu chi, hóa đơn hoặc ngân sách trong ứng dụng nhé.',
+        );
+      }
+      return await ref
+          .read(localChatAssistantProvider)
+          .answer(question)
+          .timeout(_localAnswerTimeout);
+    } on Object {
+      // Use a short offline response if local finance data is unavailable too.
+    }
+    return ChatReply(
+      text: draftRequest
+          ? 'Mình chưa tạo được bản nháp lúc này, nên chưa có khoản thu/chi nào được lưu. Bạn thử lại sau nhé.'
+          : 'Mình đang mất kết nối với trợ lý AI nên chưa trả lời được câu này. Bạn thử lại sau nhé.',
+    );
+  }
+
+  Future<ChatReply> _answerWithLlm(String question) async {
+    final client = ref.read(aiChatClientProvider);
+    final plan = await client
+        .answer(question, facts: const [], allowToolCalls: true)
+        .timeout(_llmAnswerTimeout);
+    if (plan.toolCall == null) return plan;
+
+    final facts =
+        (await ref
+                .read(localChatAssistantProvider)
+                .executeTool(plan.toolCall!)
+                .timeout(_localAnswerTimeout))
+            .facts;
+    final answer = await client
+        .answer(question, facts: facts)
+        .timeout(_llmAnswerTimeout);
+    if (answer.toolCall != null) {
+      throw const FormatException('Chatbot vượt quá số lượt gọi công cụ.');
+    }
+    return answer;
+  }
+
+  Future<void> _handleTransactionMessage(String question) async {
     if (_draftConversation != null && _isDraftCancellation(question)) {
       final pendingCardIds = _draftCards.keys.toSet();
       setState(() {
@@ -719,7 +791,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             id: _uuid.v4(),
             role: ChatMessageRole.assistant,
             text:
-                'Đã bỏ bản nháp giao dịch. Chưa có khoản thu/chi nào được lưu.',
+                'Đã hủy bản nháp rồi nhé, chưa có khoản thu/chi nào được lưu đâu bạn yên tâm.',
             createdAt: DateTime.now(),
           ),
         ];
@@ -746,9 +818,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (!mounted) return;
 
     if (!result.isTransaction) {
-      final reply = inScope
-          ? await ref.read(localChatAssistantProvider).answer(question)
-          : const ChatReply(text: ChatPrivacyPolicy.outOfScopeMessage);
+      final reply = await _answerWithLlm(question);
       if (!mounted) return;
       setState(() {
         _messages = [
@@ -1014,7 +1084,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 id: message.id,
                 role: message.role,
                 text:
-                    'Đã lưu khoản $label ${MoneyFormatter.format(draft.amountMinor)}.',
+                    '✅ Đã lưu khoản $label ${MoneyFormatter.format(draft.amountMinor)} vào sổ chi tiêu cho bạn rồi nhé!',
                 createdAt: message.createdAt,
               )
             else
@@ -1067,6 +1137,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       'tháng trước',
       'có nên',
       'nên mua',
+      'nào tốt',
+      'nên chọn',
+      'tư vấn',
+      'đánh giá',
       'tại sao',
       'làm sao',
       'thế nào',
@@ -1119,6 +1193,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ).hasMatch(text);
   }
 
+  bool _looksLikeDraftAnswer(String value) => RegExp(
+    r'^\s*(?:\d+(?:[.,]\d+)?\s*(?:k|nghìn|ngàn|triệu|tr|đồng|vnd|₫)?|hôm nay|hôm qua|ngày\s+\d{1,2}(?:[/-]\d{1,2}(?:[/-]\d{2,4})?)?)\s*$',
+    caseSensitive: false,
+    unicode: true,
+  ).hasMatch(value);
+
   bool _sameDay(DateTime left, DateTime right) =>
       left.year == right.year &&
       left.month == right.month &&
@@ -1128,9 +1208,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     id: 'welcome',
     role: ChatMessageRole.assistant,
     text:
-        'Xin chào! Mình có thể giúp bạn xem tổng thu, tổng chi, ngân sách, danh mục, '
-        'so sánh tháng và khoản chi định kỳ. Bạn cũng có thể mô tả khoản thu/chi để '
-        'tạo bản nháp rồi xác nhận trước khi lưu.',
+        'Chào bạn! Mình là Finmi. Bạn muốn xem thu chi, ngân sách hay ghi nhanh một giao dịch?',
     createdAt: DateTime.now(),
   );
 
@@ -1240,7 +1318,9 @@ class _MessageBubble extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    '${citation.label} · ${citation.sourceId}',
+                                    citation.sourceType == 'local'
+                                        ? citation.label
+                                        : '${citation.label} · ${citation.sourceId}',
                                     style: Theme.of(
                                       context,
                                     ).textTheme.bodySmall,

@@ -1,9 +1,11 @@
 abstract final class ChatPrivacyPolicy {
   static const outOfScopeMessage =
-      'Mình chỉ hỗ trợ câu hỏi về dữ liệu tài chính của bạn trong ứng dụng, '
-      'như khoản thu, chi tiêu, hóa đơn và ngân sách.';
+      'Mình hỗ trợ các câu hỏi về thu chi, hóa đơn và ngân sách trong ứng dụng. '
+      'Bạn thử hỏi về một trong những nội dung đó nhé.';
 
   static const _financeTopics = [
+    'thu chi',
+    'chenh lech',
     'thu nhap',
     'thu bao nhieu',
     'thu duoc',
@@ -150,10 +152,13 @@ abstract final class ChatPrivacyPolicy {
 
   static bool isPersonalFinanceQuestion(String value) {
     final question = ' ${_normalizeQuestion(value)} ';
-    if (_blockedTopics.any((topic) => question.contains(' $topic '))) {
-      return false;
-    }
+    if (isBlockedQuestion(value)) return false;
     return _financeTopics.any((topic) => question.contains(' $topic '));
+  }
+
+  static bool isBlockedQuestion(String value) {
+    final question = ' ${_normalizeQuestion(value)} ';
+    return _blockedTopics.any((topic) => question.contains(' $topic '));
   }
 
   static String _normalizeQuestion(String value) {

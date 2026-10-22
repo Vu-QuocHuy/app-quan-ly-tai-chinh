@@ -8,6 +8,7 @@ void main() {
       'Khoản thu gần đây',
       'Ngân sách tháng này còn bao nhiêu?',
       'Danh mục nào chi nhiều nhất?',
+      'Tháng nào chênh lệch thu chi là bao nhiêu?',
     ]) {
       expect(
         ChatPrivacyPolicy.isPersonalFinanceQuestion(question),
