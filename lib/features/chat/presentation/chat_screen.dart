@@ -67,7 +67,6 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
-  static const _maxVoiceRecordingSeconds = 30;
   static const _localAnswerTimeout = Duration(seconds: 2);
   static const _llmAnswerTimeout = Duration(seconds: 30);
 
@@ -78,8 +77,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   late List<ChatMessage> _messages;
   bool _sending = false;
   bool _recording = false;
+  bool _startingRecording = false;
   bool _transcribing = false;
-  Timer? _recordingTimer;
+  ChatMessage? _pendingVoiceMessage;
+  StreamSubscription<Amplitude>? _amplitudeSubscription;
+  List<double> _voiceLevels = List.filled(40, .06);
   String? _connectionNote;
   TransactionDraftResult? _draftConversation;
   final Map<String, _TransactionDraft> _draftCards = {};
@@ -99,7 +101,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
-    _recordingTimer?.cancel();
+    unawaited(_amplitudeSubscription?.cancel());
     _inputController.dispose();
     _scrollController.dispose();
     unawaited(
@@ -178,8 +180,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      itemCount: _messages.length + (_sending ? 1 : 0),
+      itemCount:
+          _messages.length +
+          (_pendingVoiceMessage != null ? 1 : 0) +
+          (_sending ? 1 : 0),
       itemBuilder: (context, index) {
+        if (_pendingVoiceMessage != null && index == _messages.length) {
+          return Semantics(
+            liveRegion: true,
+            child: _MessageBubble(
+              message: _pendingVoiceMessage!,
+              accessory: const SizedBox(
+                width: 200,
+                child: LinearProgressIndicator(),
+              ),
+            ),
+          );
+        }
         if (_sending && index == _messages.length) {
           return Align(
             alignment: Alignment.centerLeft,
@@ -220,8 +237,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildComposer(BuildContext context) {
-    final canSend = !_sending && _inputController.text.trim().isNotEmpty;
-    final canRecord = !_sending && !_transcribing;
+    if (_recording) return _buildRecordingComposer(context);
+    final busy = _sending || _transcribing || _startingRecording;
+    final canSend = !busy && _inputController.text.trim().isNotEmpty;
+    final canRecord = !busy;
     return Material(
       color: Theme.of(context).colorScheme.surface,
       child: Padding(
@@ -232,7 +251,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             Expanded(
               child: TextField(
                 controller: _inputController,
-                enabled: !_sending,
+                enabled: !busy,
                 minLines: 1,
                 maxLines: 3,
                 textInputAction: TextInputAction.newline,
@@ -240,11 +259,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 decoration: InputDecoration(
                   labelText: 'Nhắn trợ lý',
                   hintText: 'Ví dụ: Vừa ăn trưa hết 45 nghìn',
-                  helperText: _transcribing
-                      ? 'Đang chuyển lời nói thành văn bản…'
-                      : _recording
-                      ? 'Đang ghi âm · chạm mic để dừng; tự dừng sau $_maxVoiceRecordingSeconds giây'
-                      : null,
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -252,21 +266,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             const SizedBox(width: 4),
             Semantics(
               button: true,
-              label: _recording
-                  ? 'Dừng ghi âm'
-                  : 'Nói câu hỏi hoặc mô tả giao dịch, tối đa $_maxVoiceRecordingSeconds giây',
+              label: 'Nói câu hỏi hoặc mô tả giao dịch',
               child: IconButton.filledTonal(
-                tooltip: _recording
-                    ? 'Dừng ghi âm'
-                    : 'Nói câu hỏi hoặc giao dịch · tối đa $_maxVoiceRecordingSeconds giây',
-                onPressed: canRecord ? _toggleVoiceInput : null,
-                icon: Icon(
-                  _transcribing
-                      ? Icons.hourglass_top
-                      : _recording
-                      ? Icons.stop_rounded
-                      : Icons.mic_none,
-                ),
+                tooltip: 'Nói câu hỏi hoặc giao dịch',
+                onPressed: canRecord ? _startVoiceInput : null,
+                icon: const Icon(Icons.mic_none),
               ),
             ),
             const SizedBox(width: 4),
@@ -285,12 +289,72 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Future<void> _toggleVoiceInput() async {
-    if (_recording) {
-      await _finishVoiceInput();
-      return;
+  Widget _buildRecordingComposer(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surface,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        child: Row(
+          children: [
+            IconButton.filledTonal(
+              tooltip: 'Xóa bản ghi âm',
+              onPressed: _cancelVoiceInput,
+              icon: const Icon(Icons.delete_outline),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Semantics(
+                label: 'Sóng âm ghi âm',
+                child: Container(
+                  height: 48,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: CustomPaint(
+                    painter: _VoiceWaveformPainter(
+                      _voiceLevels,
+                      colors.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            IconButton.filled(
+              tooltip: 'Gửi bản ghi âm',
+              onPressed: _finishVoiceInput,
+              icon: const Icon(Icons.send_outlined),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cancelVoiceInput() async {
+    if (!_recording) return;
+    setState(() {
+      _recording = false;
+      _transcribing = true;
+    });
+    try {
+      await _amplitudeSubscription?.cancel();
+      _amplitudeSubscription = null;
+      await _audioRecorder.cancel();
+    } on Object catch (error) {
+      if (mounted) setState(() => _connectionNote = friendlyMessage(error));
+    } finally {
+      if (mounted) setState(() => _transcribing = false);
     }
-    if (_sending || _transcribing) return;
+  }
+
+  Future<void> _startVoiceInput() async {
+    if (_sending || _transcribing || _startingRecording || _recording) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _startingRecording = true);
     try {
       if (!await _audioRecorder.hasPermission()) {
         throw StateError('Bạn cần cấp quyền micro để nhập bằng giọng nói.');
@@ -298,6 +362,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final path = kIsWeb
           ? 'voice-${_uuid.v4()}.wav'
           : '${(await getTemporaryDirectory()).path}/voice-${_uuid.v4()}.wav';
+      if (!mounted) return;
       await _audioRecorder.start(
         const RecordConfig(
           encoder: AudioEncoder.wav,
@@ -312,27 +377,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
       setState(() {
         _recording = true;
+        _voiceLevels = List.filled(40, .06);
         _connectionNote = null;
       });
-      _recordingTimer = Timer(
-        const Duration(seconds: _maxVoiceRecordingSeconds),
-        () => unawaited(_finishVoiceInput()),
-      );
+      _amplitudeSubscription = _audioRecorder
+          .onAmplitudeChanged(const Duration(milliseconds: 100))
+          .listen((amplitude) {
+            if (!mounted || !_recording) return;
+            final level = ((amplitude.current + 60) / 60).clamp(.06, 1.0);
+            setState(() {
+              _voiceLevels = [..._voiceLevels.skip(1), level];
+            });
+          });
     } on Object catch (error) {
       if (mounted) setState(() => _connectionNote = friendlyMessage(error));
+    } finally {
+      if (mounted) setState(() => _startingRecording = false);
     }
   }
 
   Future<void> _finishVoiceInput() async {
     if (!_recording) return;
-    _recordingTimer?.cancel();
-    _recordingTimer = null;
     String? recordingPath;
     setState(() {
       _recording = false;
       _transcribing = true;
+      _pendingVoiceMessage = ChatMessage(
+        id: _uuid.v4(),
+        role: ChatMessageRole.user,
+        text: 'Đang chuyển giọng nói thành văn bản…',
+        createdAt: DateTime.now(),
+      );
     });
+    _scrollToEnd();
     try {
+      await _amplitudeSubscription?.cancel();
+      _amplitudeSubscription = null;
       recordingPath = await _audioRecorder.stop();
       if (recordingPath == null) {
         throw StateError('Không có bản ghi âm để gửi.');
@@ -373,9 +453,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _inputController.selection = TextSelection.collapsed(
         offset: _inputController.text.length,
       );
-      setState(() => _connectionNote = null);
+      setState(() {
+        _connectionNote = null;
+        _pendingVoiceMessage = null;
+        _transcribing = false;
+      });
+      await _send(_inputController.text);
     } on Object catch (error) {
-      if (mounted) setState(() => _connectionNote = friendlyMessage(error));
+      if (mounted) {
+        setState(() {
+          _pendingVoiceMessage = null;
+          _messages = [
+            ..._messages,
+            ChatMessage(
+              id: _uuid.v4(),
+              role: ChatMessageRole.user,
+              text: friendlyMessage(error),
+              createdAt: DateTime.now(),
+            ),
+          ];
+        });
+        _scrollToEnd();
+      }
     } finally {
       if (recordingPath != null) {
         try {
@@ -977,6 +1076,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
     });
   }
+}
+
+class _VoiceWaveformPainter extends CustomPainter {
+  const _VoiceWaveformPainter(this.levels, this.color);
+
+  final List<double> levels;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final spacing = size.width / levels.length;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = (spacing * .5).clamp(1.0, 3.0)
+      ..strokeCap = StrokeCap.round;
+    for (var i = 0; i < levels.length; i++) {
+      final halfHeight = (size.height - 12) * levels[i] / 2;
+      final x = spacing * (i + .5);
+      canvas.drawLine(
+        Offset(x, size.height / 2 - halfHeight),
+        Offset(x, size.height / 2 + halfHeight),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_VoiceWaveformPainter oldDelegate) =>
+      oldDelegate.levels != levels || oldDelegate.color != color;
 }
 
 class _TransactionDraft {
