@@ -5,7 +5,8 @@ App Kit. Runtime assets are declared in `pubspec.yaml`; no external folder or
 machine-specific path is required.
 
 - `logo.png`: application header and account branding.
-- `banner.png`: home page banner.
+- `banner.png`: home page banner (Vietnamese).
+- `banner-en.png`: home page banner (English).
 - `background-dark.png`: login and registration background.
 - `icon.png`: source for the committed Android, iOS and web launcher icons.
   It is a tooling input and is not bundled as an additional runtime image.

@@ -85,11 +85,12 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
     final amountController = TextEditingController();
     final noteController = TextEditingController();
     String? error;
+    final isDeposit = kind == 'deposit';
     final entry = await showDialog<({int amount, String note})>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(kind == 'deposit' ? 'Thu vào quỹ' : 'Chi từ quỹ'),
+          title: Text(isDeposit ? 'Thu vào quỹ' : 'Chi từ quỹ'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -102,17 +103,24 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
                   suffixText: '₫',
                 ),
               ),
-              if (kind == 'expense')
-                TextField(
-                  controller: noteController,
-                  maxLength: 160,
-                  decoration: const InputDecoration(labelText: 'Nội dung chi'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: noteController,
+                maxLength: 160,
+                decoration: InputDecoration(
+                  labelText: isDeposit ? 'Nội dung thu' : 'Nội dung chi',
+                  hintText: isDeposit
+                      ? 'Ví dụ: Đóng quỹ tháng 10'
+                      : 'Ví dụ: Mua nước ngọt, ăn trưa...',
                 ),
-              if (error != null)
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 8),
                 Text(
                   error!,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
+              ],
             ],
           ),
           actions: [
@@ -123,18 +131,21 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
             FilledButton(
               onPressed: () {
                 final amount = MoneyFormatter.tryParse(amountController.text);
+                final note = noteController.text.trim();
                 if (amount == null ||
                     amount < 1 ||
                     amount > 9007199254740991 ||
-                    (kind == 'expense' && noteController.text.trim().isEmpty)) {
+                    (!isDeposit && note.isEmpty)) {
                   setDialogState(
-                    () => error = 'Nhập số tiền và nội dung hợp lệ.',
+                    () => error = isDeposit
+                        ? 'Vui lòng nhập số tiền hợp lệ.'
+                        : 'Vui lòng nhập số tiền và nội dung chi.',
                   );
                   return;
                 }
                 Navigator.pop(context, (
                   amount: amount,
-                  note: noteController.text.trim(),
+                  note: note.isEmpty && isDeposit ? 'Thu vào quỹ' : note,
                 ));
               },
               child: const Text('Lưu'),
@@ -378,13 +389,13 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
                       subtitle: Text(
                         '${names[entry.actorId] ?? (entry.actorId == null ? 'Tài khoản đã xóa' : 'Chưa đặt tên')} · ${entry.createdAt.day}/${entry.createdAt.month}/${entry.createdAt.year}',
                       ),
-                      trailing: Column(
+                      trailing: Row(
                         mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
                             '${entry.kind == 'deposit' ? '+' : '−'}${MoneyFormatter.format(entry.amountMinor)}',
                             style: TextStyle(
+                              fontWeight: FontWeight.w600,
                               color: entry.kind == 'deposit'
                                   ? Theme.of(context)
                                         .extension<AppFinanceColors>()!
@@ -401,6 +412,9 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
                             PopupMenuButton<String>(
                               enabled: !_busy,
                               tooltip: 'Xử lý giao dịch ghi nhầm',
+                              padding: EdgeInsets.zero,
+                              iconSize: 20,
+                              constraints: const BoxConstraints(),
                               onSelected: (_) => _delete(entry),
                               itemBuilder: (context) => const [
                                 PopupMenuItem(

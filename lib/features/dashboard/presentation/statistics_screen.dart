@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/localization/app_strings.dart';
 import '../../../app/theme/category_palette.dart';
 import '../../../app/theme/finance_colors.dart';
 import '../../../app/theme/finmi_theme.dart';
@@ -39,6 +40,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tr = context.tr;
     final month = ref.watch(selectedMonthProvider);
     ref.listen(
       selectedMonthProvider,
@@ -68,10 +70,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               ? TransactionPeriod.month(month)
               : TransactionPeriod.day(_day!));
     final label = _yearMode
-        ? (_month == null ? 'Năm ${month.year}' : 'Tháng $_month/${month.year}')
+        ? (_month == null
+              ? (tr.isEn ? 'Year ${month.year}' : 'Năm ${month.year}')
+              : (tr.isEn ? 'Month $_month, ${month.year}' : 'Tháng $_month/${month.year}'))
         : (_day == null
-              ? 'Tháng ${month.month}/${month.year}'
-              : 'Ngày ${DateFormat('dd/MM/yyyy').format(_day!)}');
+              ? (tr.isEn ? 'Month ${month.month}, ${month.year}' : 'Tháng ${month.month}/${month.year}')
+              : (tr.isEn ? 'Day ${DateFormat('MM/dd/yyyy').format(_day!)}' : 'Ngày ${DateFormat('dd/MM/yyyy').format(_day!)}'));
     final data = PeriodTransactions(
       period: period,
       incomes: incomes.valueOrNull ?? [],
@@ -99,10 +103,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             FinmiSliverHeader(
-              title: 'Thống kê thu chi',
+              title: tr.isEn ? 'Financial Statistics' : 'Thống kê thu chi',
               actions: [
                 FinmiHeaderAction(
-                  tooltip: 'Xuất báo cáo',
+                  tooltip: tr.isEn ? 'Export report' : 'Xuất báo cáo',
                   icon: Icons.file_download_outlined,
                   onPressed: () => showReportExportSheet(context),
                 ),
@@ -125,12 +129,15 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                   : SliverList.list(
                       children: [
                         SegmentedButton<bool>(
-                          segments: const [
+                          segments: [
                             ButtonSegment(
                               value: false,
-                              label: Text('Theo tháng'),
+                              label: Text(tr.isEn ? 'Monthly' : 'Theo tháng'),
                             ),
-                            ButtonSegment(value: true, label: Text('Theo năm')),
+                            ButtonSegment(
+                              value: true,
+                              label: Text(tr.isEn ? 'Yearly' : 'Theo năm'),
+                            ),
                           ],
                           selected: {_yearMode},
                           showSelectedIcon: false,
@@ -149,7 +156,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                             child: Row(
                               children: [
                                 IconButton(
-                                  tooltip: 'Năm trước',
+                                  tooltip: tr.isEn ? 'Previous year' : 'Năm trước',
                                   onPressed: () => _setYear(month.year - 1),
                                   icon: const Icon(Icons.chevron_left),
                                 ),
@@ -157,13 +164,13 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                                   child: TextButton(
                                     onPressed: () => _pickYear(month.year),
                                     child: Text(
-                                      'Năm ${month.year}',
+                                      tr.isEn ? 'Year ${month.year}' : 'Năm ${month.year}',
                                       textAlign: TextAlign.center,
                                     ),
                                   ),
                                 ),
                                 IconButton(
-                                  tooltip: 'Năm sau',
+                                  tooltip: tr.isEn ? 'Next year' : 'Năm sau',
                                   onPressed: () => _setYear(month.year + 1),
                                   icon: const Icon(Icons.chevron_right),
                                 ),
@@ -202,7 +209,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                               }),
                               icon: const Icon(Icons.date_range_outlined),
                               label: Text(
-                                _yearMode ? 'Xem toàn năm' : 'Xem toàn tháng',
+                                tr.isEn
+                                    ? (_yearMode ? 'View full year' : 'View full month')
+                                    : (_yearMode ? 'Xem toàn năm' : 'Xem toàn tháng'),
                               ),
                             ),
                             if (_yearMode && _month != null)
@@ -223,13 +232,13 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                                   });
                                 },
                                 icon: const Icon(Icons.calendar_month_outlined),
-                                label: const Text('Xem các ngày trong tháng'),
+                                label: Text(tr.isEn ? 'View days in month' : 'Xem các ngày trong tháng'),
                               ),
                           ],
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Biểu đồ · $label',
+                          tr.isEn ? 'Chart · $label' : 'Biểu đồ · $label',
                           key: const ValueKey('statistics-period'),
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
@@ -247,17 +256,18 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                         ),
                         const SizedBox(height: 20),
                         Text(
-                          'Giao dịch · $label',
+                          tr.isEn ? 'Transactions · $label' : 'Giao dịch · $label',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 12),
                         if (data.incomes.isEmpty && data.expenses.isEmpty)
-                          const AppCard(
+                          AppCard(
                             child: AppEmptyState(
                               icon: Icons.receipt_long_outlined,
-                              title: 'Chưa có giao dịch',
-                              message:
-                                  'Không có khoản thu hoặc chi đã lưu trong khoảng này.',
+                              title: tr.noTransactionsYet,
+                              message: tr.isEn
+                                  ? 'No income or expense recorded in this period.'
+                                  : 'Không có khoản thu hoặc chi đã lưu trong khoảng này.',
                             ),
                           ),
                         ..._transactionRows(
@@ -287,7 +297,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     final value = await showDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Chọn năm'),
+        title: Text(context.tr.isEn ? 'Select Year' : 'Chọn năm'),
         content: SizedBox(
           width: 320,
           height: 360,
@@ -329,6 +339,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                     .firstOrNull,
                 tap: () => showModalBottomSheet<bool>(
                   context: context,
+                  useRootNavigator: true,
                   isScrollControlled: true,
                   useSafeArea: true,
                   showDragHandle: true,
@@ -370,7 +381,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${row.amount >= 0 ? 'Thu' : 'Chi'} · ${row.category?.name ?? 'Khác'} · ${DateFormat('dd/MM/yyyy').format(row.date)}',
+                        '${row.amount >= 0 ? (context.tr.isEn ? 'Income' : 'Thu') : (context.tr.isEn ? 'Expense' : 'Chi')} · ${context.tr.categoryName(row.category?.name ?? (context.tr.isEn ? 'Other' : 'Khác'), categoryId: row.category?.id)} · ${DateFormat(context.tr.isEn ? 'MM/dd/yyyy' : 'dd/MM/yyyy').format(row.date)}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -412,8 +423,8 @@ class _PeriodSummary extends StatelessWidget {
         MoneyText(amount, emphasis: MoneyEmphasis.body, tone: tone),
       ],
     );
-    final income = value('↓ Tổng thu', data.income, context.finance.income);
-    final expense = value('↑ Tổng chi', data.expense, context.finance.expense);
+    final income = value(context.tr.isEn ? '↓ Total Income' : '↓ Tổng thu', data.income, context.finance.income);
+    final expense = value(context.tr.isEn ? '↑ Total Expense' : '↑ Tổng chi', data.expense, context.finance.expense);
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -437,7 +448,7 @@ class _PeriodSummary extends StatelessWidget {
             ),
           const Divider(height: 28),
           Text(
-            'Chênh lệch thu − chi',
+            context.tr.isEn ? 'Net Balance (Income − Expense)' : 'Chênh lệch thu − chi',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 6),
@@ -497,14 +508,15 @@ class _YearGrid extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Tháng $month',
+                            context.tr.isEn ? 'Month $month' : 'Tháng $month',
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           const SizedBox(height: 6),
                           Text(
                             compactNet(data.net),
-                            semanticsLabel:
-                                'Chênh lệch ${MoneyFormatter.format(data.net)}',
+                            semanticsLabel: context.tr.isEn
+                                ? 'Difference ${MoneyFormatter.format(data.net)}'
+                                : 'Chênh lệch ${MoneyFormatter.format(data.net)}',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: data.net >= 0
@@ -567,14 +579,15 @@ class _PeriodFlowChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Dòng tiền', style: Theme.of(context).textTheme.titleMedium),
+          Text(context.tr.isEn ? 'Cash Flow' : 'Dòng tiền', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           if (maximum == 0)
-            const AppEmptyState(
+            AppEmptyState(
               icon: Icons.bar_chart_outlined,
-              title: 'Chưa có dữ liệu thu chi',
-              message:
-                  'Biểu đồ sẽ cập nhật khi có giao dịch trong mốc đã chọn.',
+              title: context.tr.isEn ? 'No transaction data' : 'Chưa có dữ liệu thu chi',
+              message: context.tr.isEn
+                  ? 'Chart will update when transactions exist in this period.'
+                  : 'Biểu đồ sẽ cập nhật khi có giao dịch trong mốc đã chọn.',
             )
           else
             Semantics(
@@ -682,7 +695,10 @@ class _PeriodPieState extends State<_PeriodPie> {
         ? Colors.black
         : Colors.white;
     Widget categoryRow(MapEntry<String, int> entry) {
-      final name = category(entry.key)?.name ?? 'Khác';
+      final cat = category(entry.key);
+      final name = cat != null
+          ? context.tr.categoryName(cat.name, categoryId: cat.id)
+          : (context.tr.isEn ? 'Other' : 'Khác');
       final percentage = (entry.value / total * 100).round();
       return Semantics(
         label: '$name, $percentage%, ${MoneyFormatter.format(entry.value)}',
@@ -720,14 +736,14 @@ class _PeriodPieState extends State<_PeriodPie> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Phân bổ thu chi',
+            context.tr.isEn ? 'Category Breakdown' : 'Phân bổ thu chi',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 12),
           SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: false, label: Text('Khoản chi')),
-              ButtonSegment(value: true, label: Text('Khoản thu')),
+            segments: [
+              ButtonSegment(value: false, label: Text(context.tr.expensesKind)),
+              ButtonSegment(value: true, label: Text(context.tr.incomeKind)),
             ],
             selected: {_income},
             showSelectedIcon: false,
@@ -735,10 +751,12 @@ class _PeriodPieState extends State<_PeriodPie> {
           ),
           const SizedBox(height: 16),
           if (total == 0)
-            const AppEmptyState(
+            AppEmptyState(
               icon: Icons.pie_chart_outline,
-              title: 'Chưa có dữ liệu',
-              message: 'Chọn mốc thời gian khác hoặc thêm giao dịch.',
+              title: context.tr.isEn ? 'No data' : 'Chưa có dữ liệu',
+              message: context.tr.isEn
+                  ? 'Select a different period or add transactions.'
+                  : 'Chọn mốc thời gian khác hoặc thêm giao dịch.',
             )
           else ...[
             Semantics(

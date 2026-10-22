@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import 'qr_scanner_overlay.dart';
+
 /// Màn quét QR dùng chung. Trả về chuỗi đã quét khi [validate] trả `null`;
 /// ngược lại hiện lỗi và quét tiếp. Không gọi server.
 class QrScanScreen extends StatefulWidget {
@@ -70,15 +72,8 @@ class _QrScanScreenState extends State<QrScanScreen> {
               ),
             ),
           ),
-          Center(
-            child: Container(
-              width: 264,
-              height: 264,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white, width: 3),
-                borderRadius: BorderRadius.circular(28),
-              ),
-            ),
+          const QrScannerOverlay(
+            hintText: 'Đặt mã QR vào trong khung để quét',
           ),
           if (_error != null)
             Positioned(

@@ -24,6 +24,9 @@ abstract final class SupabaseBootstrap {
       _isSafeUrl(_url) &&
       _isPublishableKey(_publishableKey);
 
+  static String get url => _url.trim();
+  static String get publishableKey => _publishableKey.trim();
+
   static String? get oauthRedirectUri {
     final redirectUri = _oauthRedirectUri.trim();
     return redirectUri.isEmpty || !isSafeAuthRedirectUri(redirectUri)

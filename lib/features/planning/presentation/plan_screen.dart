@@ -12,6 +12,8 @@ import '../../../app/theme/app_tokens.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/category_avatar.dart';
+import '../../../core/localization/app_strings.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../notifications/data/budget_notification_service.dart';
 import '../domain/plan_models.dart';
@@ -21,6 +23,7 @@ class PlanScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tr = context.tr;
     final plans = ref.watch(plansProvider);
     final expenseCategories =
         ref.watch(categoriesProvider).value ?? const <CategoryEntity>[];
@@ -33,15 +36,16 @@ class PlanScreen extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             FinmiSliverHeader(
-              title: 'Thu chi định kỳ',
+              title: tr.isEn ? 'Recurring plans' : 'Thu chi định kỳ',
               actions: [
                 FinmiHeaderAction(
                   icon: Icons.add,
-                  tooltip: 'Thêm khoản định kỳ',
+                  tooltip: tr.isEn ? 'Add recurring item' : 'Thêm khoản định kỳ',
                   onPressed: () async {
                     final kind = await showModalBottomSheet<int>(
                       context: context,
                       useSafeArea: true,
+                      useRootNavigator: true,
                       showDragHandle: true,
                       builder: (context) => SafeArea(
                         top: false,
@@ -49,18 +53,18 @@ class PlanScreen extends ConsumerWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             ListTile(
-                              title: const Text('Khoản thu định kỳ'),
+                              title: Text(tr.isEn ? 'Recurring income' : 'Khoản thu định kỳ'),
                               leading: const Icon(Icons.south_west),
                               enabled: incomeCategories.isNotEmpty,
                               onTap: () => Navigator.pop(context, 0),
                             ),
                             ListTile(
-                              title: const Text('Khoản chi định kỳ'),
+                              title: Text(tr.isEn ? 'Recurring expense' : 'Khoản chi định kỳ'),
                               leading: const Icon(Icons.north_east),
                               onTap: () => Navigator.pop(context, 1),
                             ),
                             ListTile(
-                              title: const Text('Mục tiêu tiết kiệm'),
+                              title: Text(tr.isEn ? 'Savings goal' : 'Mục tiêu tiết kiệm'),
                               leading: const Icon(Icons.savings_outlined),
                               onTap: () => Navigator.pop(context, 2),
                             ),
@@ -115,21 +119,37 @@ class PlanScreen extends ConsumerWidget {
                   return SliverList.list(
                     children: [
                       Text(
-                        'Các khoản thu nhập và chi tiêu cố định lặp lại theo chu kỳ.',
+                        tr.isEn
+                            ? 'Fixed income and expenses that repeat periodically.'
+                            : 'Các khoản thu nhập và chi tiêu cố định lặp lại theo chu kỳ.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                       const SizedBox(height: 20),
                       Text(
-                        '↓ Khoản thu định kỳ',
+                        tr.isEn ? '↓ Recurring Income' : '↓ Khoản thu định kỳ',
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           color: context.finance.income.color,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 10),
                       if (incomes.isEmpty)
-                        const Text('Chưa có khoản thu định kỳ.'),
+                        _EmptyPlanCard(
+                          title: tr.isEn ? 'No recurring income yet' : 'Chưa có khoản thu định kỳ',
+                          subtitle: tr.isEn
+                              ? 'Add salary or fixed monthly income sources to monitor steady cash flow.'
+                              : 'Thêm lương hoặc các nguồn thu nhập cố định hàng tháng để theo dõi dòng tiền ổn định.',
+                          buttonLabel: tr.isEn ? 'Add income' : 'Thêm khoản thu',
+                          icon: Icons.south_west_rounded,
+                          accentColor: context.finance.income.color,
+                          onAdd: () => _editRecurringIncome(
+                            context,
+                            ref,
+                            incomeCategories,
+                          ),
+                        ),
                       for (final income in incomes)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 10),
@@ -140,8 +160,9 @@ class PlanScreen extends ConsumerWidget {
                             detail: _categoryName(
                               income.categoryId,
                               incomeCategories,
+                              tr: tr,
                             ),
-                            due: 'Nhận ${_dateLabel(income.nextDueDate)}',
+                            due: '${tr.isEn ? 'Receive' : 'Nhận'} ${_dateLabel(income.nextDueDate)}',
                             onTap: () => _incomeActions(
                               context,
                               ref,
@@ -152,17 +173,35 @@ class PlanScreen extends ConsumerWidget {
                         ),
 
                       if (incomeCategories.isEmpty)
-                        const _Hint(
-                          'Chưa tải được danh mục thu. Vui lòng thử lại sau.',
+                        _Hint(
+                          tr.isEn
+                              ? 'Failed to load income categories. Please try again later.'
+                              : 'Chưa tải được danh mục thu. Vui lòng thử lại sau.',
                         ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
                       Text(
-                        '↑ Khoản chi định kỳ',
-                        style: Theme.of(context).textTheme.titleSmall,
+                        tr.isEn ? '↑ Recurring Expense' : '↑ Khoản chi định kỳ',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: context.finance.expense.color,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 10),
                       if (bills.isEmpty)
-                        const Text('Chưa có khoản chi định kỳ.'),
+                        _EmptyPlanCard(
+                          title: tr.isEn ? 'No recurring expense yet' : 'Chưa có khoản chi định kỳ',
+                          subtitle: tr.isEn
+                              ? 'Add rent, internet, subscriptions... to get reminders when due.'
+                              : 'Thêm tiền thuê nhà, internet, gói cước... để được Finmi nhắc nhở khi đến hạn thanh toán.',
+                          buttonLabel: tr.isEn ? 'Add expense' : 'Thêm khoản chi',
+                          icon: Icons.north_east_rounded,
+                          accentColor: context.finance.expense.color,
+                          onAdd: () => _editBill(
+                            context,
+                            ref,
+                            expenseCategories,
+                          ),
+                        ),
                       for (final bill in bills)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 10),
@@ -170,9 +209,9 @@ class PlanScreen extends ConsumerWidget {
                             title: bill.title,
                             amountMinor: bill.amountMinor,
                             detail:
-                                '${_categoryName(bill.categoryId ?? '', expenseCategories)} · ${_frequencyLabel(bill.frequency)}',
+                                '${_categoryName(bill.categoryId ?? '', expenseCategories, tr: tr)} · ${_frequencyLabel(bill.frequency, isEn: tr.isEn)}',
                             due:
-                                '${_isOverdue(bill.nextDueDate) ? 'Quá hạn' : 'Đến hạn'} ${_dateLabel(bill.nextDueDate)}',
+                                '${_isOverdue(bill.nextDueDate) ? (tr.isEn ? 'Overdue' : 'Quá hạn') : (tr.isEn ? 'Due' : 'Đến hạn')} ${_dateLabel(bill.nextDueDate)}',
                             overdue: _isOverdue(bill.nextDueDate),
                             onTap: () => _billActions(
                               context,
@@ -183,14 +222,26 @@ class PlanScreen extends ConsumerWidget {
                           ),
                         ),
 
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
                       Text(
-                        'Mục tiêu tiết kiệm',
-                        style: Theme.of(context).textTheme.titleSmall,
+                        tr.isEn ? 'Savings Goals' : 'Mục tiêu tiết kiệm',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: context.finmi.accent,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 10),
                       if (goals.isEmpty)
-                        const Text('Chưa có mục tiêu tiết kiệm.'),
+                        _EmptyPlanCard(
+                          title: tr.isEn ? 'No savings goals yet' : 'Chưa có mục tiêu tiết kiệm',
+                          subtitle: tr.isEn
+                              ? 'Set goals for shopping, emergency funds or travel to track saving progress.'
+                              : 'Đặt mục tiêu mua sắm, tích lũy khẩn cấp hoặc du lịch để kiểm soát tiến độ để dành tiền.',
+                          buttonLabel: tr.isEn ? 'Add goal' : 'Thêm mục tiêu',
+                          icon: Icons.savings_outlined,
+                          accentColor: context.finmi.accent,
+                          onAdd: () => _editGoal(context, ref),
+                        ),
                       for (final goal in goals)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 10),
@@ -214,8 +265,8 @@ class PlanScreen extends ConsumerWidget {
                                 const SizedBox(height: 8),
                                 Text(
                                   goal.remainingMinor == 0
-                                      ? 'Đã đạt mục tiêu'
-                                      : 'Cần dành ${MoneyFormatter.format(goal.monthlyNeeded(DateTime.now()))}/tháng · Hạn ${_dateLabel(goal.targetDate)}',
+                                      ? (tr.isEn ? 'Goal achieved' : 'Đã đạt mục tiêu')
+                                      : '${tr.isEn ? 'Need to save' : 'Cần dành'} ${MoneyFormatter.format(goal.monthlyNeeded(DateTime.now()))}/${tr.isEn ? 'mo' : 'tháng'} · ${tr.isEn ? 'Due' : 'Hạn'} ${_dateLabel(goal.targetDate)}',
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),
                               ],
@@ -258,110 +309,239 @@ class PlanScreen extends ConsumerWidget {
     final result = await showDialog<RecurringIncome>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(
-            income == null ? 'Thêm khoản thu cố định' : 'Sửa khoản thu cố định',
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+        builder: (context, setState) {
+          final theme = Theme.of(context);
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            title: Row(
               children: [
-                TextField(
-                  controller: title,
-                  maxLength: 120,
-                  decoration: const InputDecoration(labelText: 'Tên khoản thu'),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                TextField(
-                  controller: amount,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Số tiền mỗi tháng',
-                    suffixText: '₫',
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: context.finance.income.container,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.south_west_rounded,
+                    color: context.finance.income.color,
+                    size: 20,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                DropdownButtonFormField<String>(
-                  key: const ValueKey('recurring-income-category'),
-                  initialValue: categoryId,
-                  decoration: const InputDecoration(labelText: 'Danh mục thu'),
-                  items: categories
-                      .map(
-                        (category) => DropdownMenuItem(
-                          value: category.id,
-                          child: Text(category.name),
-                        ),
-                      )
-                      .toList(growable: false),
-                  onChanged: (value) {
-                    if (value != null) setState(() => categoryId = value);
-                  },
-                ),
-                const SizedBox(height: AppSpacing.md),
-                TextButton.icon(
-                  onPressed: () async {
-                    final chosen = await showDatePicker(
-                      context: context,
-                      initialDate: due,
-                      firstDate: income == null
-                          ? DateTime(now.year, now.month, 1)
-                          : DateTime(2000),
-                      lastDate: DateTime(2100),
-                    );
-                    if (chosen != null) setState(() => due = chosen);
-                  },
-                  icon: const Icon(Icons.calendar_today_outlined),
-                  label: Text(
-                    '${income == null ? 'Nhận từ' : 'Nhận tiếp'} ${_dateLabel(due)}',
-                  ),
-                ),
-                if (error != null)
-                  Text(
-                    error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    income == null ? 'Thêm khoản thu cố định' : 'Sửa khoản thu cố định',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
+                ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Hủy'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400, minWidth: 280),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: title,
+                      maxLength: 120,
+                      decoration: const InputDecoration(
+                        labelText: 'Tên khoản thu',
+                        hintText: 'Ví dụ: Lương tháng, Cho thuê nhà...',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        prefixIcon: Icon(Icons.edit_note_rounded),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
+                      controller: amount,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Số tiền mỗi tháng',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        prefixIcon: Icon(Icons.payments_outlined),
+                        suffixText: '₫',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    DropdownButtonFormField<String>(
+                      key: const ValueKey('recurring-income-category'),
+                      initialValue: categoryId,
+                      isExpanded: true,
+                      isDense: true,
+                      alignment: AlignmentDirectional.centerStart,
+                      icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                      elevation: 3,
+                      borderRadius: BorderRadius.circular(16),
+                      menuMaxHeight: 280,
+                      dropdownColor: theme.colorScheme.surfaceContainerHigh,
+                      decoration: const InputDecoration(
+                        labelText: 'Danh mục thu',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        prefixIcon: Icon(Icons.category_outlined),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                      selectedItemBuilder: (context) {
+                        return categories.map((c) {
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CategoryAvatar(category: c, radius: 11),
+                              const SizedBox(width: 10),
+                              Flexible(
+                                child: Text(
+                                  c.name,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList();
+                      },
+                      items: categories
+                          .map(
+                            (category) => DropdownMenuItem(
+                              value: category.id,
+                              child: Row(
+                                children: [
+                                  CategoryAvatar(category: category, radius: 12),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      category.name,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                          .toList(growable: false),
+                      onChanged: (value) {
+                        if (value != null) setState(() => categoryId = value);
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    InkWell(
+                      onTap: () async {
+                        final chosen = await showDatePicker(
+                          context: context,
+                          initialDate: due,
+                          firstDate: income == null
+                              ? DateTime(now.year, now.month, 1)
+                              : DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (chosen != null) setState(() => due = chosen);
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant,
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today_outlined,
+                              size: 18,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    income == null ? 'Ngày nhận' : 'Lần nhận tiếp',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _dateLabel(due),
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.edit_calendar_outlined,
+                              size: 18,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        error!,
+                        style: TextStyle(
+                          color: theme.colorScheme.error,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
-            FilledButton(
-              onPressed: () {
-                final parsed = MoneyFormatter.tryParse(amount.text);
-                if (title.text.trim().isEmpty ||
-                    parsed == null ||
-                    parsed <= 0 ||
-                    parsed > maxPlanMoney ||
-                    categoryId.trim().isEmpty) {
-                  setState(
-                    () => error = 'Nhập tên, số tiền và danh mục hợp lệ.',
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Hủy'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final parsed = MoneyFormatter.tryParse(amount.text);
+                  if (title.text.trim().isEmpty ||
+                      parsed == null ||
+                      parsed <= 0 ||
+                      parsed > maxPlanMoney ||
+                      categoryId.trim().isEmpty) {
+                    setState(
+                      () => error = 'Nhập tên, số tiền và danh mục hợp lệ.',
+                    );
+                    return;
+                  }
+                  Navigator.pop(
+                    context,
+                    RecurringIncome(
+                      id: income?.id ?? const Uuid().v4(),
+                      title: title.text.trim(),
+                      amountMinor: parsed,
+                      categoryId: categoryId,
+                      anchorDate: income != null && income.nextDueDate == due
+                          ? income.anchorDate
+                          : due,
+                      nextDueDate: due,
+                      updatedAt: DateTime.now(),
+                    ),
                   );
-                  return;
-                }
-                Navigator.pop(
-                  context,
-                  RecurringIncome(
-                    id: income?.id ?? const Uuid().v4(),
-                    title: title.text.trim(),
-                    amountMinor: parsed,
-                    categoryId: categoryId,
-                    anchorDate: income != null && income.nextDueDate == due
-                        ? income.anchorDate
-                        : due,
-                    nextDueDate: due,
-                    updatedAt: DateTime.now(),
-                  ),
-                );
-              },
-              child: const Text('Lưu'),
-            ),
-          ],
-        ),
+                },
+                child: const Text('Lưu'),
+              ),
+            ],
+          );
+        },
       ),
     );
     // Dialog fields can remain mounted during the closing transition.
@@ -383,133 +563,306 @@ class PlanScreen extends ConsumerWidget {
     final result = await showDialog<RecurringBill>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(
-            bill == null ? 'Thêm khoản chi cố định' : 'Sửa khoản chi cố định',
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+        builder: (context, setState) {
+          final theme = Theme.of(context);
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            title: Row(
               children: [
-                TextField(
-                  controller: title,
-                  maxLength: 120,
-                  decoration: const InputDecoration(labelText: 'Tên khoản'),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                TextField(
-                  controller: amount,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Số tiền',
-                    suffixText: '₫',
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: context.finance.expense.container,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.north_east_rounded,
+                    color: context.finance.expense.color,
+                    size: 20,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                DropdownButtonFormField<BillFrequency>(
-                  initialValue: frequency,
-                  decoration: const InputDecoration(labelText: 'Lặp lại'),
-                  items: BillFrequency.values
-                      .map(
-                        (value) => DropdownMenuItem(
-                          value: value,
-                          child: Text(_frequencyLabel(value)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) setState(() => frequency = value);
-                  },
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                DropdownButtonFormField<String>(
-                  key: const ValueKey('recurring-bill-category'),
-                  initialValue: categoryId ?? '',
-                  decoration: const InputDecoration(
-                    labelText: 'Danh mục ngân sách',
-                  ),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: '',
-                      child: Text('Chưa phân loại'),
-                    ),
-                    if (categoryId != null &&
-                        !categories.any((item) => item.id == categoryId))
-                      DropdownMenuItem(
-                        value: categoryId,
-                        child: const Text('Danh mục hiện không có sẵn'),
-                      ),
-                    for (final category in categories)
-                      DropdownMenuItem(
-                        value: category.id,
-                        child: Text(category.name),
-                      ),
-                  ],
-                  onChanged: (value) => setState(
-                    () => categoryId = value == null || value.isEmpty
-                        ? null
-                        : value,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                TextButton.icon(
-                  onPressed: () async {
-                    final chosen = await showDatePicker(
-                      context: context,
-                      initialDate: due,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
-                    );
-                    if (chosen != null) setState(() => due = chosen);
-                  },
-                  icon: const Icon(Icons.calendar_today_outlined),
-                  label: Text('Đến hạn: ${_dateLabel(due)}'),
-                ),
-                if (error != null)
-                  Text(
-                    error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    bill == null ? 'Thêm khoản chi cố định' : 'Sửa khoản chi cố định',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
+                ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Hủy'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400, minWidth: 280),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: title,
+                      maxLength: 120,
+                      decoration: const InputDecoration(
+                        labelText: 'Tên khoản',
+                        hintText: 'Ví dụ: Tiền thuê nhà, Internet, Điện nước...',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        prefixIcon: Icon(Icons.edit_note_rounded),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
+                      controller: amount,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Số tiền',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        prefixIcon: Icon(Icons.payments_outlined),
+                        suffixText: '₫',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    DropdownButtonFormField<BillFrequency>(
+                      initialValue: frequency,
+                      isExpanded: true,
+                      isDense: true,
+                      alignment: AlignmentDirectional.centerStart,
+                      icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                      elevation: 3,
+                      borderRadius: BorderRadius.circular(16),
+                      menuMaxHeight: 280,
+                      dropdownColor: theme.colorScheme.surfaceContainerHigh,
+                      decoration: const InputDecoration(
+                        labelText: 'Tần suất lặp lại',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        prefixIcon: Icon(Icons.repeat_rounded),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                      items: BillFrequency.values
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(_frequencyLabel(value)),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) setState(() => frequency = value);
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    DropdownButtonFormField<String>(
+                      key: const ValueKey('recurring-bill-category'),
+                      initialValue: categoryId ?? '',
+                      isExpanded: true,
+                      isDense: true,
+                      alignment: AlignmentDirectional.centerStart,
+                      icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                      elevation: 3,
+                      borderRadius: BorderRadius.circular(16),
+                      menuMaxHeight: 280,
+                      dropdownColor: theme.colorScheme.surfaceContainerHigh,
+                      decoration: const InputDecoration(
+                        labelText: 'Danh mục ngân sách',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        prefixIcon: Icon(Icons.category_outlined),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                      selectedItemBuilder: (context) {
+                        return [
+                          const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.help_outline, size: 20),
+                              SizedBox(width: 10),
+                              Flexible(child: Text('Chưa phân loại', overflow: TextOverflow.ellipsis)),
+                            ],
+                          ),
+                          if (categoryId != null &&
+                              !categories.any((item) => item.id == categoryId))
+                            const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.error_outline, size: 20),
+                                SizedBox(width: 10),
+                                Flexible(child: Text('Danh mục hiện không có sẵn', overflow: TextOverflow.ellipsis)),
+                              ],
+                            ),
+                          for (final category in categories)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CategoryAvatar(category: category, radius: 11),
+                                const SizedBox(width: 10),
+                                Flexible(
+                                  child: Text(
+                                    category.name,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ];
+                      },
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: '',
+                          child: Row(
+                            children: [
+                              Icon(Icons.help_outline, size: 20),
+                              SizedBox(width: 10),
+                              Expanded(child: Text('Chưa phân loại')),
+                            ],
+                          ),
+                        ),
+                        if (categoryId != null &&
+                            !categories.any((item) => item.id == categoryId))
+                          DropdownMenuItem(
+                            value: categoryId,
+                            child: const Row(
+                              children: [
+                                Icon(Icons.error_outline, size: 20),
+                                SizedBox(width: 10),
+                                Expanded(child: Text('Danh mục hiện không có sẵn')),
+                              ],
+                            ),
+                          ),
+                        for (final category in categories)
+                          DropdownMenuItem(
+                            value: category.id,
+                            child: Row(
+                              children: [
+                                CategoryAvatar(category: category, radius: 12),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    category.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                      onChanged: (value) => setState(
+                        () => categoryId = value == null || value.isEmpty
+                            ? null
+                            : value,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    InkWell(
+                      onTap: () async {
+                        final chosen = await showDatePicker(
+                          context: context,
+                          initialDate: due,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (chosen != null) setState(() => due = chosen);
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant,
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today_outlined,
+                              size: 18,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Hạn thanh toán',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _dateLabel(due),
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.edit_calendar_outlined,
+                              size: 18,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        error!,
+                        style: TextStyle(
+                          color: theme.colorScheme.error,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
-            FilledButton(
-              onPressed: () {
-                final parsed = MoneyFormatter.tryParse(amount.text);
-                if (title.text.trim().isEmpty ||
-                    parsed == null ||
-                    parsed <= 0 ||
-                    parsed > maxPlanMoney) {
-                  setState(() => error = 'Nhập tên và số tiền hợp lệ.');
-                  return;
-                }
-                Navigator.pop(
-                  context,
-                  RecurringBill(
-                    id: bill?.id ?? const Uuid().v4(),
-                    title: title.text.trim(),
-                    amountMinor: parsed,
-                    frequency: frequency,
-                    anchorDate: bill != null && bill.nextDueDate == due
-                        ? bill.anchorDate
-                        : due,
-                    nextDueDate: due,
-                    categoryId: categoryId,
-                    updatedAt: DateTime.now(),
-                  ),
-                );
-              },
-              child: const Text('Lưu'),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Hủy'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final parsed = MoneyFormatter.tryParse(amount.text);
+                  if (title.text.trim().isEmpty ||
+                      parsed == null ||
+                      parsed <= 0 ||
+                      parsed > maxPlanMoney) {
+                    setState(() => error = 'Nhập tên và số tiền hợp lệ.');
+                    return;
+                  }
+                  Navigator.pop(
+                    context,
+                    RecurringBill(
+                      id: bill?.id ?? const Uuid().v4(),
+                      title: title.text.trim(),
+                      amountMinor: parsed,
+                      frequency: frequency,
+                      anchorDate: bill != null && bill.nextDueDate == due
+                          ? bill.anchorDate
+                          : due,
+                      nextDueDate: due,
+                      categoryId: categoryId,
+                      updatedAt: DateTime.now(),
+                    ),
+                  );
+                },
+                child: const Text('Lưu'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (result != null && context.mounted) await _save(context, ref, result);
@@ -533,85 +886,173 @@ class PlanScreen extends ConsumerWidget {
     final result = await showDialog<SavingsGoal>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(goal == null ? 'Thêm mục tiêu' : 'Sửa mục tiêu'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+        builder: (context, setState) {
+          final theme = Theme.of(context);
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            title: Row(
               children: [
-                TextField(
-                  controller: name,
-                  maxLength: 120,
-                  decoration: const InputDecoration(labelText: 'Tên mục tiêu'),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                TextField(
-                  controller: target,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Số tiền mục tiêu',
-                    suffixText: '₫',
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: context.finmi.accent.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.savings_outlined,
+                    color: context.finmi.accent,
+                    size: 20,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.md),
-                TextButton.icon(
-                  onPressed: () async {
-                    final chosen = await showDatePicker(
-                      context: context,
-                      initialDate: date,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100),
-                    );
-                    if (chosen != null) setState(() => date = chosen);
-                  },
-                  icon: const Icon(Icons.calendar_today_outlined),
-                  label: Text('Hạn ${_dateLabel(date)}'),
-                ),
-                if (error != null)
-                  Text(
-                    error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    goal == null ? 'Thêm mục tiêu tiết kiệm' : 'Sửa mục tiêu tiết kiệm',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
+                ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Hủy'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400, minWidth: 280),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: name,
+                      maxLength: 120,
+                      decoration: const InputDecoration(
+                        labelText: 'Tên mục tiêu',
+                        hintText: 'Ví dụ: Quỹ khẩn cấp, Mua laptop, Du lịch...',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        prefixIcon: Icon(Icons.flag_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
+                      controller: target,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Số tiền mục tiêu',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        prefixIcon: Icon(Icons.savings_outlined),
+                        suffixText: '₫',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    InkWell(
+                      onTap: () async {
+                        final chosen = await showDatePicker(
+                          context: context,
+                          initialDate: date,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (chosen != null) setState(() => date = chosen);
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant,
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today_outlined,
+                              size: 18,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Thời hạn hoàn thành',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _dateLabel(date),
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.edit_calendar_outlined,
+                              size: 18,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        error!,
+                        style: TextStyle(
+                          color: theme.colorScheme.error,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
-            FilledButton(
-              onPressed: () {
-                final parsed = MoneyFormatter.tryParse(target.text);
-                if (name.text.trim().isEmpty ||
-                    parsed == null ||
-                    parsed <= 0 ||
-                    parsed > maxPlanMoney ||
-                    (goal?.savedMinor ?? 0) > parsed) {
-                  setState(
-                    () =>
-                        error = 'Nhập tên và mục tiêu lớn hơn số tiền đã dành.',
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Hủy'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final parsed = MoneyFormatter.tryParse(target.text);
+                  if (name.text.trim().isEmpty ||
+                      parsed == null ||
+                      parsed <= 0 ||
+                      parsed > maxPlanMoney ||
+                      (goal?.savedMinor ?? 0) > parsed) {
+                    setState(
+                      () =>
+                          error = 'Nhập tên và mục tiêu lớn hơn số tiền đã dành.',
+                    );
+                    return;
+                  }
+                  Navigator.pop(
+                    context,
+                    SavingsGoal(
+                      id: goal?.id ?? const Uuid().v4(),
+                      name: name.text.trim(),
+                      targetMinor: parsed,
+                      savedMinor: goal?.savedMinor ?? 0,
+                      targetDate: date,
+                      updatedAt: DateTime.now(),
+                    ),
                   );
-                  return;
-                }
-                Navigator.pop(
-                  context,
-                  SavingsGoal(
-                    id: goal?.id ?? const Uuid().v4(),
-                    name: name.text.trim(),
-                    targetMinor: parsed,
-                    savedMinor: goal?.savedMinor ?? 0,
-                    targetDate: date,
-                    updatedAt: DateTime.now(),
-                  ),
-                );
-              },
-              child: const Text('Lưu'),
-            ),
-          ],
-        ),
+                },
+                child: const Text('Lưu'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (result != null && context.mounted) await _save(context, ref, result);
@@ -623,25 +1064,27 @@ class PlanScreen extends ConsumerWidget {
     RecurringIncome income,
     List<CategoryEntity> categories,
   ) async {
+    final tr = context.tr;
     final action = await showModalBottomSheet<String>(
       context: context,
+      useRootNavigator: true,
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
             ListTile(
               title: Text(income.title),
               subtitle: Text(
-                'Lần nhận tiếp theo: ${_dateLabel(income.nextDueDate)}',
+                '${tr.isEn ? "Next due" : "Lần nhận tiếp theo"}: ${_dateLabel(income.nextDueDate)}',
               ),
             ),
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('Sửa', maxLines: 3),
+              title: Text(tr.isEn ? 'Edit' : 'Sửa', maxLines: 3),
               onTap: () => Navigator.pop(context, 'edit'),
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: const Text('Ngừng khoản thu định kỳ', maxLines: 3),
+              title: Text(tr.isEn ? 'Stop recurring income' : 'Ngừng khoản thu định kỳ', maxLines: 3),
               onTap: () => Navigator.pop(context, 'delete'),
             ),
           ],
@@ -661,39 +1104,41 @@ class PlanScreen extends ConsumerWidget {
     RecurringBill bill,
     List<CategoryEntity> categories,
   ) async {
+    final tr = context.tr;
     final action = await showModalBottomSheet<String>(
       context: context,
+      useRootNavigator: true,
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
             ListTile(
               title: Text(bill.title),
               subtitle: Text(
-                'Đến hạn ${_dateLabel(bill.nextDueDate)}',
+                '${tr.isEn ? "Due" : "Đến hạn"} ${_dateLabel(bill.nextDueDate)}',
                 maxLines: 3,
               ),
             ),
             ListTile(
               leading: const Icon(Icons.check_circle_outline),
-              title: const Text('Đã thanh toán và ghi khoản chi', maxLines: 3),
+              title: Text(tr.isEn ? 'Mark paid and record expense' : 'Đã thanh toán và ghi khoản chi', maxLines: 3),
               onTap: () => Navigator.pop(context, 'paid'),
             ),
             ListTile(
               leading: const Icon(Icons.skip_next_outlined),
-              title: const Text(
-                'Đã ghi chi trước đó hoặc bỏ qua kỳ này',
+              title: Text(
+                tr.isEn ? 'Already recorded or skip this period' : 'Đã ghi chi trước đó hoặc bỏ qua kỳ này',
                 maxLines: 3,
               ),
               onTap: () => Navigator.pop(context, 'skip'),
             ),
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('Sửa', maxLines: 3),
+              title: Text(tr.isEn ? 'Edit' : 'Sửa', maxLines: 3),
               onTap: () => Navigator.pop(context, 'edit'),
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: const Text('Xóa', maxLines: 3),
+              title: Text(tr.isEn ? 'Delete' : 'Xóa', maxLines: 3),
               onTap: () => Navigator.pop(context, 'delete'),
             ),
           ],
@@ -728,7 +1173,7 @@ class PlanScreen extends ConsumerWidget {
               createdAt: now,
               updatedAt: now,
               confirmedAt: now,
-              notes: 'Khoản định kỳ: ${_dateLabel(current.nextDueDate)}',
+              notes: '${tr.isEn ? "Recurring bill" : "Khoản định kỳ"}: ${_dateLabel(current.nextDueDate)}',
             ),
           );
         }
@@ -746,8 +1191,8 @@ class PlanScreen extends ConsumerWidget {
           SnackBar(
             content: Text(
               action == 'paid'
-                  ? 'Đã ghi khoản chi.'
-                  : 'Đã chuyển sang kỳ tiếp theo.',
+                  ? (tr.isEn ? 'Expense recorded.' : 'Đã ghi khoản chi.')
+                  : (tr.isEn ? 'Moved to next period.' : 'Đã chuyển sang kỳ tiếp theo.'),
             ),
           ),
         );
@@ -762,25 +1207,27 @@ class PlanScreen extends ConsumerWidget {
     WidgetRef ref,
     SavingsGoal goal,
   ) async {
+    final tr = context.tr;
     final action = await showModalBottomSheet<String>(
       context: context,
+      useRootNavigator: true,
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
             ListTile(title: Text(goal.name)),
             ListTile(
               leading: const Icon(Icons.add_circle_outline),
-              title: const Text('Cập nhật tiền đã để dành', maxLines: 3),
+              title: Text(tr.isEn ? 'Update saved amount' : 'Cập nhật tiền đã để dành', maxLines: 3),
               onTap: () => Navigator.pop(context, 'add'),
             ),
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('Sửa', maxLines: 3),
+              title: Text(tr.isEn ? 'Edit' : 'Sửa', maxLines: 3),
               onTap: () => Navigator.pop(context, 'edit'),
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: const Text('Xóa', maxLines: 3),
+              title: Text(tr.isEn ? 'Delete' : 'Xóa', maxLines: 3),
               onTap: () => Navigator.pop(context, 'delete'),
             ),
           ],
@@ -796,45 +1243,80 @@ class PlanScreen extends ConsumerWidget {
     final amount = await showDialog<int>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Tiền đã để dành', maxLines: 3),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                autofocus: true,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Tổng đã dành',
-                  suffixText: '₫',
+        builder: (context, setState) {
+          final theme = Theme.of(context);
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: context.finmi.accent.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.savings_outlined,
+                    color: context.finmi.accent,
+                    size: 20,
+                  ),
                 ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Cập nhật tiền đã để dành',
+                    maxLines: 2,
+                  ),
+                ),
+              ],
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400, minWidth: 280),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Tổng số tiền đã tích lũy',
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                      prefixIcon: Icon(Icons.payments_outlined),
+                      suffixText: '₫',
+                    ),
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      error!,
+                      style: TextStyle(color: theme.colorScheme.error, fontSize: 13),
+                    ),
+                  ],
+                ],
               ),
-              if (error != null)
-                Text(
-                  error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Hủy'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final parsed = MoneyFormatter.tryParse(controller.text);
+                  if (parsed == null || parsed < 0 || parsed > maxPlanMoney) {
+                    setState(() => error = 'Nhập số tiền hợp lệ.');
+                    return;
+                  }
+                  Navigator.pop(context, parsed);
+                },
+                child: const Text('Lưu'),
+              ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Hủy'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final parsed = MoneyFormatter.tryParse(controller.text);
-                if (parsed == null || parsed < 0 || parsed > maxPlanMoney) {
-                  setState(() => error = 'Nhập số tiền hợp lệ.');
-                  return;
-                }
-                Navigator.pop(context, parsed);
-              },
-              child: const Text('Lưu'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
     if (amount == null) return;
@@ -984,10 +1466,10 @@ class _RecurringPlanCard extends StatelessWidget {
   }
 }
 
-String _frequencyLabel(BillFrequency frequency) => switch (frequency) {
-  BillFrequency.weekly => 'Hàng tuần',
-  BillFrequency.monthly => 'Hàng tháng',
-  BillFrequency.yearly => 'Hàng năm',
+String _frequencyLabel(BillFrequency frequency, {bool isEn = false}) => switch (frequency) {
+  BillFrequency.weekly => isEn ? 'Weekly' : 'Hàng tuần',
+  BillFrequency.monthly => isEn ? 'Monthly' : 'Hàng tháng',
+  BillFrequency.yearly => isEn ? 'Yearly' : 'Hàng năm',
 };
 
 String _dateKey(DateTime date) =>
@@ -998,6 +1480,109 @@ bool _isOverdue(DateTime date) =>
       DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
     );
 
-String _categoryName(String id, List<CategoryEntity> categories) =>
-    categories.where((category) => category.id == id).firstOrNull?.name ??
-    'Chưa phân loại';
+String _categoryName(String id, List<CategoryEntity> categories, {AppStrings? tr}) {
+  final cat = categories.where((category) => category.id == id).firstOrNull;
+  if (cat == null) return tr?.isEn ?? false ? 'Unclassified' : 'Chưa phân loại';
+  return tr != null ? tr.categoryName(cat.name, categoryId: cat.id) : cat.name;
+}
+
+class _EmptyPlanCard extends StatelessWidget {
+  const _EmptyPlanCard({
+    required this.title,
+    required this.subtitle,
+    required this.buttonLabel,
+    required this.icon,
+    required this.accentColor,
+    required this.onAdd,
+  });
+
+  final String title;
+  final String subtitle;
+  final String buttonLabel;
+  final IconData icon;
+  final Color accentColor;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.6),
+          width: 1.25,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: accentColor, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: Text(buttonLabel),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: accentColor,
+                side: BorderSide(
+                  color: accentColor.withValues(alpha: 0.45),
+                  width: 1.2,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

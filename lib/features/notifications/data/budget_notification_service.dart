@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -244,6 +246,44 @@ class BudgetNotificationService {
     );
     await _preferences.markDelivered(decision.deduplicationKey);
     return BudgetNotificationResult.shown;
+  }
+
+  Future<void> showDebtNotification({
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    if (!_isSupportedPlatform) return;
+    if (!_initialized) await initialize();
+
+    final vibrationPattern = Int64List.fromList([0, 300, 200, 300]);
+    final androidDetails = AndroidNotificationDetails(
+      'debt_reminders',
+      'Thông báo nợ',
+      channelDescription: 'Thông báo ghi nhận và nhắc nhở các khoản nợ.',
+      importance: Importance.max,
+      priority: Priority.high,
+      visibility: NotificationVisibility.public,
+      enableVibration: true,
+      vibrationPattern: vibrationPattern,
+      playSound: true,
+    );
+    final notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: const DarwinNotificationDetails(
+        threadIdentifier: 'debt_reminders',
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+    );
+    await _plugin.show(
+      id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      title: title,
+      body: body,
+      notificationDetails: notificationDetails,
+      payload: payload ?? '/debts',
+    );
   }
 
   int _notificationId(BudgetAlertDecision decision) {

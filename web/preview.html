@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finmi Mobile Preview Studio - Multi-Instance</title>
+  <style>
+    :root {
+      --bg-canvas: #0c1117;
+      --bg-panel: #161b22;
+      --border-panel: #30363d;
+      --text-main: #f0f6fc;
+      --text-sub: #8b949e;
+      --brand: #10b981;
+      --brand-hover: #059669;
+      --phone-w: 390px;
+      --phone-h: 844px;
+      --phone-scale: 0.85;
+      --phone-radius: 46px;
+    }
+
+    body.light-theme {
+      --bg-canvas: #f3f4f6;
+      --bg-panel: #ffffff;
+      --border-panel: #e5e7eb;
+      --text-main: #111827;
+      --text-sub: #6b7280;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: auto;
+      overflow-y: auto;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    /* Top Studio Bar */
+    header.studio-bar {
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-panel);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, #10b981, #047857);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-tag {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .controls-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-segmented {
+      display: inline-flex;
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border-panel);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+    }
+
+    .btn-seg {
+      background: transparent;
+      border: none;
+      color: var(--text-sub);
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+
+    .btn-seg:hover {
+      color: var(--text-main);
+    }
+
+    .btn-seg.active {
+      background: var(--brand);
+      color: white;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+
+    .action-btn {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-panel);
+      color: var(--text-main);
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+
+    .action-btn:hover {
+      border-color: var(--brand);
+      color: var(--brand);
+    }
+
+    .scale-select {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-panel);
+      color: var(--text-main);
+      padding: 6px 10px;
+      font-size: 13px;
+      border-radius: 8px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    /* Tip Banner */
+    .sync-banner {
+      background: linear-gradient(90deg, rgba(16, 185, 129, 0.12), rgba(6, 95, 70, 0.12));
+      border-bottom: 1px solid rgba(16, 185, 129, 0.25);
+      padding: 8px 20px;
+      font-size: 12.5px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #a7f3d0;
+    }
+
+    body.light-theme .sync-banner {
+      background: #ecfdf5;
+      color: #065f46;
+      border-bottom-color: #a7f3d0;
+    }
+
+    .sync-banner-text {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Workspace Canvas */
+    .studio-stage {
+      flex: 1;
+      padding: 30px 20px 60px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 36px;
+      overflow-x: auto;
+    }
+
+    /* Phone Device Container */
+    .device-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      transform-origin: top center;
+    }
+
+    .device-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: calc(var(--phone-w) + 24px);
+      padding: 0 4px;
+    }
+
+    .device-user-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-panel);
+      color: var(--text-main);
+    }
+
+    .device-user-pill .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 6px #10b981;
+    }
+
+    .device-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .mini-btn {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-panel);
+      color: var(--text-sub);
+      padding: 4px 8px;
+      font-size: 11.5px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+
+    .mini-btn:hover {
+      color: var(--text-main);
+      border-color: var(--brand);
+    }
+
+    /* Realistic Phone Frame */
+    .phone-chassis {
+      position: relative;
+      width: calc(var(--phone-w) + 24px);
+      height: calc(var(--phone-h) + 24px);
+      background: linear-gradient(145deg, #374151, #1f2937 40%, #111827);
+      border-radius: var(--phone-radius);
+      padding: 12px;
+      box-shadow:
+        0 25px 60px -15px rgba(0, 0, 0, 0.7),
+        0 0 0 1px rgba(255, 255, 255, 0.12) inset,
+        0 0 0 4px #0f172a;
+    }
+
+    /* Side hardware buttons */
+    .phone-chassis::before {
+      /* Left buttons: Action button + Volume */
+      content: '';
+      position: absolute;
+      left: -4px;
+      top: 100px;
+      width: 4px;
+      height: 30px;
+      background: #475569;
+      border-radius: 2px 0 0 2px;
+      box-shadow: 0 50px 0 #475569, 0 100px 0 #475569;
+    }
+
+    .phone-chassis::after {
+      /* Right button: Power button */
+      content: '';
+      position: absolute;
+      right: -4px;
+      top: 140px;
+      width: 4px;
+      height: 60px;
+      background: #475569;
+      border-radius: 0 2px 2px 0;
+    }
+
+    .phone-screen {
+      position: relative;
+      width: var(--phone-w);
+      height: var(--phone-h);
+      background: #000;
+      border-radius: calc(var(--phone-radius) - 10px);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: inset 0 0 4px rgba(0,0,0,0.8);
+    }
+
+    /* Dynamic Island */
+    .dynamic-island {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 110px;
+      height: 28px;
+      background: #000000;
+      border-radius: 20px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      pointer-events: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+
+    .camera-lens {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #111e2e;
+      border: 1px solid #1e293b;
+    }
+
+    .sensor {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #0b1320;
+    }
+
+    /* Status Bar */
+    .phone-status-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 44px;
+      padding: 10px 24px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 90;
+      pointer-events: none;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    }
+
+    .status-icons {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Phone Iframe */
+    .phone-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #ffffff;
+      padding-top: 0;
+    }
+
+    /* Home Indicator */
+    .home-indicator {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 134px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.4);
+      border-radius: 999px;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    /* Quick navigation pills under phone */
+    .quick-routes {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: var(--phone-w);
+    }
+
+    .route-pill {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-panel);
+      color: var(--text-sub);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .route-pill:hover {
+      color: var(--brand);
+      border-color: var(--brand);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Studio Bar -->
+  <header class="studio-bar">
+    <div class="brand-group">
+      <div class="logo-badge">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <rect x="2" y="5" width="20" height="14" rx="3" />
+          <path d="M2 10h20" />
+        </svg>
+        Finmi
+      </div>
+      <div class="brand-title">
+        Mobile Preview Studio
+        <span class="badge-tag">Multi-Instance Demo</span>
+      </div>
+    </div>
+
+    <div class="controls-group">
+      <!-- Layout Modes -->
+      <div class="btn-segmented">
+        <button class="btn-seg" id="mode-single" onclick="setMode('single')">
+          📱 1 Thiết bị
+        </button>
+        <button class="btn-seg active" id="mode-dual" onclick="setMode('dual')">
+          📱📱 2 Thiết bị (Demo Song Song)
+        </button>
+        <button class="btn-seg" id="mode-triple" onclick="setMode('triple')">
+          📱📱📱 3 Thiết bị
+        </button>
+      </div>
+
+      <!-- Zoom / Scale -->
+      <select class="scale-select" id="scale-select" onchange="changeScale(this.value)">
+        <option value="1.0">Phóng to: 100%</option>
+        <option value="0.9">Phóng to: 90%</option>
+        <option value="0.85" selected>Phóng to: 85% (Chuẩn)</option>
+        <option value="0.75">Phóng to: 75%</option>
+        <option value="0.67">Phóng to: 67%</option>
+      </select>
+
+      <!-- Reload All -->
+      <button class="action-btn" onclick="reloadAll()">
+        🔄 Tải lại tất cả
+      </button>
+
+      <!-- Theme Mode -->
+      <button class="action-btn" onclick="toggleTheme()" id="theme-btn">
+        🌙 Nền tối
+      </button>
+    </div>
+  </header>
+
+  <!-- Live Sync Demo Guide Banner -->
+  <div class="sync-banner">
+    <div class="sync-banner-text">
+      <span>💡</span>
+      <span>
+        <strong>Mẹo demo thông báo nợ, quỹ nhóm & micro AI:</strong>
+        Thiết bị 1 chạy trên <code>localhost:8080</code>, Thiết bị 2 chạy trên <code>127.0.0.1:8080</code>.
+        Trình duyệt tự cô lập phiên đăng nhập của 2 máy riêng biệt. Để dùng micro AI mượt nhất không bị hạn chế quyền iframe của trình duyệt, bạn có thể nhấn <strong>↗ Mở tab</strong> ở đầu mỗi máy!
+      </span>
+    </div>
+  </div>
+
+  <!-- Stage Canvas -->
+  <main class="studio-stage" id="studio-stage">
+
+    <!-- Device 1 (User A) -->
+    <div class="device-wrapper" id="device-wrap-1">
+      <div class="device-header">
+        <div class="device-user-pill">
+          <span class="dot"></span>
+          <span>Thiết bị 1 · User A</span>
+          <span style="opacity:0.6; font-size:10px;">(localhost:8080)</span>
+        </div>
+        <div class="device-actions">
+          <button class="mini-btn" onclick="reloadDevice('frame-1')">🔄 Reload</button>
+          <button class="mini-btn" onclick="openExternal('http://localhost:8080/')">↗ Mở tab</button>
+        </div>
+      </div>
+
+      <!-- Phone Chassis -->
+      <div class="phone-chassis">
+        <div class="phone-screen">
+          <div class="dynamic-island">
+            <div class="sensor"></div>
+            <div class="camera-lens"></div>
+          </div>
+          <div class="phone-status-bar">
+            <span>9:41</span>
+            <div class="status-icons">
+              <span>5G</span>
+              <span>100%</span>
+            </div>
+          </div>
+          <iframe id="frame-1" class="phone-frame" src="http://localhost:8080/" allow="microphone *; camera *; clipboard-read *; clipboard-write *;"></iframe>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+
+      <!-- Quick Route Shortcuts -->
+      <div class="quick-routes">
+        <span class="route-pill" onclick="navFrame('frame-1', '/')">🏠 Tổng quan</span>
+        <span class="route-pill" onclick="navFrame('frame-1', '/#/invoices')">📜 Lịch sử</span>
+        <span class="route-pill" onclick="navFrame('frame-1', '/#/invoices?tab=debts')">🔔 Nợ</span>
+        <span class="route-pill" onclick="navFrame('frame-1', '/#/budgets')">📊 Ngân sách</span>
+        <span class="route-pill" onclick="navFrame('frame-1', '/#/debts')">🤝 Quản lý nợ</span>
+      </div>
+    </div>
+
+    <!-- Device 2 (User B) -->
+    <div class="device-wrapper" id="device-wrap-2">
+      <div class="device-header">
+        <div class="device-user-pill">
+          <span class="dot" style="background:#3b82f6; box-shadow:0 0 6px #3b82f6;"></span>
+          <span>Thiết bị 2 · User B</span>
+          <span style="opacity:0.6; font-size:10px;">(127.0.0.1:8080)</span>
+        </div>
+        <div class="device-actions">
+          <button class="mini-btn" onclick="reloadDevice('frame-2')">🔄 Reload</button>
+          <button class="mini-btn" onclick="openExternal('http://127.0.0.1:8080/')">↗ Mở tab</button>
+        </div>
+      </div>
+
+      <!-- Phone Chassis -->
+      <div class="phone-chassis">
+        <div class="phone-screen">
+          <div class="dynamic-island">
+            <div class="sensor"></div>
+            <div class="camera-lens"></div>
+          </div>
+          <div class="phone-status-bar">
+            <span>9:41</span>
+            <div class="status-icons">
+              <span>5G</span>
+              <span>100%</span>
+            </div>
+          </div>
+          <!-- 127.0.0.1 provides an isolated session & localStorage from localhost -->
+          <iframe id="frame-2" class="phone-frame" src="http://127.0.0.1:8080/" allow="microphone *; camera *; clipboard-read *; clipboard-write *;"></iframe>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+
+      <!-- Quick Route Shortcuts -->
+      <div class="quick-routes">
+        <span class="route-pill" onclick="navFrame('frame-2', '/')">🏠 Tổng quan</span>
+        <span class="route-pill" onclick="navFrame('frame-2', '/#/invoices')">📜 Lịch sử</span>
+        <span class="route-pill" onclick="navFrame('frame-2', '/#/invoices?tab=debts')">🔔 Nợ</span>
+        <span class="route-pill" onclick="navFrame('frame-2', '/#/debts')">🤝 Quản lý nợ</span>
+        <span class="route-pill" onclick="navFrame('frame-2', '/#/settings')">⚙️ Cài đặt</span>
+      </div>
+    </div>
+
+    <!-- Device 3 (Optional / Group Demo) -->
+    <div class="device-wrapper" id="device-wrap-3" style="display:none;">
+      <div class="device-header">
+        <div class="device-user-pill">
+          <span class="dot" style="background:#ec4899; box-shadow:0 0 6px #ec4899;"></span>
+          <span>Thiết bị 3 · Thành viên nhóm</span>
+        </div>
+        <div class="device-actions">
+          <button class="mini-btn" onclick="reloadDevice('frame-3')">🔄 Reload</button>
+          <button class="mini-btn" onclick="openExternal('http://localhost:8080/#/groups')">↗ Mở tab</button>
+        </div>
+      </div>
+
+      <!-- Phone Chassis -->
+      <div class="phone-chassis">
+        <div class="phone-screen">
+          <div class="dynamic-island">
+            <div class="sensor"></div>
+            <div class="camera-lens"></div>
+          </div>
+          <div class="phone-status-bar">
+            <span>9:41</span>
+            <div class="status-icons">
+              <span>5G</span>
+              <span>100%</span>
+            </div>
+          </div>
+          <iframe id="frame-3" class="phone-frame" src="http://localhost:8080/#/groups" allow="microphone *; camera *; clipboard-read *; clipboard-write *;"></iframe>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+
+      <!-- Quick Route Shortcuts -->
+      <div class="quick-routes">
+        <span class="route-pill" onclick="navFrame('frame-3', '/')">🏠 Tổng quan</span>
+        <span class="route-pill" onclick="navFrame('frame-3', '/#/groups')">👥 Nhóm & Quỹ</span>
+        <span class="route-pill" onclick="navFrame('frame-3', '/#/debts')">🤝 Quản lý nợ</span>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    function setMode(mode) {
+      document.querySelectorAll('.btn-seg').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('mode-' + mode).classList.add('active');
+
+      const dev1 = document.getElementById('device-wrap-1');
+      const dev2 = document.getElementById('device-wrap-2');
+      const dev3 = document.getElementById('device-wrap-3');
+
+      if (mode === 'single') {
+        dev1.style.display = 'flex';
+        dev2.style.display = 'none';
+        dev3.style.display = 'none';
+      } else if (mode === 'dual') {
+        dev1.style.display = 'flex';
+        dev2.style.display = 'flex';
+        dev3.style.display = 'none';
+      } else if (mode === 'triple') {
+        dev1.style.display = 'flex';
+        dev2.style.display = 'flex';
+        dev3.style.display = 'flex';
+      }
+    }
+
+    function changeScale(val) {
+      const wrappers = document.querySelectorAll('.device-wrapper');
+      wrappers.forEach(w => {
+        w.style.transform = `scale(${val})`;
+      });
+    }
+
+    function reloadDevice(frameId) {
+      const frame = document.getElementById(frameId);
+      if (frame) {
+        frame.src = frame.src;
+      }
+    }
+
+    function reloadAll() {
+      reloadDevice('frame-1');
+      reloadDevice('frame-2');
+      reloadDevice('frame-3');
+    }
+
+    function navFrame(frameId, path) {
+      const frame = document.getElementById(frameId);
+      if (!frame) return;
+      const base = frame.id === 'frame-2' ? 'http://127.0.0.1:8080' : 'http://localhost:8080';
+      frame.src = base + (path.startsWith('/') ? path : '/' + path);
+    }
+
+    function openExternal(url) {
+      window.open(url, '_blank');
+    }
+
+    let isDark = true;
+    function toggleTheme() {
+      isDark = !isDark;
+      document.body.classList.toggle('light-theme', !isDark);
+      document.getElementById('theme-btn').innerText = isDark ? '🌙 Nền tối' : '☀️ Nền sáng';
+    }
+
+    // Initialize default scale
+    changeScale('0.85');
+  </script>
+</body>
+</html>

@@ -1,8 +1,14 @@
-import '../../../shared/widgets/finmi_brand.dart';
-import '../../../shared/widgets/finmi_text_field.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../core/localization/app_strings.dart';
+import '../../../shared/widgets/finmi_brand.dart';
+import '../../../shared/widgets/finmi_text_field.dart';
+import '../../../shared/widgets/google_logo.dart';
+import '../../../core/security/supabase_bootstrap.dart';
+import 'complete_profile_dialog.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/database/app_database.dart';
@@ -15,6 +21,8 @@ import '../../ingestion/data/pending_import_store.dart';
 import '../../insights/data/anomaly_feedback_store.dart';
 import '../../invoices/data/drift_invoice_repository.dart';
 import '../../notifications/data/budget_alert_preferences.dart';
+import '../../debts/data/debt_notification_store.dart';
+import '../data/personal_profile_store.dart';
 import '../domain/auth_validators.dart';
 import 'personal_profile_card.dart';
 import '../../notifications/data/budget_notification_service.dart';
@@ -35,6 +43,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmationController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
 
   bool _registering = false;
   bool _busy = false;
@@ -48,6 +58,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmationController.dispose();
+    _nameController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -57,10 +69,11 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     final user = ref.watch(authUserProvider);
     final isSignedOut =
         client != null && user.hasValue && user.valueOrNull == null;
+    final isEn = context.tr.isEn;
     return Scaffold(
       appBar: isSignedOut
           ? null
-          : AppBar(title: const Text('Tài khoản', maxLines: 3)),
+          : AppBar(title: Text(isEn ? 'Account' : 'Tài khoản', maxLines: 3)),
       body: DecoratedBox(
         decoration: BoxDecoration(
           color: isSignedOut ? const Color(0xFF123D32) : null,
@@ -87,7 +100,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   error: (error, _) => _buildCenteredContent(
                     _StatusCard(
                       icon: Icons.error_outline,
-                      title: 'Không đọc được phiên đăng nhập',
+                      title: isEn
+                          ? 'Failed to load sign-in session'
+                          : 'Không đọc được phiên đăng nhập',
                       message: friendlyMessage(error),
                       isError: true,
                     ),
@@ -169,6 +184,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
   Widget _buildAuthIntro(BuildContext context, {required bool expanded}) {
     final theme = Theme.of(context);
+    final isEn = context.tr.isEn;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       child: Column(
@@ -185,12 +201,14 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           ),
           const SizedBox(height: 20),
           Text(
-            'Theo dõi chi tiêu mỗi ngày',
+            isEn ? 'Track your daily finances' : 'Theo dõi chi tiêu mỗi ngày',
             style: theme.textTheme.titleLarge?.copyWith(color: Colors.white),
           ),
           const SizedBox(height: 12),
           Text(
-            'Ghi khoản thu chi, kiểm tra hóa đơn và chủ động với ngân sách của bạn.',
+            isEn
+                ? 'Record income and expenses, review receipts and stay on top of your budget.'
+                : 'Ghi khoản thu chi, kiểm tra hóa đơn và chủ động với ngân sách của bạn.',
             style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
           ),
         ],
@@ -248,7 +266,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _registering ? 'Tài khoản mới' : 'Chào mừng trở lại',
+                          _registering
+                              ? (context.tr.isEn ? 'New Account' : 'Tài khoản mới')
+                              : (context.tr.isEn ? 'Welcome Back' : 'Chào mừng trở lại'),
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: scheme.tertiary,
                             letterSpacing: 0,
@@ -257,7 +277,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                         ),
                         const SizedBox(height: AppSpacing.xs),
                         Text(
-                          _registering ? 'Tạo tài khoản' : 'Đăng nhập',
+                          _registering
+                              ? (context.tr.isEn ? 'Create Account' : 'Tạo tài khoản')
+                              : (context.tr.isEn ? 'Sign In' : 'Đăng nhập'),
                           style: theme.textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
@@ -270,8 +292,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               const SizedBox(height: AppSpacing.md),
               Text(
                 _registering
-                    ? 'Bắt đầu theo dõi thu chi của bạn.'
-                    : 'Đăng nhập để tiếp tục quản lý tài chính cá nhân.',
+                    ? (context.tr.isEn
+                        ? 'Start tracking your personal finances.'
+                        : 'Bắt đầu theo dõi thu chi của bạn.')
+                    : (context.tr.isEn
+                        ? 'Sign in to continue managing your personal finances.'
+                        : 'Đăng nhập để tiếp tục quản lý tài chính cá nhân.'),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                   height: 1.45,
@@ -280,7 +306,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               const SizedBox(height: AppSpacing.xl),
               Semantics(
                 container: true,
-                label: 'Chọn đăng nhập hoặc đăng ký',
+                label: context.tr.isEn
+                    ? 'Select sign in or register'
+                    : 'Chọn đăng nhập hoặc đăng ký',
                 child: SegmentedButton<bool>(
                   direction:
                       MediaQuery.sizeOf(context).width < 360 ||
@@ -293,9 +321,15 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     ),
                     tapTargetSize: MaterialTapTargetSize.padded,
                   ),
-                  segments: const [
-                    ButtonSegment(value: false, label: Text('Đăng nhập')),
-                    ButtonSegment(value: true, label: Text('Đăng ký')),
+                  segments: [
+                    ButtonSegment(
+                      value: false,
+                      label: Text(context.tr.isEn ? 'Sign In' : 'Đăng nhập'),
+                    ),
+                    ButtonSegment(
+                      value: true,
+                      label: Text(context.tr.isEn ? 'Register' : 'Đăng ký'),
+                    ),
                   ],
                   selected: {_registering},
                   onSelectionChanged: _busy
@@ -318,16 +352,83 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     icon: _messageIsError
                         ? Icons.error_outline
                         : Icons.mark_email_read_outlined,
-                    title: _messageIsError ? 'Có lỗi xảy ra' : 'Đã xử lý',
+                    title: _messageIsError
+                        ? (context.tr.isEn ? 'An error occurred' : 'Có lỗi xảy ra')
+                        : (context.tr.isEn ? 'Processed' : 'Đã xử lý'),
                     message: _message!,
                     isError: _messageIsError,
                     actionLabel: _verificationEmail == null
                         ? null
-                        : 'Gửi lại email xác nhận',
+                        : (context.tr.isEn
+                            ? 'Resend confirmation email'
+                            : 'Gửi lại email xác nhận'),
                     onAction: _verificationEmail == null
                         ? null
                         : _resendSignupConfirmation,
                   ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              ],
+              if (_registering) ...[
+                FinmiTextField(
+                  controller: _nameController,
+                  enabled: !_busy,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.name],
+                  decoration: InputDecoration(
+                    labelText: context.tr.isEn ? 'Full Name *' : 'Họ và tên *',
+                    hintText: context.tr.isEn
+                        ? 'e.g. John Doe'
+                        : 'Ví dụ: Nguyễn Văn A',
+                    prefixIcon: const Icon(Icons.person_outline),
+                  ),
+                  validator: (value) {
+                    final name = value?.trim() ?? '';
+                    if (name.isEmpty) {
+                      return context.tr.isEn
+                          ? 'Please enter full name.'
+                          : 'Vui lòng nhập họ và tên.';
+                    }
+                    if (name.length < 2) {
+                      return context.tr.isEn
+                          ? 'Enter at least 2 characters.'
+                          : 'Họ tên ít nhất 2 ký tự.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                FinmiTextField(
+                  controller: _phoneController,
+                  enabled: !_busy,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.telephoneNumber],
+                  decoration: InputDecoration(
+                    labelText: context.tr.isEn
+                        ? 'Phone Number *'
+                        : 'Số điện thoại *',
+                    hintText: '0912345678',
+                    prefixIcon: const Icon(Icons.phone_outlined),
+                  ),
+                  validator: (value) {
+                    final phone = value?.trim() ?? '';
+                    if (phone.isEmpty) {
+                      return context.tr.isEn
+                          ? 'Please enter phone number.'
+                          : 'Vui lòng nhập số điện thoại.';
+                    }
+                    return RegExp(r'^0[0-9]{9}$').hasMatch(phone)
+                        ? null
+                        : (context.tr.isEn
+                            ? 'Phone number must have 10 digits starting with 0.'
+                            : 'Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.');
+                  },
                 ),
                 const SizedBox(height: AppSpacing.lg),
               ],
@@ -340,10 +441,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 autocorrect: false,
                 enableSuggestions: false,
                 autofillHints: const [AutofillHints.email],
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Email',
-                  hintText: 'ban@example.com',
-                  prefixIcon: Icon(Icons.email_outlined),
+                  hintText: 'user@example.com',
+                  prefixIcon: const Icon(Icons.email_outlined),
                 ),
                 validator: AuthValidators.email,
               ),
@@ -366,13 +467,17 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     ? null
                     : (_) => _submit(),
                 decoration: InputDecoration(
-                  labelText: 'Mật khẩu',
+                  labelText: context.tr.isEn ? 'Password' : 'Mật khẩu',
                   helperText: _registering
-                      ? 'Tối thiểu 8 ký tự. Bạn có thể dùng trình quản lý mật khẩu.'
+                      ? (context.tr.isEn
+                          ? 'At least 8 characters. You can use a password manager.'
+                          : 'Tối thiểu 8 ký tự. Bạn có thể dùng trình quản lý mật khẩu.')
                       : null,
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
-                    tooltip: _obscurePassword ? 'Hiện mật khẩu' : 'Ẩn mật khẩu',
+                    tooltip: _obscurePassword
+                        ? (context.tr.isEn ? 'Show password' : 'Hiện mật khẩu')
+                        : (context.tr.isEn ? 'Hide password' : 'Ẩn mật khẩu'),
                     onPressed: _busy
                         ? null
                         : () => setState(
@@ -387,10 +492,14 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Hãy nhập mật khẩu.';
+                    return context.tr.isEn
+                        ? 'Please enter password.'
+                        : 'Hãy nhập mật khẩu.';
                   }
                   if (_registering && value.length < 8) {
-                    return 'Mật khẩu cần ít nhất 8 ký tự.';
+                    return context.tr.isEn
+                        ? 'Password must have at least 8 characters.'
+                        : 'Mật khẩu cần ít nhất 8 ký tự.';
                   }
                   return null;
                 },
@@ -404,7 +513,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                       tapTargetSize: MaterialTapTargetSize.padded,
                     ),
                     onPressed: _busy ? null : _sendPasswordReset,
-                    child: const Text('Quên mật khẩu?'),
+                    child: Text(
+                      context.tr.isEn ? 'Forgot password?' : 'Quên mật khẩu?',
+                    ),
                   ),
                 ),
               if (_registering) ...[
@@ -418,16 +529,22 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   enableSuggestions: false,
                   autofillHints: const [AutofillHints.newPassword],
                   onFieldSubmitted: _busy ? null : (_) => _submit(),
-                  decoration: const InputDecoration(
-                    labelText: 'Nhập lại mật khẩu',
-                    prefixIcon: Icon(Icons.lock_reset_outlined),
+                  decoration: InputDecoration(
+                    labelText: context.tr.isEn
+                        ? 'Confirm Password'
+                        : 'Nhập lại mật khẩu',
+                    prefixIcon: const Icon(Icons.lock_reset_outlined),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Hãy nhập lại mật khẩu.';
+                      return context.tr.isEn
+                          ? 'Please confirm password.'
+                          : 'Hãy nhập lại mật khẩu.';
                     }
                     return value != _passwordController.text
-                        ? 'Hai mật khẩu chưa khớp.'
+                        ? (context.tr.isEn
+                            ? 'Passwords do not match.'
+                            : 'Hai mật khẩu chưa khớp.')
                         : null;
                   },
                 ),
@@ -449,9 +566,52 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                       const SizedBox(width: AppSpacing.sm),
                     Flexible(
                       child: Text(
-                        _registering ? 'Tạo tài khoản' : 'Đăng nhập',
+                        _registering
+                            ? (context.tr.isEn
+                                ? 'Create Account'
+                                : 'Tạo tài khoản')
+                            : (context.tr.isEn ? 'Sign In' : 'Đăng nhập'),
                         textAlign: TextAlign.center,
                       ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                    child: Text(
+                      context.tr.isEn ? 'or' : 'hoặc',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: _busy ? null : _signInWithGoogle,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const GoogleLogo(size: 20),
+                    const SizedBox(width: 12),
+                    Text(
+                      context.tr.isEn
+                          ? 'Continue with Google'
+                          : 'Đăng nhập với Google',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -465,13 +625,15 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
   Widget _buildSignedIn(BuildContext context, User user) {
     final scheme = Theme.of(context).colorScheme;
+    final isEn = context.tr.isEn;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _StatusCard(
           icon: Icons.cloud_done_outlined,
-          title: 'Đã kết nối tài khoản',
-          message: user.email ?? 'Tài khoản ${user.id}',
+          title: isEn ? 'Account connected' : 'Đã kết nối tài khoản',
+          message: user.email ??
+              (isEn ? 'Account ${user.id}' : 'Tài khoản ${user.id}'),
         ),
         const SizedBox(height: AppSpacing.lg),
         PersonalProfileCard(
@@ -488,7 +650,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               icon: _messageIsError
                   ? Icons.error_outline
                   : Icons.check_circle_outline,
-              title: _messageIsError ? 'Có lỗi xảy ra' : 'Hoàn tất',
+              title: _messageIsError
+                  ? (isEn ? 'An error occurred' : 'Có lỗi xảy ra')
+                  : (isEn ? 'Done' : 'Hoàn tất'),
               message: _message!,
               isError: _messageIsError,
             ),
@@ -497,33 +661,36 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         const SizedBox(height: AppSpacing.xxl),
         _SectionHeading(
           icon: Icons.cloud_sync_outlined,
-          title: 'Dữ liệu và đồng bộ',
-          message:
-              'Đẩy thay đổi đang chờ lên cloud hoặc tải thay đổi mới về máy.',
+          title: isEn ? 'Data & Sync' : 'Dữ liệu và đồng bộ',
+          message: isEn
+              ? 'Push pending changes to cloud or download latest updates.'
+              : 'Đẩy thay đổi đang chờ lên cloud hoặc tải thay đổi mới về máy.',
         ),
         const SizedBox(height: AppSpacing.md),
         FilledButton.icon(
           onPressed: _busy ? null : _syncNow,
           icon: _busy ? const ButtonSpinner() : const Icon(Icons.sync),
-          label: const Text('Đồng bộ ngay'),
+          label: Text(isEn ? 'Sync now' : 'Đồng bộ ngay'),
         ),
         const SizedBox(height: AppSpacing.xxl),
         _SectionHeading(
           icon: Icons.shield_outlined,
-          title: 'Bảo mật tài khoản',
-          message: 'Quản lý mật khẩu, phiên đăng nhập và dữ liệu cloud.',
+          title: isEn ? 'Account Security' : 'Bảo mật tài khoản',
+          message: isEn
+              ? 'Manage password, sign-in sessions and cloud data.'
+              : 'Quản lý mật khẩu, phiên đăng nhập và dữ liệu cloud.',
         ),
         const SizedBox(height: AppSpacing.md),
         OutlinedButton.icon(
           onPressed: _busy ? null : _changePassword,
           icon: const Icon(Icons.lock_reset_outlined),
-          label: const Text('Đổi mật khẩu'),
+          label: Text(isEn ? 'Change Password' : 'Đổi mật khẩu'),
         ),
         const SizedBox(height: AppSpacing.sm),
         OutlinedButton.icon(
           onPressed: _busy ? null : _signOut,
           icon: const Icon(Icons.logout),
-          label: const Text('Đăng xuất'),
+          label: Text(isEn ? 'Sign Out' : 'Đăng xuất'),
         ),
         const SizedBox(height: AppSpacing.sm),
         OutlinedButton.icon(
@@ -533,11 +700,13 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             side: BorderSide(color: scheme.error),
           ),
           icon: const Icon(Icons.delete_forever_outlined),
-          label: const Text('Xóa tài khoản'),
+          label: Text(isEn ? 'Delete Account' : 'Xóa tài khoản'),
         ),
         const SizedBox(height: AppSpacing.lg),
         Text(
-          'Đăng xuất không xóa dữ liệu đang lưu trên thiết bị. Xóa tài khoản sẽ xóa dữ liệu cloud và dữ liệu local liên quan.',
+          isEn
+              ? 'Signing out will not erase local device data. Deleting your account will permanently remove cloud data and related local data.'
+              : 'Đăng xuất không xóa dữ liệu đang lưu trên thiết bị. Xóa tài khoản sẽ xóa dữ liệu cloud và dữ liệu local liên quan.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall,
         ),
@@ -547,18 +716,21 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
 
   Widget _buildIdentitySection(BuildContext context) {
     final identitiesAsync = ref.watch(authIdentitiesProvider);
+    final isEn = context.tr.isEn;
     return identitiesAsync.when(
       loading: () => const LinearProgressIndicator(),
       error: (error, _) => Card(
         child: ListTile(
           leading: const Icon(Icons.link_off_outlined),
-          title: const Text(
-            'Không tải được phương thức đăng nhập',
+          title: Text(
+            isEn
+                ? 'Failed to load sign-in methods'
+                : 'Không tải được phương thức đăng nhập',
             maxLines: 3,
           ),
           subtitle: Text(friendlyMessage(error)),
           trailing: IconButton(
-            tooltip: 'Tải lại',
+            tooltip: isEn ? 'Retry' : 'Tải lại',
             onPressed: _busy
                 ? null
                 : () => ref.invalidate(authIdentitiesProvider),
@@ -567,9 +739,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         ),
       ),
       data: (identities) {
-        final hasGoogle = identities.any(
-          (identity) => identity.provider == OAuthProvider.google.name,
-        );
         return Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -577,39 +746,37 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Phương thức đăng nhập',
+                  isEn ? 'Sign-in method' : 'Phương thức đăng nhập',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
                 for (final identity in identities)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(_identityIcon(identity.provider)),
+                    leading: identity.provider == OAuthProvider.google.name
+                        ? const GoogleLogo(size: 22)
+                        : Icon(_identityIcon(identity.provider)),
                     title: Text(_identityLabel(identity.provider)),
                     subtitle: Text(
                       identity.provider == 'email'
-                          ? 'Đăng nhập bằng email và mật khẩu'
-                          : 'Đã liên kết với tài khoản này',
+                          ? (isEn
+                              ? 'Signed in with email and password'
+                              : 'Đăng nhập bằng email và mật khẩu')
+                          : (isEn
+                              ? 'Linked to this account'
+                              : 'Đã liên kết với tài khoản này'),
                     ),
                     trailing:
                         identity.provider == 'email' || identities.length < 2
                         ? null
                         : IconButton(
-                            tooltip: 'Gỡ liên kết',
+                            tooltip: isEn ? 'Unlink' : 'Gỡ liên kết',
                             onPressed: _busy
                                 ? null
                                 : () => _unlinkIdentity(identity),
                             icon: const Icon(Icons.link_off_outlined),
                           ),
                   ),
-                if (!hasGoogle) ...[
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : _linkGoogle,
-                    icon: const Icon(Icons.add_link),
-                    label: const Text('Liên kết Google'),
-                  ),
-                ],
               ],
             ),
           ),
@@ -644,9 +811,27 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     });
     try {
       if (_registering) {
+        final phone = _phoneController.text.replaceAll(RegExp(r'\s+'), '').trim();
+        final client = ref.read(supabaseClientProvider);
+        final isTaken = await DebtNotificationStore.isPhoneTakenByAnotherUser(
+          phone,
+          client: client,
+        );
+        if (isTaken) {
+          if (!mounted) return;
+          setState(() {
+            _busy = false;
+            _messageIsError = true;
+            _message = 'Số điện thoại này đã được sử dụng bởi tài khoản khác.';
+          });
+          return;
+        }
+
         final response = await auth.signUp(
           email: _emailController.text,
           password: _passwordController.text,
+          displayName: _nameController.text.trim(),
+          phone: phone,
         );
         if (!mounted) return;
         setState(() {
@@ -656,7 +841,23 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               ? 'Hãy kiểm tra email để xác nhận tài khoản, sau đó quay lại đăng nhập.'
               : 'Tài khoản đã được tạo và đăng nhập.';
         });
-        if (response.session != null) await _runSync();
+        if (response.session != null) {
+          if (client != null) {
+            try {
+              await PersonalProfileStore(client).save(
+                displayName: _nameController.text.trim(),
+                phone: phone,
+              );
+            } catch (_) {}
+          }
+          await DebtNotificationStore.setCurrentUserPhone(
+            phone,
+            ref: ref,
+            client: client,
+            userId: response.user?.id,
+          );
+          await _runSync();
+        }
       } else {
         await auth.signIn(
           email: _emailController.text,
@@ -681,7 +882,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     }
   }
 
-  Future<void> _linkGoogle() async {
+  Future<void> _signInWithGoogle() async {
     final auth = ref.read(supabaseAuthServiceProvider);
     if (auth == null) return;
     setState(() {
@@ -689,26 +890,216 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       _message = null;
     });
     try {
-      final launched = await auth.linkGoogleIdentity();
+      final launched = await auth.signInWithGoogle();
       if (!launched) {
-        throw const AuthException('Không thể mở trang liên kết Google.');
+        throw const AuthException('Không thể mở trang đăng nhập Google.');
       }
       if (!mounted) return;
       setState(() {
         _messageIsError = false;
-        _message = 'Đã mở Google. Hoàn tất liên kết để quay lại ứng dụng.';
+        _message = 'Đang chuyển hướng tới Google...';
       });
     } on AuthException catch (error) {
       if (!mounted) return;
-      setState(() {
-        _messageIsError = true;
-        _message = friendlyMessage(error);
-      });
+      final msg = error.message.toLowerCase();
+      final isProviderDisabled = msg.contains('unsupported provider') ||
+          msg.contains('provider is not enabled') ||
+          msg.contains('provider not enabled');
+      if (isProviderDisabled) {
+        await _showGoogleProviderNotEnabledDialog();
+      } else {
+        setState(() {
+          _messageIsError = true;
+          _message = friendlyMessage(error);
+        });
+      }
+    } on Object catch (error) {
+      if (!mounted) return;
+      final str = error.toString().toLowerCase();
+      if (str.contains('unsupported provider') ||
+          str.contains('provider is not enabled') ||
+          str.contains('provider not enabled')) {
+        await _showGoogleProviderNotEnabledDialog();
+      } else {
+        setState(() {
+          _messageIsError = true;
+          _message = 'Không thể đăng nhập Google: ${friendlyMessage(error)}';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _showGoogleProviderNotEnabledDialog() async {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final client = ref.read(supabaseClientProvider);
+    final supabaseOrigin = client != null ? Uri.parse(client.rest.url).origin : '';
+    final redirectUri = SupabaseBootstrap.oauthRedirectUri ??
+        (supabaseOrigin.isNotEmpty
+            ? '$supabaseOrigin/auth/v1/callback'
+            : 'https://<project-ref>.supabase.co/auth/v1/callback');
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        icon: const Center(
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              GoogleLogo(size: 38),
+              Positioned(
+                right: -4,
+                bottom: -4,
+                child: CircleAvatar(
+                  radius: 8,
+                  backgroundColor: Colors.amber,
+                  child: Icon(Icons.priority_high, size: 11, color: Colors.black),
+                ),
+              ),
+            ],
+          ),
+        ),
+        title: const Text(
+          'Google OAuth chưa bật',
+          textAlign: TextAlign.center,
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: scheme.outlineVariant),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, size: 18, color: scheme.error),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Unsupported provider: provider is not enabled',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Supabase chưa được cấu hình Provider Google. Để kích hoạt thật:',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 10),
+              _buildSetupStep('1', 'Vào Supabase Dashboard → Authentication → Providers → Google.'),
+              _buildSetupStep('2', 'Bật toggle "Enable Sign in with Google".'),
+              _buildSetupStep('3', 'Nhập Client ID và Client Secret từ Google Cloud Console.'),
+              _buildSetupStep('4', 'Cấu hình Authorized Redirect URI: $redirectUri'),
+              const SizedBox(height: 14),
+              const Divider(),
+              const SizedBox(height: 8),
+              Text(
+                'Bạn có thể dùng tài khoản Google mẫu để kiểm tra ngay luồng bổ sung Họ tên & SĐT (10 số):',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Đóng'),
+          ),
+          FilledButton.icon(
+            icon: const GoogleLogo(size: 16),
+            label: const Text('Thử tài khoản Google Demo'),
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              _signInWithDemoGoogleAccount();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSetupStep(String stepNumber, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 18,
+            height: 18,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              stepNumber,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.3),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _signInWithDemoGoogleAccount() async {
+    final auth = ref.read(supabaseAuthServiceProvider);
+    if (auth == null) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+
+    const demoEmail = 'google.tester@demo.finmi.app';
+    const demoPassword = 'GoogleTesterDemo2026!';
+
+    try {
+      try {
+        await auth.signIn(email: demoEmail, password: demoPassword);
+      } catch (_) {
+        await auth.signUp(
+          email: demoEmail,
+          password: demoPassword,
+          displayName: 'Google Tester',
+        );
+        try {
+          await auth.signIn(email: demoEmail, password: demoPassword);
+        } catch (_) {}
+      }
+      await _runSync();
+      if (!mounted) return;
+      await showCompleteProfileDialogIfNeeded(context, ref);
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
-        _message = friendlyMessage(error);
+        _message = 'Không thể đăng nhập tài khoản demo: ${friendlyMessage(error)}';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -850,6 +1241,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     if (password == null || !mounted) return;
     final auth = ref.read(supabaseAuthServiceProvider);
     if (auth == null) return;
+    final isEn = context.tr.isEn;
     setState(() {
       _busy = true;
       _message = null;
@@ -859,7 +1251,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       if (!mounted) return;
       setState(() {
         _messageIsError = false;
-        _message = 'Đã đổi mật khẩu thành công.';
+        _message = isEn
+            ? 'Password changed successfully.'
+            : 'Đã đổi mật khẩu thành công.';
       });
     } on AuthException catch (error) {
       if (!mounted) return;
@@ -873,22 +1267,30 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   Future<void> _runSync() async {
+    final isEn = context.tr.isEn;
     await ref.read(syncOutboxStoreProvider).retryFailed();
     final result = await ref.read(syncCoordinatorProvider).runOnce();
     if (!mounted) return;
     setState(() {
       _messageIsError = result.upload.failed > 0 || result.conflicts > 0;
       _message = result.conflicts > 0
-          ? 'Đã gửi ${result.upload.pushed}, tải về ${result.applied}; có ${result.conflicts} xung đột cần kiểm tra.'
+          ? (isEn
+              ? 'Uploaded ${result.upload.pushed}, downloaded ${result.applied}; ${result.conflicts} conflict(s) need review.'
+              : 'Đã gửi ${result.upload.pushed}, tải về ${result.applied}; có ${result.conflicts} xung đột cần kiểm tra.')
           : result.upload.failed > 0
-          ? 'Đã gửi ${result.upload.pushed} thay đổi, ${result.upload.failed} thay đổi bị lỗi.'
-          : 'Đã gửi ${result.upload.pushed}, tải về ${result.applied} thay đổi từ tài khoản.';
+          ? (isEn
+              ? 'Uploaded ${result.upload.pushed} changes, ${result.upload.failed} changes failed.'
+              : 'Đã gửi ${result.upload.pushed} thay đổi, ${result.upload.failed} thay đổi bị lỗi.')
+          : (isEn
+              ? 'Uploaded ${result.upload.pushed}, downloaded ${result.applied} changes from account.'
+              : 'Đã gửi ${result.upload.pushed}, tải về ${result.applied} thay đổi từ tài khoản.');
     });
   }
 
   Future<void> _signOut() async {
     final auth = ref.read(supabaseAuthServiceProvider);
     if (auth == null) return;
+    final isEn = context.tr.isEn;
     setState(() => _busy = true);
     try {
       await auth.signOut();
@@ -903,7 +1305,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
-        _message = 'Không thể đăng xuất: ${friendlyMessage(error)}';
+        _message = isEn
+            ? 'Failed to sign out: ${friendlyMessage(error)}'
+            : 'Không thể đăng xuất: ${friendlyMessage(error)}';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -911,32 +1315,35 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   }
 
   Future<void> _deleteAccount() async {
+    final isEn = context.tr.isEn;
     final confirmationController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setState) {
-          final canDelete =
-              confirmationController.text.trim().toUpperCase() == 'XÓA';
+          final text = confirmationController.text.trim().toUpperCase();
+          final canDelete = text == 'XÓA' || text == 'DELETE';
           final scheme = Theme.of(context).colorScheme;
           return AlertDialog(
             icon: Icon(Icons.delete_forever_outlined, color: scheme.error),
-            title: const Text('Xóa tài khoản?', maxLines: 3),
+            title: Text(isEn ? 'Delete account?' : 'Xóa tài khoản?', maxLines: 3),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Tài khoản, dữ liệu đồng bộ và tệp backup cloud sẽ bị xóa vĩnh viễn. Dữ liệu local liên quan cũng sẽ bị xóa. Thao tác này không thể hoàn tác.',
+                Text(
+                  isEn
+                      ? 'Your account, synced data, and cloud backup files will be permanently deleted. Related local data will also be removed. This action cannot be undone.'
+                      : 'Tài khoản, dữ liệu đồng bộ và tệp backup cloud sẽ bị xóa vĩnh viễn. Dữ liệu local liên quan cũng sẽ bị xóa. Thao tác này không thể hoàn tác.',
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: confirmationController,
                   autofocus: true,
                   textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    labelText: 'Nhập XÓA để xác nhận',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: isEn ? 'Type DELETE to confirm' : 'Nhập XÓA để xác nhận',
+                    border: const OutlineInputBorder(),
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -945,7 +1352,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Hủy'),
+                child: Text(isEn ? 'Cancel' : 'Hủy'),
               ),
               FilledButton(
                 onPressed: canDelete
@@ -955,7 +1362,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   backgroundColor: scheme.error,
                   foregroundColor: scheme.onError,
                 ),
-                child: const Text('Xóa vĩnh viễn'),
+                child: Text(isEn ? 'Delete permanently' : 'Xóa vĩnh viễn'),
               ),
             ],
           );
@@ -1097,14 +1504,16 @@ class _ConfigurationMissingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isEn = context.tr.isEn;
     return AppCallout(
       icon: Icons.cloud_off_outlined,
       tone: CalloutTone.info,
-      title: 'Cần cấu hình tài khoản',
-      message:
-          'Ứng dụng yêu cầu đăng nhập trước khi sử dụng. Bản build này chưa có '
-          'cấu hình dịch vụ tài khoản. Hãy liên hệ người quản lý ứng dụng. '
-          'SUPABASE_PUBLISHABLE_KEY. Lần đăng nhập đầu cần có kết nối mạng.',
+      title: isEn ? 'Account Configuration Required' : 'Cần cấu hình tài khoản',
+      message: isEn
+          ? 'The application requires sign-in before use. This build is missing account service configuration. Please contact your app administrator.'
+          : 'Ứng dụng yêu cầu đăng nhập trước khi sử dụng. Bản build này chưa có '
+              'cấu hình dịch vụ tài khoản. Hãy liên hệ người quản lý ứng dụng. '
+              'SUPABASE_PUBLISHABLE_KEY. Lần đăng nhập đầu cần có kết nối mạng.',
     );
   }
 }
@@ -1131,8 +1540,9 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isEn = context.tr.isEn;
     return AlertDialog(
-      title: const Text('Đổi mật khẩu', maxLines: 3),
+      title: Text(isEn ? 'Change Password' : 'Đổi mật khẩu', maxLines: 3),
       content: Form(
         key: _formKey,
         child: Column(
@@ -1143,7 +1553,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
               obscureText: _obscure,
               autofocus: true,
               decoration: InputDecoration(
-                labelText: 'Mật khẩu mới',
+                labelText: isEn ? 'New password' : 'Mật khẩu mới',
                 suffixIcon: IconButton(
                   onPressed: () => setState(() => _obscure = !_obscure),
                   icon: Icon(
@@ -1154,16 +1564,20 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
                 ),
               ),
               validator: (value) => (value?.length ?? 0) < 8
-                  ? 'Mật khẩu cần ít nhất 8 ký tự.'
+                  ? (isEn
+                      ? 'Password must have at least 8 characters.'
+                      : 'Mật khẩu cần ít nhất 8 ký tự.')
                   : null,
             ),
             const SizedBox(height: 12),
             FinmiTextField(
               controller: _confirmationController,
               obscureText: _obscure,
-              decoration: const InputDecoration(labelText: 'Nhập lại mật khẩu'),
+              decoration: InputDecoration(
+                labelText: isEn ? 'Confirm password' : 'Nhập lại mật khẩu',
+              ),
               validator: (value) => value != _passwordController.text
-                  ? 'Hai mật khẩu chưa khớp.'
+                  ? (isEn ? 'Passwords do not match.' : 'Hai mật khẩu chưa khớp.')
                   : null,
             ),
           ],
@@ -1172,7 +1586,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Hủy'),
+          child: Text(isEn ? 'Cancel' : 'Hủy'),
         ),
         FilledButton(
           onPressed: () {
@@ -1180,7 +1594,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
               Navigator.pop(context, _passwordController.text);
             }
           },
-          child: const Text('Lưu mật khẩu'),
+          child: Text(isEn ? 'Save Password' : 'Lưu mật khẩu'),
         ),
       ],
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/app_tokens.dart';
+import '../../core/localization/app_strings.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/utils/month_utils.dart';
 import 'month_picker_sheet.dart';
@@ -11,8 +12,9 @@ class MonthSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tr = context.tr;
     final month = ref.watch(selectedMonthProvider);
-    final label = MonthUtils.label(month);
+    final label = MonthUtils.label(month, isEn: tr.isEn);
     final scheme = Theme.of(context).colorScheme;
     return Card(
       margin: EdgeInsets.zero,
@@ -25,7 +27,7 @@ class MonthSelector extends ConsumerWidget {
         child: Row(
           children: [
             IconButton(
-              tooltip: 'Tháng trước',
+              tooltip: tr.previousMonth,
               onPressed: () => _setMonth(ref, MonthUtils.shift(month, -1)),
               icon: const Icon(Icons.chevron_left),
             ),
@@ -65,7 +67,7 @@ class MonthSelector extends ConsumerWidget {
               ),
             ),
             IconButton(
-              tooltip: 'Tháng sau',
+              tooltip: tr.nextMonth,
               onPressed: () => _setMonth(ref, MonthUtils.shift(month, 1)),
               icon: const Icon(Icons.chevron_right),
             ),

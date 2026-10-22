@@ -1,3 +1,4 @@
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/app_exception.dart';
@@ -28,8 +29,53 @@ class SupabaseAuthService {
   Future<AuthResponse> signUp({
     required String email,
     required String password,
+    String? displayName,
+    String? phone,
   }) {
-    return _client.auth.signUp(email: email.trim(), password: password);
+    return _client.auth.signUp(
+      email: email.trim(),
+      password: password,
+      data: {
+        if (displayName != null && displayName.trim().isNotEmpty)
+          'display_name': displayName.trim(),
+        if (phone != null && phone.trim().isNotEmpty)
+          'phone': phone.trim(),
+      },
+    );
+  }
+
+  Future<bool> signInWithGoogle() async {
+    // Kiểm tra trước xem Google OAuth Provider có được bật trên Supabase không
+    // để tránh việc trình duyệt bị chuyển hướng sang trang trắng báo lỗi JSON 400.
+    try {
+      final origin = Uri.parse(_client.rest.url).origin;
+      final checkUri = Uri.parse('$origin/auth/v1/authorize?provider=google');
+      final client = http.Client();
+      final response = await client.get(
+        checkUri,
+        headers: {
+          if (_client.headers['apikey'] != null)
+            'apikey': _client.headers['apikey']!,
+        },
+      ).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 400 &&
+          (response.body.contains('provider is not enabled') ||
+           response.body.contains('Unsupported provider'))) {
+        throw const AuthException(
+          'Unsupported provider: provider is not enabled',
+          statusCode: '400',
+        );
+      }
+    } on AuthException {
+      rethrow;
+    } catch (_) {
+      // Bỏ qua nếu có lỗi mạng khi kiểm tra trước để không chặn luồng chính
+    }
+
+    return _client.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: SupabaseBootstrap.oauthRedirectUri,
+    );
   }
 
   Future<void> resendSignupConfirmation(String email) async {

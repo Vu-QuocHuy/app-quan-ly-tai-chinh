@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/localization/app_strings.dart';
 import '../../core/config/feature_flags.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers/app_providers.dart';
@@ -19,6 +20,7 @@ import '../../features/ingestion/domain/import_job.dart';
 import '../../features/ingestion/domain/quick_transaction_parser.dart';
 import '../../features/ingestion/presentation/import_source_sheet.dart';
 import '../../features/income/presentation/income_entry_sheet.dart';
+import '../../features/auth/presentation/complete_profile_dialog.dart';
 import '../../features/payments/application/qr_payment_providers.dart';
 import '../../features/notifications/data/budget_notification_service.dart';
 import '../../shared/dialogs/confirm_dialog.dart';
@@ -150,7 +152,12 @@ class _AppShellState extends ConsumerState<AppShell>
     final flags = ref.read(featureFlagsProvider).value ?? FeatureFlags.defaults;
     if (ref.read(supabaseClientProvider) == null || !flags.cloudSync) {
       _initialSyncLoadingFor = null;
-      if (mounted) setState(() => _initialSyncComplete = true);
+      if (mounted) {
+        setState(() => _initialSyncComplete = true);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(showCompleteProfileDialogIfNeeded(context, ref));
+        });
+      }
       return;
     }
     try {
@@ -168,6 +175,9 @@ class _AppShellState extends ConsumerState<AppShell>
           setState(() => _initialSyncComplete = true);
           unawaited(_processDueRecurringIncomes());
           if (!kIsWeb) unawaited(_resumePendingImports());
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) unawaited(showCompleteProfileDialogIfNeeded(context, ref));
+          });
           return;
         }
       }
@@ -212,28 +222,31 @@ class _AppShellState extends ConsumerState<AppShell>
     unawaited(_syncCloud());
   }
 
-  static const _destinations = [
-    NavigationDestination(
-      icon: Icon(CupertinoIcons.house),
-      selectedIcon: Icon(CupertinoIcons.house_fill),
-      label: 'Tổng quan',
-    ),
-    NavigationDestination(
-      icon: Icon(CupertinoIcons.chart_pie),
-      selectedIcon: Icon(CupertinoIcons.chart_pie_fill),
-      label: 'Ngân sách',
-    ),
-    NavigationDestination(
-      icon: Icon(CupertinoIcons.group),
-      selectedIcon: Icon(CupertinoIcons.group_solid),
-      label: 'Nhóm',
-    ),
-    NavigationDestination(
-      icon: Icon(CupertinoIcons.gear_alt),
-      selectedIcon: Icon(CupertinoIcons.gear_alt_fill),
-      label: 'Cài đặt',
-    ),
-  ];
+  List<NavigationDestination> _getDestinations(BuildContext context) {
+    final tr = context.tr;
+    return [
+      NavigationDestination(
+        icon: const Icon(CupertinoIcons.house),
+        selectedIcon: const Icon(CupertinoIcons.house_fill),
+        label: tr.navOverview,
+      ),
+      NavigationDestination(
+        icon: const Icon(CupertinoIcons.chart_pie),
+        selectedIcon: const Icon(CupertinoIcons.chart_pie_fill),
+        label: tr.navBudgets,
+      ),
+      NavigationDestination(
+        icon: const Icon(CupertinoIcons.group),
+        selectedIcon: const Icon(CupertinoIcons.group_solid),
+        label: tr.navGroups,
+      ),
+      NavigationDestination(
+        icon: const Icon(CupertinoIcons.gear_alt),
+        selectedIcon: const Icon(CupertinoIcons.gear_alt_fill),
+        label: tr.navSettings,
+      ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -303,6 +316,8 @@ class _AppShellState extends ConsumerState<AppShell>
     });
     final width = MediaQuery.sizeOf(context).width;
     final pendingQrPayment = ref.watch(pendingQrPaymentDraftProvider);
+    final hasActiveModal = ref.watch(hasActiveModalProvider).hasModal;
+    final hideAssistant = ref.watch(hideFloatingAssistantProvider) || hasActiveModal;
     final useRail = AppBreakpoints.useRail(width);
     final largeText = MediaQuery.textScalerOf(context).scale(12) / 12 >= 1.3;
     final wrapNavigation = largeText || width < 360;
@@ -312,18 +327,19 @@ class _AppShellState extends ConsumerState<AppShell>
       child: widget.navigationShell,
     );
     final scheme = Theme.of(context).colorScheme;
+    final tr = context.tr;
     final invoiceAction = _isImporting ? _cancelImport : _showImportSources;
     final invoiceActionTooltip = _isImporting
         ? _importFileName == null
-              ? 'Hủy nhập giao dịch'
+              ? tr.navCancelImport
               : 'Đang xử lý $_importFileName · Nhấn để hủy'
-        : 'Giao dịch';
+        : tr.navTransaction;
     final invoiceActionIcon = _isImporting
         ? const Icon(Icons.stop_circle_outlined)
         : const Icon(Icons.add_rounded);
     final invoiceActionLabel = _isImporting
-        ? 'Hủy $_importIndex/$_importTotal'
-        : 'Giao dịch';
+        ? '${tr.cancel} $_importIndex/$_importTotal'
+        : tr.navTransaction;
     return Scaffold(
       body: Stack(
         children: [
@@ -408,7 +424,7 @@ class _AppShellState extends ConsumerState<AppShell>
                             padding: EdgeInsets.only(bottom: 24),
                             child: FinmiBrand(width: 76),
                           ),
-                          destinations: _destinations
+                          destinations: _getDestinations(context)
                               .map(
                                 (item) => NavigationRailDestination(
                                   icon: item.icon,
@@ -443,10 +459,10 @@ class _AppShellState extends ConsumerState<AppShell>
               ],
             ),
           ),
-          if (!wrapNavigation || useRail)
+          if (!hideAssistant && (!wrapNavigation || useRail))
             Positioned(
               right: AppSpacing.gutter,
-              bottom: useRail ? 96 : AppSpacing.lg,
+              bottom: _isImporting ? 96 : AppSpacing.lg,
               child: const FinmiAssistantButton(),
             ),
         ],
@@ -475,8 +491,8 @@ class _AppShellState extends ConsumerState<AppShell>
                           child: Semantics(
                             button: true,
                             label: _isImporting
-                                ? 'Hủy nhập'
-                                : 'Quét QR thanh toán hoặc hóa đơn',
+                                ? tr.navCancelImport
+                                : tr.navScanTooltip,
                             child: InkWell(
                               onTap: _isImporting
                                   ? _cancelImport
@@ -519,12 +535,13 @@ class _AppShellState extends ConsumerState<AppShell>
                           children: [
                             for (final item in [
                               ...destinations,
-                              const Expanded(
-                                child: Padding(
-                                  padding: EdgeInsets.all(6),
-                                  child: FinmiAssistantButton(),
+                              if (!hideAssistant)
+                                const Expanded(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(6),
+                                    child: FinmiAssistantButton(),
+                                  ),
                                 ),
-                              ),
                             ])
                               SizedBox(
                                 width: constraints.maxWidth / columns,
@@ -542,10 +559,8 @@ class _AppShellState extends ConsumerState<AppShell>
                 ),
               ),
             ),
-      floatingActionButtonLocation: useRail
-          ? FloatingActionButtonLocation.endFloat
-          : FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: useRail
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButton: _isImporting
           ? FloatingActionButton.extended(
               onPressed: invoiceAction,
               tooltip: invoiceActionTooltip,
@@ -557,7 +572,7 @@ class _AppShellState extends ConsumerState<AppShell>
   }
 
   Widget _bottomDestination(BuildContext context, int index) {
-    final destination = _destinations[index];
+    final destination = _getDestinations(context)[index];
     final selected = widget.navigationShell.currentIndex == index;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -591,7 +606,7 @@ class _AppShellState extends ConsumerState<AppShell>
                           size: 20,
                           color: selected
                               ? scheme.onPrimary
-                              : scheme.onSurfaceVariant,
+                              : scheme.onSurface.withValues(alpha: 0.78),
                         ),
                         child: destination.icon,
                       ),
@@ -600,13 +615,13 @@ class _AppShellState extends ConsumerState<AppShell>
                         destination.label,
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          fontSize: 11,
+                          fontSize: 11.5,
                           fontWeight: selected
-                              ? FontWeight.w600
-                              : FontWeight.w400,
+                              ? FontWeight.w700
+                              : FontWeight.w600,
                           color: selected
                               ? scheme.onPrimary
-                              : scheme.onSurfaceVariant,
+                              : scheme.onSurface.withValues(alpha: 0.8),
                         ),
                       ),
                     ],
@@ -621,6 +636,7 @@ class _AppShellState extends ConsumerState<AppShell>
   }
 
   void _goBranch(int index) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     widget.navigationShell.goBranch(
       index,
       initialLocation: index == widget.navigationShell.currentIndex,
@@ -644,6 +660,7 @@ class _AppShellState extends ConsumerState<AppShell>
           context: context,
           showDragHandle: true,
           isScrollControlled: true,
+          useRootNavigator: true,
           builder: (context) => const IncomeEntrySheet(),
         );
       case ImportSource.scan:
@@ -718,6 +735,7 @@ class _AppShellState extends ConsumerState<AppShell>
         context: context,
         showDragHandle: true,
         isScrollControlled: true,
+        useRootNavigator: true,
         builder: (context) => IncomeEntrySheet(
           initialAmountMinor: transaction.amountMinor,
           initialDate: transaction.date,
@@ -1036,9 +1054,12 @@ class _AppShellState extends ConsumerState<AppShell>
   void _showMessage(String message, {bool isError = false}) {
     final scheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
+      ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          showCloseIcon: true,
           content: Row(
             children: [
               Icon(

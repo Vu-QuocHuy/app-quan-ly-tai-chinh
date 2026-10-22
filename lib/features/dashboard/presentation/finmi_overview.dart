@@ -17,7 +17,13 @@ import '../../../shared/widgets/app_refresh.dart';
 import '../../../shared/widgets/app_skeleton.dart';
 import '../../../shared/widgets/finmi_brand.dart';
 import '../../../shared/widgets/finmi_page_header.dart';
+import '../../../shared/widgets/finmi_assistant_button.dart';
 import '../../../shared/widgets/month_picker_sheet.dart';
+import '../../../core/localization/app_strings.dart';
+import '../../debts/data/debt_repository.dart';
+import '../../debts/data/debt_notification_store.dart';
+import '../../debts/domain/debt_models.dart';
+import '../../debts/domain/debt_notification.dart';
 import '../../export/presentation/report_export_sheet.dart';
 import '../../income/presentation/transaction_entry_sheet.dart';
 import '../../ingestion/presentation/import_source_sheet.dart';
@@ -70,6 +76,12 @@ class DashboardScreen extends ConsumerWidget {
     final incomeTotal = incomes.valueOrNull
         ?.where((e) => MonthUtils.key(e.receivedAt) == MonthUtils.key(month))
         .fold<int>(0, (sum, e) => sum + e.amountMinor);
+    final tr = context.tr;
+    final currentLocale = ref.watch(appLocaleProvider);
+    final isEn = currentLocale.languageCode == 'en';
+    final debtNotifs = ref.watch(debtNotificationsProvider).valueOrNull ?? [];
+    final hasUnreadDebts = debtNotifs.any((n) => !n.isRead);
+
     ref.listen(dashboardProvider, (_, next) {
       if (next.valueOrNull case final data?) {
         ref.read(budgetNotificationServiceProvider).notifyIfNeeded(data);
@@ -78,20 +90,24 @@ class DashboardScreen extends ConsumerWidget {
     void quickAdd() => showTransactionEntry(context);
 
     final utilities = <(IconData, String, VoidCallback?)>[
-      (CupertinoIcons.money_dollar_circle, 'Thêm thu/chi', quickAdd),
-      (CupertinoIcons.chart_bar, 'Thống kê', () => context.push('/statistics')),
+      (CupertinoIcons.money_dollar_circle, tr.utilAdd, quickAdd),
+      (CupertinoIcons.chart_bar, tr.utilStats, () => context.push('/statistics')),
       (
         CupertinoIcons.arrow_2_circlepath,
-        'Thu chi định kỳ',
+        tr.utilPlans,
         () => context.push('/plans'),
       ),
-      (CupertinoIcons.creditcard, 'Ngân sách', () => context.go('/budgets')),
-      (CupertinoIcons.group, 'Nhóm', () => context.go('/groups')),
-      (CupertinoIcons.camera, 'Quét', actions?.scanReceipt),
-      (CupertinoIcons.tag, 'Danh mục', () => context.push('/categories')),
+      (CupertinoIcons.creditcard, tr.utilBudgets, () => context.go('/budgets')),
+      (CupertinoIcons.group, tr.utilGroups, () => context.go('/groups')),
+      (
+        CupertinoIcons.arrow_right_arrow_left_circle,
+        tr.utilDebts,
+        () => context.push('/debts'),
+      ),
+      (CupertinoIcons.tag, tr.utilCategories, () => context.push('/categories')),
       (
         CupertinoIcons.doc_text,
-        'Xuất báo cáo',
+        tr.utilReports,
         () => showReportExportSheet(context),
       ),
     ];
@@ -108,11 +124,38 @@ class DashboardScreen extends ConsumerWidget {
                   children: [
                     const FinmiBrand(width: 112),
                     const Spacer(),
+                    InkWell(
+                      onTap: () => ref.read(appLocaleProvider.notifier).toggle(),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: context.finmi.border, width: 1.25),
+                          borderRadius: BorderRadius.circular(16),
+                          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.language, size: 14, color: theme.colorScheme.primary),
+                            const SizedBox(width: 4),
+                            Text(
+                              isEn ? 'EN' : 'VI',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     FinmiHeaderAction(
                       icon: CupertinoIcons.bell,
-                      tooltip: 'Thông báo',
-                      badge: pending.valueOrNull?.isNotEmpty ?? false,
-                      onPressed: () => context.push('/invoices?review=1'),
+                      tooltip: tr.notifications,
+                      badge: (pending.valueOrNull?.isNotEmpty ?? false) || hasUnreadDebts,
+                      onPressed: () => context.push('/invoices?tab=debts'),
                     ),
                     const SizedBox(width: 4),
                     SizedBox(
@@ -176,10 +219,12 @@ class DashboardScreen extends ConsumerWidget {
                       snapshot: data,
                       income: incomeTotal,
                       incomeError: incomes.hasError,
+                      debtSummary: ref.watch(debtSummaryProvider),
                       onRetry: () => ref.invalidate(incomesProvider),
                       onHistory: () => context.push(
                         '/invoices?month=${MonthUtils.key(month)}',
                       ),
+                      onDebts: () => context.push('/debts'),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -211,9 +256,9 @@ class DashboardScreen extends ConsumerWidget {
                   ],
                   const SizedBox(height: 16),
                   FinmiSectionLabel(
-                    'Tiện ích',
+                    tr.utilities,
                     trailing: Text(
-                      'Quản lý theo cách của bạn',
+                      tr.manageYourWay,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -246,10 +291,10 @@ class DashboardScreen extends ConsumerWidget {
                   _ScanBanner(onTap: actions?.scanReceipt),
                   const SizedBox(height: 20),
                   FinmiSectionLabel(
-                    'Giao dịch gần đây',
+                    tr.recentTransactions,
                     trailing: TextButton(
                       onPressed: () => context.push('/invoices'),
-                      child: const Text('Lịch sử thu chi ›'),
+                      child: Text('${tr.history} ›'),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -265,16 +310,15 @@ class DashboardScreen extends ConsumerWidget {
                     data: (entries) => entries.isEmpty
                         ? AppEmptyState(
                             icon: CupertinoIcons.doc_text,
-                            title: 'Chưa có khoản chi nào',
-                            message:
-                                'Thêm khoản chi đầu tiên hoặc quét một hóa đơn.',
+                            title: tr.noTransactionsYet,
+                            message: tr.addFirstTransaction,
                             action: OutlinedButton.icon(
                               onPressed: actions == null
                                   ? null
                                   : () =>
                                         actions.openSource(ImportSource.manual),
                               icon: const Icon(Icons.add),
-                              label: const Text('Thêm khoản chi'),
+                              label: Text(tr.addExpenseBtn),
                             ),
                           )
                         : Column(
@@ -309,13 +353,14 @@ class _Greeting extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tr = context.tr;
     final greeting = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Chào $name,', style: theme.textTheme.titleLarge),
+        Text(tr.greeting(name), style: theme.textTheme.titleLarge),
         const SizedBox(height: 4),
         Text(
-          'Theo dõi chi tiêu mỗi ngày',
+          tr.trackDaily,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -325,13 +370,16 @@ class _Greeting extends StatelessWidget {
     final date = OutlinedButton(
       onPressed: onMonth,
       style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         side: BorderSide(color: context.finmi.border, width: 1.25),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       child: Text(
-        'Tháng ${month.month}, ${month.year}',
-        style: theme.textTheme.bodySmall,
+        tr.monthLabel(month.month, month.year),
+        style: theme.textTheme.bodySmall?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: theme.colorScheme.onSurface,
+        ),
       ),
     );
     return context.needsStackedLayout
@@ -356,11 +404,15 @@ class _BalanceCard extends StatefulWidget {
     required this.incomeError,
     required this.onRetry,
     required this.onHistory,
+    this.debtSummary,
+    this.onDebts,
   });
   final DashboardSnapshot snapshot;
   final int? income;
   final bool incomeError;
   final VoidCallback onRetry, onHistory;
+  final DebtSummary? debtSummary;
+  final VoidCallback? onDebts;
   @override
   State<_BalanceCard> createState() => _BalanceCardState();
 }
@@ -371,6 +423,7 @@ class _BalanceCardState extends State<_BalanceCard> {
   Widget build(BuildContext context) {
     final t = context.finmi;
     final theme = Theme.of(context);
+    final tr = context.tr;
     final darkHero = t.heroBackground.computeLuminance() < .25;
     final incomeColor = darkHero
         ? const Color(0xFFBDE6C5)
@@ -394,7 +447,7 @@ class _BalanceCardState extends State<_BalanceCard> {
               hidden
                   ? '••••••'
                   : value == null
-                  ? (widget.incomeError ? 'Không tải được' : 'Đang tải…')
+                  ? (widget.incomeError ? (tr.isEn ? 'Failed' : 'Không tải được') : tr.loading)
                   : '${isIncome ? '+' : '-'} ${MoneyFormatter.format(value)}',
               style: statStyle?.copyWith(
                 color: isIncome ? incomeColor : t.heroText,
@@ -404,8 +457,35 @@ class _BalanceCardState extends State<_BalanceCard> {
         ),
       ),
     );
-    final thu = metric('Thu nhập tháng này', widget.income, true);
-    final chi = metric('Chi tiêu tháng này', widget.snapshot.totalMinor, false);
+    final thu = metric(tr.monthlyIncome, widget.income, true);
+    final chi = metric(tr.monthlyExpense, widget.snapshot.totalMinor, false);
+
+    final receivable = widget.debtSummary?.totalReceivableMinor ?? 0;
+    final payable = widget.debtSummary?.totalPayableMinor ?? 0;
+    Widget debtMetric() => InkWell(
+      onTap: widget.onDebts,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('⇄  ${tr.netDebts}', style: style),
+            const SizedBox(height: 4),
+            Text(
+              hidden
+                  ? '••••••'
+                  : (receivable == 0 && payable == 0)
+                      ? tr.noActiveDebts
+                      : '${receivable > 0 ? '+${MoneyFormatter.format(receivable)} ' : ''}${payable > 0 ? '-${MoneyFormatter.format(payable)}' : ''}'.trim(),
+              style: statStyle?.copyWith(
+                color: receivable >= payable ? incomeColor : const Color(0xFFF87171),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
     return AppCard(
       color: t.heroBackground,
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
@@ -420,16 +500,15 @@ class _BalanceCardState extends State<_BalanceCard> {
             children: [
               Expanded(
                 child: Tooltip(
-                  message:
-                      'Thu nhập trừ chi tiêu đã ghi nhận trong tháng đang chọn',
+                  message: tr.balanceTooltip,
                   child: Text(
-                    'Tổng số dư',
+                    tr.totalBalance,
                     style: style?.copyWith(fontWeight: FontWeight.w500),
                   ),
                 ),
               ),
               IconButton(
-                tooltip: hidden ? 'Hiện số tiền' : 'Ẩn số tiền',
+                tooltip: hidden ? tr.showAmount : tr.hideAmount,
                 onPressed: () => setState(() => hidden = !hidden),
                 style: IconButton.styleFrom(
                   foregroundColor: t.heroSecondary,
@@ -451,8 +530,8 @@ class _BalanceCardState extends State<_BalanceCard> {
           if (widget.income == null)
             Text(
               widget.incomeError
-                  ? 'Không tải được khoản thu'
-                  : 'Đang tải số dư…',
+                  ? (tr.isEn ? 'Failed to load income' : 'Không tải được khoản thu')
+                  : (tr.isEn ? 'Loading balance…' : 'Đang tải số dư…'),
               style: theme.textTheme.titleMedium?.copyWith(color: t.heroText),
             )
           else
@@ -483,7 +562,7 @@ class _BalanceCardState extends State<_BalanceCard> {
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
               semanticsLabel: hidden
-                  ? 'Số dư đã ẩn'
+                  ? (tr.isEn ? 'Hidden balance' : 'Số dư đã ẩn')
                   : MoneyFormatter.format(
                       widget.income! - widget.snapshot.totalMinor,
                     ),
@@ -492,7 +571,7 @@ class _BalanceCardState extends State<_BalanceCard> {
             TextButton(
               onPressed: widget.onRetry,
               style: TextButton.styleFrom(foregroundColor: t.heroText),
-              child: const Text('Thử lại khoản thu'),
+              child: Text(tr.isEn ? 'Retry income' : 'Thử lại khoản thu'),
             ),
           const SizedBox(height: 16),
           Divider(indent: 0, color: t.heroSecondary.withValues(alpha: .4)),
@@ -501,6 +580,8 @@ class _BalanceCardState extends State<_BalanceCard> {
             thu,
             const SizedBox(height: 8),
             chi,
+            const SizedBox(height: 8),
+            debtMetric(),
           ] else
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -508,6 +589,8 @@ class _BalanceCardState extends State<_BalanceCard> {
                 Expanded(child: thu),
                 const SizedBox(width: 8),
                 Expanded(child: chi),
+                const SizedBox(width: 8),
+                Expanded(child: debtMetric()),
               ],
             ),
         ],
@@ -558,6 +641,7 @@ class _TodayStrip extends StatelessWidget {
         ),
       ),
     );
+    final tr = context.tr;
     final description = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -567,8 +651,8 @@ class _TodayStrip extends StatelessWidget {
             const SizedBox(width: 5),
             Expanded(
               child: Text(
-                'Chi tiêu hôm nay',
-                style: theme.textTheme.bodySmall?.copyWith(
+                tr.todaySpending,
+                style: theme.textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -577,9 +661,10 @@ class _TodayStrip extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Đã chi ${MoneyFormatter.format(snapshot.dailyTotals[today.day] ?? 0)} · Chạm để xem',
+          tr.todaySpent(MoneyFormatter.format(snapshot.dailyTotals[today.day] ?? 0)),
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
@@ -611,26 +696,32 @@ class _Utility extends StatelessWidget {
     final theme = Theme.of(context);
     return AppCard(
       onTap: onTap,
-      padding: const EdgeInsets.fromLTRB(1, 12, 1, 9),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 77),
+        constraints: const BoxConstraints(minHeight: 80),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 34,
-              height: 34,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
                 color: theme.colorScheme.primary,
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: theme.colorScheme.onPrimary, size: 20),
             ),
-            const SizedBox(height: 7),
+            const SizedBox(height: 8),
             Text(
               label,
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w500,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                height: 1.25,
+                color: theme.colorScheme.onSurface,
               ),
             ),
           ],
@@ -746,11 +837,12 @@ class _ScanBanner extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(17),
         child: Semantics(
-          label:
-              'Theo dõi chi tiêu mỗi ngày. Quét hóa đơn, ghi lại khoản chi. Chạm để quét hóa đơn.',
+          label: context.tr.bannerSemantics,
           image: true,
           child: Image.asset(
-            'assets/branding/finmi/banner.png',
+            context.tr.isEn
+                ? 'assets/branding/finmi/banner-en.png'
+                : 'assets/branding/finmi/banner.png',
             width: double.infinity,
             fit: BoxFit.fitWidth,
             excludeFromSemantics: true,
@@ -824,5 +916,226 @@ class _RecentTransaction extends StatelessWidget {
               ],
             ),
     );
+  }
+}
+
+Future<void> _showHomeNotificationsSheet(
+  BuildContext context,
+  WidgetRef ref,
+  List<InvoiceEntity>? pendingInvoices,
+  List<DebtInAppNotification> debtNotifs,
+) async {
+  final tr = context.tr;
+  final theme = Theme.of(context);
+  final unreadDebts = debtNotifs.where((n) => !n.isRead).toList();
+
+  ref.read(hideFloatingAssistantProvider.notifier).state = true;
+  try {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      useSafeArea: true,
+      useRootNavigator: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      tr.notifications,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        context.push('/invoices');
+                      },
+                      icon: const Icon(Icons.history_rounded, size: 16),
+                      label: Text(tr.viewHistoryPage),
+                    ),
+                  ],
+                ),
+                if (unreadDebts.isNotEmpty)
+                  TextButton(
+                    onPressed: () async {
+                      for (final n in unreadDebts) {
+                        await DebtNotificationStore.markAsRead(n.id);
+                      }
+                      ref.invalidate(debtNotificationsProvider);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+                    child: Text(tr.markAllRead),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if ((pendingInvoices == null || pendingInvoices.isEmpty) &&
+                debtNotifs.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(28),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.notifications_off_outlined,
+                        size: 48,
+                        color: theme.colorScheme.outlineVariant,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        tr.noNotifications,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.tonalIcon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          context.push('/invoices');
+                        },
+                        icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                        label: Text(tr.openHistoryTransactions),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.6,
+                ),
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    if (pendingInvoices != null && pendingInvoices.isNotEmpty) ...[
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFFEF3C7),
+                          child: Icon(
+                            Icons.receipt_long,
+                            color: Color(0xFFD97706),
+                          ),
+                        ),
+                        title: Text(
+                          tr.receiptsNeedReview(pendingInvoices.length),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(tr.tapToVerifyAndApprove),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          context.push('/invoices?review=1');
+                        },
+                      ),
+                      const Divider(height: 1),
+                    ],
+                    if (debtNotifs.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12, bottom: 6),
+                        child: Text(
+                          tr.debtNotificationsTitle,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      for (final notif in debtNotifs)
+                        ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: notif.isRead
+                                ? theme.colorScheme.surfaceContainerHighest
+                                : const Color(0xFFDCFCE7),
+                            child: Icon(
+                              Icons.handshake_outlined,
+                              color: notif.isRead
+                                  ? theme.colorScheme.onSurfaceVariant
+                                  : const Color(0xFF16A34A),
+                            ),
+                          ),
+                          title: Text(
+                            '${notif.senderName}: ${MoneyFormatter.format(notif.amountMinor)}',
+                            style: TextStyle(
+                              fontWeight: notif.isRead
+                                  ? FontWeight.normal
+                                  : FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: Text(
+                            [
+                              if (notif.notes != null && notif.notes!.isNotEmpty)
+                                notif.notes!,
+                              if (notif.dueDate != null)
+                                '${tr.duePrefix}${notif.dueDate!.day}/${notif.dueDate!.month}/${notif.dueDate!.year}',
+                            ].join(' · '),
+                          ),
+                          trailing: notif.isRead
+                              ? const Icon(Icons.chevron_right)
+                              : Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                          onTap: () async {
+                            if (!notif.isRead) {
+                              await DebtNotificationStore.markAsRead(notif.id);
+                              ref.invalidate(debtNotificationsProvider);
+                            }
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            context.push('/invoices?tab=debts');
+                          },
+                        ),
+                    ],
+                    const Divider(height: 16),
+                    ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: theme.colorScheme.primaryContainer,
+                        child: Icon(
+                          Icons.history_rounded,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                      title: Text(
+                        tr.openHistoryTransactions,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        context.push('/invoices');
+                      },
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  } finally {
+    ref.read(hideFloatingAssistantProvider.notifier).state = false;
   }
 }

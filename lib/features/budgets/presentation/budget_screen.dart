@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/localization/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
@@ -23,6 +24,7 @@ class BudgetScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tr = context.tr;
     final categories = ref.watch(categoriesProvider);
     final budgets = ref.watch(budgetsProvider);
     final dashboard = ref.watch(dashboardProvider);
@@ -36,10 +38,10 @@ class BudgetScreen extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             FinmiSliverHeader(
-              title: 'Hạn mức ngân sách',
+              title: tr.budgetLimits,
               actions: [
                 FinmiHeaderAction(
-                  tooltip: 'Quản lý danh mục',
+                  tooltip: tr.manageCategories,
                   onPressed: () => context.push('/categories'),
                   icon: Icons.category_outlined,
                 ),
@@ -135,19 +137,21 @@ class BudgetScreen extends ConsumerWidget {
   ) async {
     final initialValue = current?.limitMinor.toString() ?? '';
     var inputValue = initialValue;
+    final tr = context.tr;
+    final categoryTitle = tr.categoryName(category.name, categoryId: category.id);
     final result = await showDialog<_BudgetDialogResult>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Ngân sách ${category.name}', maxLines: 3),
+        title: Text(tr.budgetFor(categoryTitle), maxLines: 3),
         content: FinmiTextField(
           initialValue: initialValue,
           onChanged: (text) => inputValue = text,
           autofocus: true,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'Hạn mức tháng',
+          decoration: InputDecoration(
+            labelText: tr.monthlyLimit,
             suffixText: '₫',
-            helperText: 'Để trống hoặc nhập 0 để không giới hạn.',
+            helperText: tr.budgetInputHelper,
           ),
         ),
         actions: [
@@ -156,10 +160,9 @@ class BudgetScreen extends ConsumerWidget {
               onPressed: () async {
                 final confirmed = await showConfirmDialog(
                   context,
-                  title: 'Xóa hạn mức ngân sách?',
-                  message:
-                      'Danh mục “${category.name}” sẽ trở về không giới hạn.',
-                  confirmLabel: 'Xóa hạn mức',
+                  title: tr.deleteBudgetTitle,
+                  message: tr.deleteBudgetDesc(categoryTitle),
+                  confirmLabel: tr.deleteLimitBtn,
                   destructive: true,
                 );
                 if (confirmed && context.mounted) {
@@ -167,7 +170,7 @@ class BudgetScreen extends ConsumerWidget {
                 }
               },
               child: Text(
-                'Xóa',
+                tr.delete,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
@@ -179,7 +182,7 @@ class BudgetScreen extends ConsumerWidget {
               }
               Navigator.pop(context);
             },
-            child: const Text('Hủy'),
+            child: Text(tr.cancel),
           ),
           FilledButton(
             onPressed: () {
@@ -196,7 +199,7 @@ class BudgetScreen extends ConsumerWidget {
                     : _BudgetDialogResult.value(parsed),
               );
             },
-            child: const Text('Lưu'),
+            child: Text(tr.save),
           ),
         ],
       ),
@@ -275,13 +278,13 @@ class _BudgetTile extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        category.name,
+                        context.tr.categoryName(category.name, categoryId: category.id),
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                     ),
                     if (isOver)
                       Tooltip(
-                        message: 'Vượt hạn mức',
+                        message: context.tr.isEn ? 'Over budget' : 'Vượt hạn mức',
                         child: Icon(
                           Icons.warning_amber_rounded,
                           size: 18,
@@ -293,8 +296,12 @@ class _BudgetTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   unlimited
-                      ? 'Không giới hạn · Đã chi ${MoneyFormatter.format(spentMinor)}'
-                      : 'Hạn mức: ${MoneyFormatter.format(limit)} · Đã chi ${MoneyFormatter.format(spentMinor)} (${(ratio * 100).round()}%)',
+                      ? context.tr.unlimitedSpent(MoneyFormatter.format(spentMinor))
+                      : context.tr.budgetLimitSpent(
+                          MoneyFormatter.format(limit),
+                          MoneyFormatter.format(spentMinor),
+                          (ratio * 100).round(),
+                        ),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -310,8 +317,12 @@ class _BudgetTile extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     isOver
-                        ? 'Vượt hạn mức ${MoneyFormatter.format(-remaining)}'
-                        : 'Còn lại ${MoneyFormatter.format(remaining)}',
+                        ? (context.tr.isEn
+                            ? 'Over by ${MoneyFormatter.format(-remaining)}'
+                            : 'Vượt hạn mức ${MoneyFormatter.format(-remaining)}')
+                        : (context.tr.isEn
+                            ? 'Remaining ${MoneyFormatter.format(remaining)}'
+                            : 'Còn lại ${MoneyFormatter.format(remaining)}'),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: isOver
                           ? finance.budgetOver.color
@@ -324,7 +335,9 @@ class _BudgetTile extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: 'Sửa ngân sách ${category.name}',
+            tooltip: context.tr.editBudgetFor(
+              context.tr.categoryName(category.name, categoryId: category.id),
+            ),
             onPressed: onEdit,
             icon: const Icon(Icons.edit_outlined, size: 18),
           ),
@@ -375,6 +388,7 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
           ),
           // Không cảnh báo theo tổng; chỉ liệt kê danh mục vượt hạn mức riêng.
           data: (data) {
+            final tr = context.tr;
             final overBudget = data.overBudgetCategories;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,14 +397,18 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
                   children: [
                     Expanded(
                       child: Text(
-                        'Chi tiêu tháng này',
-                        style: Theme.of(context).textTheme.bodySmall,
+                        tr.monthlySpending,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
                       ),
                     ),
                     IconButton(
                       tooltip: _expanded
-                          ? 'Ẩn danh mục vượt hạn mức'
-                          : 'Xem danh mục vượt hạn mức',
+                          ? tr.hideOverBudget
+                          : tr.showOverBudget,
                       onPressed: () => setState(() => _expanded = !_expanded),
                       icon: Icon(
                         _expanded ? Icons.expand_less : Icons.expand_more,
@@ -408,7 +426,7 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
                 const SizedBox(height: 6),
                 if (overBudget.isNotEmpty)
                   Text(
-                    '${overBudget.length} danh mục vượt hạn mức',
+                    tr.overBudgetCategoriesCount(overBudget.length),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: context.finance.budgetOver.color,
                     ),
@@ -416,12 +434,12 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
                 if (_expanded) ...[
                   const Divider(height: 24),
                   Text(
-                    'Danh mục vượt hạn mức',
+                    tr.overBudgetCategories,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
                   if (overBudget.isEmpty)
-                    const Text('Chưa có danh mục nào vượt hạn mức.'),
+                    Text(tr.noOverBudgetCategories),
                   for (final item in overBudget)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -439,9 +457,14 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(item.categoryName),
                                 Text(
-                                  'Vượt ${MoneyFormatter.format(item.overMinor)}',
+                                  tr.categoryName(
+                                    item.categoryName,
+                                    categoryId: item.categoryId,
+                                  ),
+                                ),
+                                Text(
+                                  tr.overBy(MoneyFormatter.format(item.overMinor)),
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(color: scheme.error),
                                 ),

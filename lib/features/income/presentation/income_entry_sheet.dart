@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
+import '../../../shared/widgets/category_avatar.dart';
 import '../../budgets/presentation/category_management.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../data/income_repository.dart';
@@ -190,16 +191,72 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
               DropdownButtonFormField<String>(
                 key: ValueKey('income-category-${categoryId ?? 'loading'}'),
                 initialValue: categoryId,
+                isExpanded: true,
+                isDense: true,
+                alignment: AlignmentDirectional.centerStart,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                elevation: 4,
+                borderRadius: BorderRadius.circular(16),
+                menuMaxHeight: 280,
+                dropdownColor: Theme.of(context).colorScheme.surfaceContainerHigh,
                 decoration: InputDecoration(
                   labelText: 'Danh mục thu',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
                   errorText: _categoryError,
                   prefixIcon: const Icon(Icons.category_outlined),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
+                hint: Text(
+                  'Chọn danh mục',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 15,
+                  ),
+                ),
+                selectedItemBuilder: (context) {
+                  return categories.map((category) {
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CategoryAvatar(category: category, radius: 11),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            category.name,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList();
+                },
                 items: [
                   for (final category in categories)
                     DropdownMenuItem(
                       value: category.id,
-                      child: Text(category.name),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            CategoryAvatar(category: category, radius: 12),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                category.name,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                 ],
                 onChanged: _saving || categories.isEmpty

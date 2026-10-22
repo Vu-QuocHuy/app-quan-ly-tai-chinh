@@ -33,15 +33,96 @@
   <title>Finmi</title>
   <link rel="manifest" href="manifest.json">
 </head>
-<body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  <script>
+    (function() {
+      var recognition = null;
+      window._finmiSpeechSupported = function() {
+        return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+      };
+      window._finmiStartSpeech = function(lang, onResult, onError, onEnd) {
+        var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRec) {
+          if (onError) onError("Trình duyệt không hỗ trợ Web Speech API");
+          return;
+        }
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+        function runRecognition() {
+          try {
+            if (recognition) {
+              try { recognition.abort(); } catch(e) {}
+              recognition = null;
+            }
+            recognition = new SpeechRec();
+            recognition.lang = lang || 'vi-VN';
+            recognition.interimResults = true;
+            recognition.continuous = true;
+            recognition.onresult = function(event) {
+              var text = "";
+              for (var i = 0; i < event.results.length; i++) {
+                text += event.results[i][0].transcript;
+              }
+              if (onResult) onResult(text);
+            };
+            recognition.onerror = function(err) {
+              console.warn("Finmi Speech error:", err);
+              var msg = err.error || "Lỗi micro";
+              if (err.error === 'not-allowed') {
+                msg = "Chưa được cấp quyền micro. Hãy bấm vào biểu tượng ổ khóa/quyền trang trên thanh địa chỉ để bật micro.";
+              }
+              if (onError) onError(msg);
+            };
+            recognition.onend = function() {
+              if (onEnd) onEnd();
+            };
+            recognition.start();
+          } catch (e) {
+            console.warn("Finmi Speech start error:", e);
+            if (onError) onError(e.message || String(e));
+          }
+        }
+
+        // Explicitly trigger the browser's native microphone permission prompt first
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+            try {
+              stream.getTracks().forEach(function(track) { track.stop(); });
+            } catch(e) {}
+            runRecognition();
+          }).catch(function(err) {
+            console.warn("Finmi getUserMedia permission prompt error:", err);
+            if (onError) {
+              onError("Trình duyệt chưa cho phép dùng micro. Nếu đang chạy qua khung nhúng, hãy mở ứng dụng ở tab riêng hoặc cấp quyền micro trên thanh địa chỉ.");
+            }
+          });
+        } else {
+          runRecognition();
+        }
+      };
+      window._finmiStopSpeech = function() {
+        if (recognition) {
+          try {
+            recognition.stop();
+          } catch(e) {}
+          recognition = null;
+        }
+      };
+      window._finmiGetCookie = function(name) {
+        try {
+          var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+          return match ? decodeURIComponent(match[2]) : '';
+        } catch(e) {
+          return '';
+        }
+      };
+      window._finmiSetCookie = function(name, val) {
+        try {
+          var d = new Date();
+          d.setTime(d.getTime() + (7*24*60*60*1000));
+          document.cookie = name + "=" + encodeURIComponent(val) + ";path=/;expires=" + d.toUTCString() + ";SameSite=Lax";
+        } catch(e) {}
+      };
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

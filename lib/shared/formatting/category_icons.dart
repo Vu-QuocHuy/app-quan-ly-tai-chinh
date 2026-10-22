@@ -15,15 +15,29 @@ const List<String> kCategoryIconNames = [
   'pets',
   'flight',
   'fitness_center',
+  // Finance & Income icons
+  'payments',
+  'account_balance',
+  'savings',
+  'trending_up',
+  'card_giftcard',
+  'storefront',
+  'work',
+  'receipt_long',
+  'coffee',
+  'local_gas_station',
+  'local_pharmacy',
+  'build',
+  'devices',
+  'sports_esports',
+  'child_care',
+  'credit_card',
+  'attach_money',
+  'celebration',
+  'shopping_cart',
 ];
 
 /// Ánh xạ tên icon đã lưu trong DB sang `IconData`.
-///
-/// Hợp nhất BA bản không khớp nhau trước đây: màn Danh mục nhận đủ 11 case,
-/// còn Dashboard và Chi tiết hóa đơn chỉ nhận 7. Hệ quả là người dùng chọn
-/// `pets` / `home` / `flight` / `fitness_center` thì thấy đúng icon ở Danh mục
-/// nhưng ra `Icons.category` xám ở hai màn còn lại. Bản này giữ đủ 12 case và
-/// nhận `null` an toàn.
 IconData categoryIconFor(String? name) => switch (name) {
   'restaurant' => Icons.restaurant,
   'directions_car' => Icons.directions_car,
@@ -36,14 +50,29 @@ IconData categoryIconFor(String? name) => switch (name) {
   'pets' => Icons.pets,
   'flight' => Icons.flight,
   'fitness_center' => Icons.fitness_center,
+  'payments' => Icons.payments,
+  'account_balance' => Icons.account_balance,
+  'savings' => Icons.savings,
+  'trending_up' => Icons.trending_up,
+  'card_giftcard' => Icons.card_giftcard,
+  'storefront' => Icons.storefront,
+  'work' => Icons.work,
+  'receipt_long' => Icons.receipt_long,
+  'coffee' => Icons.coffee,
+  'local_gas_station' => Icons.local_gas_station,
+  'local_pharmacy' => Icons.local_pharmacy,
+  'build' => Icons.build,
+  'devices' => Icons.devices,
+  'sports_esports' => Icons.sports_esports,
+  'child_care' => Icons.child_care,
+  'credit_card' => Icons.credit_card,
+  'attach_money' => Icons.attach_money,
+  'celebration' => Icons.celebration,
+  'shopping_cart' => Icons.shopping_cart,
   _ => Icons.category,
 };
 
 /// Tên tiếng Việt của từng icon.
-///
-/// Cần thiết vì picker icon dùng `ChoiceChip(label: Icon(...))`: `Icon` không
-/// đóng góp semantics nếu không có `semanticLabel`, nên mỗi chip vốn phơi ra
-/// một cái tên RỖNG — người dùng TalkBack vuốt qua hàng icon chỉ nghe im lặng.
 String categoryIconLabel(String? name) => switch (name) {
   'restaurant' => 'Ăn uống',
   'directions_car' => 'Di chuyển',
@@ -56,5 +85,24 @@ String categoryIconLabel(String? name) => switch (name) {
   'pets' => 'Thú cưng',
   'flight' => 'Du lịch',
   'fitness_center' => 'Thể thao',
+  'payments' => 'Tiền lương',
+  'account_balance' => 'Ngân hàng',
+  'savings' => 'Tiết kiệm / Lãi',
+  'trending_up' => 'Đầu tư',
+  'card_giftcard' => 'Thưởng / Quà',
+  'storefront' => 'Bán hàng / Kinh doanh',
+  'work' => 'Công việc / Phụ cấp',
+  'receipt_long' => 'Hóa đơn',
+  'coffee' => 'Cà phê',
+  'local_gas_station' => 'Xăng xe',
+  'local_pharmacy' => 'Hiệu thuốc',
+  'build' => 'Sửa chữa',
+  'devices' => 'Thiết bị',
+  'sports_esports' => 'Trò chơi',
+  'child_care' => 'Con cái',
+  'credit_card' => 'Thẻ tín dụng',
+  'attach_money' => 'Tiền mặt',
+  'celebration' => 'Tiệc tùng',
+  'shopping_cart' => 'Đi chợ',
   _ => 'Khác',
 };

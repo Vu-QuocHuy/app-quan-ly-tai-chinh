@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/localization/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
@@ -27,6 +28,7 @@ class _CategoryManagementScreenState
 
   @override
   Widget build(BuildContext context) {
+    final tr = context.tr;
     final categoryProvider = _kind == CategoryKind.income
         ? incomeCategoriesProvider
         : categoriesProvider;
@@ -34,13 +36,13 @@ class _CategoryManagementScreenState
     final categories = categoryState.asData?.value;
     final selectedMonth = ref.watch(selectedMonthProvider);
     final monthKey = MonthUtils.key(selectedMonth);
-    final monthLabel = MonthUtils.label(selectedMonth);
+    final monthLabel = MonthUtils.label(selectedMonth, isEn: tr.isEn);
     return Scaffold(
       appBar: FinmiPageHeader(
-        title: 'Quản lý danh mục',
+        title: tr.manageCategories,
         actions: [
           FinmiHeaderAction(
-            tooltip: 'Thêm danh mục',
+            tooltip: tr.addCategory,
             onPressed: categories == null
                 ? null
                 : () => _editCategory(
@@ -60,14 +62,14 @@ class _CategoryManagementScreenState
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
             child: SegmentedButton<CategoryKind>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: CategoryKind.expense,
-                  label: Text('Khoản chi'),
+                  label: Text(tr.expensesKind),
                 ),
                 ButtonSegment(
                   value: CategoryKind.income,
-                  label: Text('Khoản thu'),
+                  label: Text(tr.incomeKind),
                 ),
               ],
               selected: {_kind},
@@ -176,14 +178,14 @@ class _CategoryManagementScreenState
     WidgetRef ref,
     CategoryEntity category,
   ) async {
+    final tr = context.tr;
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Xóa “${category.name}”?',
+      title: tr.deleteCategoryPrompt(tr.categoryName(category.name, categoryId: category.id)),
       message: category.kind == CategoryKind.income
-          ? 'Các khoản thu dùng danh mục này sẽ chuyển về “Chưa phân loại”.'
-          : 'Hóa đơn đang dùng danh mục này sẽ chuyển về “Khác”. Ngân sách và '
-                'quy tắc merchant của danh mục sẽ bị xóa.',
-      confirmLabel: 'Xóa danh mục',
+          ? tr.deleteCategoryIncomeDesc
+          : tr.deleteCategoryExpenseDesc,
+      confirmLabel: tr.deleteCategory,
       destructive: true,
     );
     if (!confirmed || !context.mounted) return;
@@ -192,12 +194,12 @@ class _CategoryManagementScreenState
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Đã xóa danh mục.')));
+      ).showSnackBar(SnackBar(content: Text(tr.isEn ? 'Category deleted.' : 'Đã xóa danh mục.')));
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Không thể xóa danh mục: ${friendlyMessage(error)}'),
+          content: Text(tr.isEn ? 'Cannot delete category: ${friendlyMessage(error)}' : 'Không thể xóa danh mục: ${friendlyMessage(error)}'),
         ),
       );
     }
@@ -211,6 +213,7 @@ Future<CategoryEntity?> createCategoryFromEntry(
   CategoryKind kind,
 ) async {
   final month = ref.read(selectedMonthProvider);
+  final tr = context.tr;
   final result = await _showCategoryDialog(
     context,
     categories: categories,
@@ -236,7 +239,9 @@ Future<CategoryEntity?> createCategoryFromEntry(
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Đã lưu danh mục nhưng chưa lưu được hạn mức: ${friendlyMessage(error)}',
+                tr.isEn
+                    ? 'Category saved, but failed to save limit: ${friendlyMessage(error)}'
+                    : 'Đã lưu danh mục nhưng chưa lưu được hạn mức: ${friendlyMessage(error)}',
               ),
             ),
           );
@@ -248,7 +253,7 @@ Future<CategoryEntity?> createCategoryFromEntry(
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Không thể lưu danh mục: ${friendlyMessage(error)}'),
+          content: Text(tr.isEn ? 'Cannot save category: ${friendlyMessage(error)}' : 'Không thể lưu danh mục: ${friendlyMessage(error)}'),
         ),
       );
     }
@@ -273,9 +278,9 @@ class _CategoryList extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
         if (categories.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 32),
-            child: Center(child: Text('Chưa có danh mục nào.')),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: Text(context.tr.isEn ? 'No categories yet.' : 'Chưa có danh mục nào.')),
           )
         else
           for (final category in categories)
@@ -285,24 +290,24 @@ class _CategoryList extends StatelessWidget {
               child: ListTile(
                 minTileHeight: 64,
                 leading: CategoryAvatar(category: category, radius: 18),
-                title: Text(category.name),
+                title: Text(context.tr.categoryName(category.name, categoryId: category.id)),
                 subtitle: Text(
                   category.isSystem
-                      ? 'Danh mục mặc định'
-                      : 'Danh mục tùy chỉnh',
+                      ? context.tr.defaultCategory
+                      : context.tr.customCategory,
                 ),
                 onTap: () => onEdit(category),
                 trailing: Wrap(
                   spacing: 0,
                   children: [
                     IconButton(
-                      tooltip: 'Chỉnh sửa danh mục',
+                      tooltip: context.tr.editCategory,
                       onPressed: () => onEdit(category),
                       icon: const Icon(Icons.edit_outlined),
                     ),
                     if (!category.isSystem)
                       IconButton(
-                        tooltip: 'Xóa danh mục',
+                        tooltip: context.tr.deleteCategory,
                         onPressed: () => onDelete(category),
                         icon: const Icon(Icons.delete_outline),
                       ),
@@ -358,12 +363,20 @@ class _CategoryDialog extends StatefulWidget {
 class _CategoryDialogState extends State<_CategoryDialog> {
   static const _colorValues = [
     0xFF0F766E,
+    0xFF16A34A,
+    0xFF22C55E,
+    0xFF059669,
+    0xFF0284C7,
     0xFF2563EB,
+    0xFF4F46E5,
     0xFF7C3AED,
-    0xFFEA580C,
-    0xFFCA8A04,
-    0xFFDC2626,
+    0xFF9333EA,
     0xFFDB2777,
+    0xFFE11D48,
+    0xFFDC2626,
+    0xFFEA580C,
+    0xFFD97706,
+    0xFFCA8A04,
     0xFF64748B,
   ];
 
@@ -391,9 +404,10 @@ class _CategoryDialogState extends State<_CategoryDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final tr = context.tr;
     return AlertDialog(
       title: Text(
-        widget.editing == null ? 'Thêm danh mục' : 'Chỉnh sửa danh mục',
+        widget.editing == null ? tr.addCategory : tr.editCategory,
       ),
       content: Form(
         key: _formKey,
@@ -407,20 +421,20 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                 controller: _nameController,
                 autofocus: true,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Tên danh mục',
-                  hintText: 'Ví dụ: Văn phòng phẩm',
-                  prefixIcon: Icon(Icons.category_outlined),
+                decoration: InputDecoration(
+                  labelText: tr.categoryNameLabel,
+                  hintText: tr.categoryNameHint,
+                  prefixIcon: const Icon(Icons.category_outlined),
                 ),
                 validator: (value) {
                   final name = value?.trim() ?? '';
-                  if (name.isEmpty) return 'Hãy nhập tên danh mục.';
+                  if (name.isEmpty) return tr.pleaseEnterCategoryName;
                   final duplicate = widget.categories.any(
                     (item) =>
                         item.id != widget.editing?.id &&
                         item.name.trim().toLowerCase() == name.toLowerCase(),
                   );
-                  return duplicate ? 'Tên danh mục đã tồn tại.' : null;
+                  return duplicate ? tr.categoryNameExists : null;
                 },
               ),
               if (widget.kind == CategoryKind.expense &&
@@ -431,23 +445,23 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                   controller: _budgetController,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: 'Hạn mức tháng ${widget.monthLabel}',
+                    labelText: tr.categoryLimitLabel(widget.monthLabel),
                     suffixText: '₫',
-                    helperText: 'Không bắt buộc; có thể chỉnh sửa sau.',
+                    helperText: tr.categoryLimitHelper,
                   ),
                   validator: (value) {
                     final text = value?.trim() ?? '';
                     if (text.isEmpty) return null;
                     final amount = MoneyFormatter.tryParse(text);
                     if (amount == null || amount < 0) {
-                      return 'Hãy nhập hạn mức hợp lệ.';
+                      return tr.isEn ? 'Please enter a valid amount.' : 'Hãy nhập hạn mức hợp lệ.';
                     }
                     return null;
                   },
                 ),
               ],
               const SizedBox(height: 20),
-              Text('Biểu tượng', style: Theme.of(context).textTheme.titleSmall),
+              Text(tr.categoryIcons, style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -467,17 +481,18 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                 ],
               ),
               const SizedBox(height: 20),
-              Text('Màu sắc', style: Theme.of(context).textTheme.titleSmall),
+              Text(tr.categoryColors, style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 10,
+                runSpacing: 10,
                 children: [
                   for (final item in _colorValues)
                     InkWell(
                       onTap: () => setState(() => _colorValue = item),
                       borderRadius: BorderRadius.circular(24),
                       child: Semantics(
-                        label: 'Chọn màu',
+                        label: tr.isEn ? 'Pick color' : 'Chọn màu',
                         selected: _colorValue == item,
                         child: CircleAvatar(
                           radius: 20,
@@ -498,8 +513,8 @@ class _CategoryDialogState extends State<_CategoryDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: _cancel, child: const Text('Hủy')),
-        FilledButton(onPressed: _save, child: const Text('Lưu danh mục')),
+        TextButton(onPressed: _cancel, child: Text(tr.cancel)),
+        FilledButton(onPressed: _save, child: Text(tr.saveCategoryBtn)),
       ],
     );
   }

@@ -101,6 +101,7 @@ class ExternalBillsSection extends ConsumerWidget {
   Future<void> _showParticipants(BuildContext context, ExternalBill bill) {
     return showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) => SafeArea(

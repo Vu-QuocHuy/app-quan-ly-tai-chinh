@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_tokens.dart';
+import '../../core/localization/app_strings.dart';
 import '../../core/utils/month_utils.dart';
 
 /// Chọn THÁNG bằng lưới 12 ô + bộ đổi năm.
@@ -15,6 +16,7 @@ Future<DateTime?> showMonthPickerSheet(
   return showModalBottomSheet<DateTime>(
     context: context,
     showDragHandle: true,
+    useRootNavigator: true,
     builder: (sheetContext) => _MonthPickerSheet(selected: selected),
   );
 }
@@ -33,6 +35,7 @@ class _MonthPickerSheetState extends State<_MonthPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final tr = context.tr;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final now = DateTime.now();
@@ -49,19 +52,19 @@ class _MonthPickerSheetState extends State<_MonthPickerSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Chọn tháng', style: theme.textTheme.titleLarge),
+            Text(tr.selectMonth, style: theme.textTheme.titleLarge),
             const SizedBox(height: AppSpacing.lg),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 IconButton(
-                  tooltip: 'Năm trước',
+                  tooltip: tr.previousYear,
                   onPressed: () => setState(() => _year--),
                   icon: const Icon(Icons.chevron_left),
                 ),
                 Text('$_year', style: theme.textTheme.titleMedium),
                 IconButton(
-                  tooltip: 'Năm sau',
+                  tooltip: tr.nextYear,
                   onPressed: () => setState(() => _year++),
                   icon: const Icon(Icons.chevron_right),
                 ),
@@ -78,7 +81,7 @@ class _MonthPickerSheetState extends State<_MonthPickerSheet> {
               children: [
                 for (var month = 1; month <= 12; month++)
                   _MonthCell(
-                    label: 'Th $month',
+                    label: tr.monthShort(month),
                     selected:
                         _year == widget.selected.year &&
                         month == widget.selected.month,
@@ -99,7 +102,7 @@ class _MonthPickerSheetState extends State<_MonthPickerSheet> {
                   MonthUtils.normalize(DateTime(now.year, now.month)),
                 ),
                 child: Text(
-                  'Về tháng này',
+                  tr.thisMonth,
                   style: TextStyle(color: scheme.primary),
                 ),
               ),

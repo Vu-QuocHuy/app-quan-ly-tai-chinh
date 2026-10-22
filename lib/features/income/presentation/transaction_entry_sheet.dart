@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/localization/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
+import '../../../shared/widgets/category_avatar.dart';
 import '../../../shared/widgets/finmi_text_field.dart';
 import '../../budgets/presentation/category_management.dart';
 import '../../invoices/domain/invoice_models.dart';
@@ -18,6 +20,7 @@ Future<bool?> showTransactionEntry(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
+  useRootNavigator: true,
   showDragHandle: true,
   builder: (_) => TransactionEntrySheet(initialIncome: income),
 );
@@ -123,6 +126,7 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final tr = context.tr;
     final categories = ref.watch(
       _income ? incomeCategoriesProvider : categoriesProvider,
     );
@@ -152,12 +156,12 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                   children: [
                     Expanded(
                       child: Text(
-                        'Thêm thu/chi',
+                        tr.isEn ? 'Add transaction' : 'Thêm thu/chi',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                     ),
                     IconButton(
-                      tooltip: 'Đóng',
+                      tooltip: tr.isEn ? 'Close' : 'Đóng',
                       onPressed: _saving ? null : _close,
                       icon: const Icon(Icons.close),
                     ),
@@ -193,16 +197,16 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                         ? Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              tab(true, 'Thêm khoản thu'),
+                              tab(true, tr.isEn ? 'Add income' : 'Thêm khoản thu'),
                               const SizedBox(height: 8),
-                              tab(false, 'Thêm khoản chi'),
+                              tab(false, tr.isEn ? 'Add expense' : 'Thêm khoản chi'),
                             ],
                           )
                         : Row(
                             children: [
-                              Expanded(child: tab(true, 'Thêm khoản thu')),
+                              Expanded(child: tab(true, tr.isEn ? 'Add income' : 'Thêm khoản thu')),
                               const SizedBox(width: 8),
-                              Expanded(child: tab(false, 'Thêm khoản chi')),
+                              Expanded(child: tab(false, tr.isEn ? 'Add expense' : 'Thêm khoản chi')),
                             ],
                           );
                   },
@@ -213,14 +217,18 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                   controller: draft.amount,
                   enabled: !_saving,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Số tiền (₫)'),
+                  decoration: InputDecoration(
+                    labelText: tr.isEn ? 'Amount (₫)' : 'Số tiền (₫)',
+                  ),
                   onChanged: (_) => setState(() {}),
                   validator: (text) {
                     final value = MoneyFormatter.tryParse(text ?? '');
                     return value == null ||
                             value <= 0 ||
                             value > 9007199254740991
-                        ? 'Nhập số tiền nguyên lớn hơn 0.'
+                        ? (tr.isEn
+                            ? 'Enter an amount greater than 0.'
+                            : 'Nhập số tiền nguyên lớn hơn 0.')
                         : null;
                   },
                 ),
@@ -231,26 +239,84 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                       ? draft.categoryId
                       : null,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Danh mục',
-                    prefixIcon: Icon(Icons.category_outlined),
+                  isDense: true,
+                  alignment: AlignmentDirectional.centerStart,
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                  elevation: 4,
+                  borderRadius: BorderRadius.circular(16),
+                  menuMaxHeight: 280,
+                  dropdownColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                  decoration: InputDecoration(
+                    labelText: tr.isEn ? 'Category' : 'Danh mục',
+                    floatingLabelBehavior: FloatingLabelBehavior.always,
+                    prefixIcon: const Icon(Icons.category_outlined),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
+                  hint: Text(
+                    tr.isEn ? 'Select category' : 'Chọn danh mục',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 15,
+                    ),
+                  ),
+                  selectedItemBuilder: (context) {
+                    return items.map((c) {
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CategoryAvatar(category: c, radius: 11),
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: Text(
+                              tr.categoryName(c.name, categoryId: c.id),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList();
+                  },
                   items: [
                     for (final c in items)
-                      DropdownMenuItem(value: c.id, child: Text(c.name)),
+                      DropdownMenuItem(
+                        value: c.id,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              CategoryAvatar(category: c, radius: 12),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  tr.categoryName(c.name, categoryId: c.id),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                   onChanged: _saving
                       ? null
                       : (value) => setState(() => draft.categoryId = value),
                   validator: (value) =>
-                      value == null ? 'Chọn danh mục giao dịch.' : null,
+                      value == null ? (tr.isEn ? 'Select transaction category.' : 'Chọn danh mục giao dịch.') : null,
                 ),
                 if (categories.hasError)
                   TextButton(
                     onPressed: () => ref.invalidate(
                       _income ? incomeCategoriesProvider : categoriesProvider,
                     ),
-                    child: const Text('Tải lại danh mục'),
+                    child: Text(tr.isEn ? 'Reload categories' : 'Tải lại danh mục'),
                   ),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -271,7 +337,7 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                             }
                           },
                     icon: const Icon(Icons.add),
-                    label: const Text('Thêm danh mục'),
+                    label: Text(tr.isEn ? 'Add category' : 'Thêm danh mục'),
                   ),
                 ),
                 FinmiTextField(
@@ -281,16 +347,16 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                   maxLines: 3,
                   maxLength: 2000,
                   onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    labelText: 'Nội dung',
-                    hintText: 'Ghi chú về giao dịch',
+                  decoration: InputDecoration(
+                    labelText: tr.isEn ? 'Note' : 'Nội dung',
+                    hintText: tr.isEn ? 'Transaction notes' : 'Ghi chú về giao dịch',
                   ),
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.calendar_today_outlined),
                   label: Text(
-                    'Ngày giao dịch: ${DateFormat('dd/MM/yyyy').format(draft.date)}',
+                    '${tr.isEn ? 'Date' : 'Ngày giao dịch'}: ${DateFormat('dd/MM/yyyy').format(draft.date)}',
                   ),
                   onPressed: _saving
                       ? null
@@ -322,7 +388,11 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                 const SizedBox(height: 20),
                 FilledButton(
                   onPressed: _saving ? null : _save,
-                  child: Text(_saving ? 'Đang lưu…' : 'Lưu giao dịch'),
+                  child: Text(
+                    _saving
+                        ? (tr.isEn ? 'Saving…' : 'Đang lưu…')
+                        : (tr.isEn ? 'Save transaction' : 'Lưu giao dịch'),
+                  ),
                 ),
               ],
             ),

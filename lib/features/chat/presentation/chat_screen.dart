@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cross_file/cross_file.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +19,8 @@ import '../../ingestion/data/ai_extraction_client.dart';
 import '../domain/chat_models.dart';
 import '../domain/chat_privacy_policy.dart';
 import '../data/voice_file_cleanup.dart';
+import '../data/voice_speech_service.dart';
+import '../../../core/localization/app_strings.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
 
@@ -36,9 +39,37 @@ const chatQuickPrompts = [
   'Nếu tôi giảm chi 500.000đ mỗi tháng thì tiết kiệm được bao nhiêu?',
 ];
 
+const chatQuickPromptsEn = [
+  'How much did I spend this month?',
+  'How much did I earn this month?',
+  'Compare spending this month with last month',
+  'Which category has the highest spending?',
+  'How much budget do I have left?',
+  'Forecast spending until the end of the month',
+  'My recent invoices',
+  'Do I have any recurring expenses?',
+  'Are there any unusual expenses?',
+  'If I save 500,000 VND each month, how much will I save?',
+];
+
+const _enToViPromptMap = {
+  'How much did I spend this month?': 'Tháng này tôi đã chi bao nhiêu?',
+  'How much did I earn this month?': 'Tháng này tôi đã thu bao nhiêu?',
+  'Compare spending this month with last month': 'So sánh chi tiêu tháng này với tháng trước',
+  'Which category has the highest spending?': 'Danh mục nào chi nhiều nhất?',
+  'How much budget do I have left?': 'Tôi còn bao nhiêu hạn mức ngân sách?',
+  'Forecast spending until the end of the month': 'Dự báo chi tiêu đến cuối tháng',
+  'My recent invoices': 'Hóa đơn gần đây của tôi',
+  'Do I have any recurring expenses?': 'Tôi có khoản chi định kỳ nào không?',
+  'Are there any unusual expenses?': 'Có khoản chi nào bất thường không?',
+  'If I save 500,000 VND each month, how much will I save?':
+      'Nếu tôi giảm chi 500.000đ mỗi tháng thì tiết kiệm được bao nhiêu?',
+};
+
 Future<void> showFinmiAssistant(BuildContext context) =>
     showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
@@ -80,6 +111,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Timer? _recordingTimer;
   String? _connectionNote;
   TransactionDraftResult? _draftConversation;
+  bool _usingWebSpeech = false;
+  String _webSpeechBaseText = '';
   final Map<String, _TransactionDraft> _draftCards = {};
   String? _savingDraftMessageId;
 
@@ -117,14 +150,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
+              Container(
+                width: 32,
+                height: 32,
+                margin: const EdgeInsets.only(right: 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                    width: 1,
+                  ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Image.asset(
+                  'assets/branding/finmi/icon.png',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Icon(
+                    CupertinoIcons.chat_bubble_2_fill,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 18,
+                  ),
+                ),
+              ),
               Expanded(
                 child: Text(
-                  'Trợ lý tài chính',
-                  style: Theme.of(context).textTheme.titleLarge,
+                  context.tr.isEn ? 'Finmi Assistant' : 'Trợ lý Finmi',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               IconButton(
-                tooltip: 'Đóng trợ lý',
+                tooltip: context.tr.isEn ? 'Close assistant' : 'Đóng trợ lý',
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.close),
               ),
@@ -165,9 +222,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_messages.isEmpty) {
       return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Text(
-            'Bắt đầu bằng một câu hỏi về thu chi của bạn.',
+            context.tr.isEn
+                ? 'Start by asking a question about your income or expenses.'
+                : 'Bắt đầu bằng một câu hỏi về thu chi của bạn.',
             textAlign: TextAlign.center,
           ),
         ),
@@ -182,10 +241,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           return Align(
             alignment: Alignment.centerLeft,
             child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Semantics(
-                label: 'Trợ lý đang suy nghĩ',
-                child: CircularProgressIndicator(strokeWidth: 2),
+                label: context.tr.isEn ? 'Assistant is thinking' : 'Trợ lý đang suy nghĩ',
+                child: const CircularProgressIndicator(strokeWidth: 2),
               ),
             ),
           );
@@ -204,7 +263,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_sending || _recording || _transcribing) {
       return const SizedBox.shrink();
     }
-    const suggestions = chatQuickPrompts;
+    final isEn = context.tr.isEn;
+    final suggestions = isEn ? chatQuickPromptsEn : chatQuickPrompts;
     return SizedBox(
       height: 48 * (MediaQuery.textScalerOf(context).scale(14) / 14),
       child: ListView.separated(
@@ -223,64 +283,167 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget _buildComposer(BuildContext context) {
     final canSend = !_sending && _inputController.text.trim().isNotEmpty;
     final canRecord = !_sending && !_transcribing;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isListening = _recording || _transcribing;
+
     return Material(
-      color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _inputController,
-                enabled: !_sending,
-                minLines: 1,
-                maxLines: 3,
-                textInputAction: TextInputAction.newline,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  labelText: 'Nhắn trợ lý',
-                  hintText: 'Ví dụ: Vừa ăn trưa hết 45 nghìn',
-                  helperText: _transcribing
-                      ? 'Đang chuyển lời nói thành văn bản…'
-                      : _recording
-                      ? 'Đang ghi âm · chạm mic để dừng; tự dừng sau $_maxVoiceRecordingSeconds giây'
-                      : null,
-                  border: OutlineInputBorder(),
+      color: scheme.surface,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (isListening)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _transcribing ? Icons.hourglass_top : Icons.mic,
+                        size: 16,
+                        color: scheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _transcribing
+                              ? (context.tr.isEn
+                                  ? 'Transcribing speech to text…'
+                                  : 'Đang chuyển lời nói thành văn bản…')
+                              : (context.tr.isEn
+                                  ? 'Listening · tap mic to stop (auto-stops after $_maxVoiceRecordingSeconds s)'
+                                  : 'Đang lắng nghe · chạm mic để dừng (tự dừng sau $_maxVoiceRecordingSeconds giây)'),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 44),
+                      child: TextField(
+                        controller: _inputController,
+                        enabled: !_sending,
+                        minLines: 1,
+                        maxLines: 4,
+                        scrollPhysics: const ClampingScrollPhysics(),
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        textAlignVertical: TextAlignVertical.center,
+                        onChanged: (_) => setState(() {}),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurface,
+                          height: 1.35,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          hintText: context.tr.isEn ? 'Message assistant…' : 'Nhắn trợ lý…',
+                          hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          filled: true,
+                          fillColor: scheme.surfaceContainerHighest.withValues(
+                            alpha: 0.35,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(22),
+                            borderSide: BorderSide(
+                              color: scheme.outlineVariant,
+                              width: 1.25,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(22),
+                            borderSide: BorderSide(
+                              color: scheme.outlineVariant,
+                              width: 1.25,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(22),
+                            borderSide: BorderSide(
+                              color: scheme.primary,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Semantics(
+                    button: true,
+                    label: _recording
+                        ? 'Dừng ghi âm'
+                        : 'Nói câu hỏi hoặc mô tả giao dịch, tối đa $_maxVoiceRecordingSeconds giây',
+                    child: IconButton.filledTonal(
+                      tooltip: _recording
+                          ? 'Dừng ghi âm'
+                          : 'Nói câu hỏi hoặc giao dịch · tối đa $_maxVoiceRecordingSeconds giây',
+                      onPressed: canRecord ? _toggleVoiceInput : null,
+                      style: IconButton.styleFrom(
+                        fixedSize: const Size(44, 44),
+                        minimumSize: const Size(44, 44),
+                        padding: EdgeInsets.zero,
+                      ),
+                      icon: Icon(
+                        _transcribing
+                            ? Icons.hourglass_top
+                            : _recording
+                            ? Icons.stop_rounded
+                            : Icons.mic_none,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Semantics(
+                    button: true,
+                    label: context.tr.isEn ? 'Send question' : 'Gửi câu hỏi',
+                    child: IconButton(
+                      tooltip: context.tr.isEn ? 'Send question' : 'Gửi câu hỏi',
+                      onPressed: canSend ? () => _send(_inputController.text) : null,
+                      style: IconButton.styleFrom(
+                        fixedSize: const Size(44, 44),
+                        minimumSize: const Size(44, 44),
+                        padding: EdgeInsets.zero,
+                        backgroundColor: canSend
+                            ? scheme.primary
+                            : scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        foregroundColor: canSend
+                            ? Colors.white
+                            : scheme.onSurfaceVariant.withValues(alpha: 0.38),
+                        disabledBackgroundColor: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        disabledForegroundColor: scheme.onSurfaceVariant.withValues(alpha: 0.38),
+                      ),
+                      icon: Icon(
+                        Icons.send_rounded,
+                        size: 19,
+                        color: canSend
+                            ? Colors.white
+                            : scheme.onSurfaceVariant.withValues(alpha: 0.38),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: 4),
-            Semantics(
-              button: true,
-              label: _recording
-                  ? 'Dừng ghi âm'
-                  : 'Nói câu hỏi hoặc mô tả giao dịch, tối đa $_maxVoiceRecordingSeconds giây',
-              child: IconButton.filledTonal(
-                tooltip: _recording
-                    ? 'Dừng ghi âm'
-                    : 'Nói câu hỏi hoặc giao dịch · tối đa $_maxVoiceRecordingSeconds giây',
-                onPressed: canRecord ? _toggleVoiceInput : null,
-                icon: Icon(
-                  _transcribing
-                      ? Icons.hourglass_top
-                      : _recording
-                      ? Icons.stop_rounded
-                      : Icons.mic_none,
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Semantics(
-              button: true,
-              label: 'Gửi câu hỏi',
-              child: IconButton.filled(
-                tooltip: 'Gửi câu hỏi',
-                onPressed: canSend ? () => _send(_inputController.text) : null,
-                icon: const Icon(Icons.send_outlined),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -292,16 +455,53 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
     if (_sending || _transcribing) return;
+
+    final tr = context.tr;
+    if (kIsWeb && isWebSpeechSupported()) {
+      _usingWebSpeech = true;
+      _webSpeechBaseText = _inputController.text.trim();
+      setState(() {
+        _recording = true;
+        _connectionNote = null;
+      });
+      _recordingTimer?.cancel();
+      _recordingTimer = Timer(
+        const Duration(seconds: _maxVoiceRecordingSeconds),
+        () => unawaited(_finishVoiceInput()),
+      );
+      startWebSpeech(
+        lang: tr.isEn ? 'en-US' : 'vi-VN',
+        onResult: (text) {
+          if (!mounted) return;
+          final combined = _webSpeechBaseText.isEmpty ? text : '$_webSpeechBaseText $text';
+          _inputController.text = combined;
+          _inputController.selection = TextSelection.collapsed(offset: combined.length);
+        },
+        onError: (err) {
+          if (!mounted) return;
+          setState(() {
+            _recording = false;
+            _connectionNote = err;
+          });
+        },
+        onEnd: () {
+          if (!mounted) return;
+          setState(() => _recording = false);
+        },
+      );
+      return;
+    }
+
     try {
       if (!await _audioRecorder.hasPermission()) {
-        throw StateError('Bạn cần cấp quyền micro để nhập bằng giọng nói.');
+        throw StateError(tr.isEn ? 'Microphone permission required for voice input.' : 'Bạn cần cấp quyền micro để nhập bằng giọng nói.');
       }
       final path = kIsWeb
-          ? 'voice-${_uuid.v4()}.wav'
+          ? ''
           : '${(await getTemporaryDirectory()).path}/voice-${_uuid.v4()}.wav';
       await _audioRecorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.wav,
+        RecordConfig(
+          encoder: kIsWeb ? AudioEncoder.opus : AudioEncoder.wav,
           sampleRate: 16000,
           numChannels: 1,
         ),
@@ -328,6 +528,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (!_recording) return;
     _recordingTimer?.cancel();
     _recordingTimer = null;
+
+    if (_usingWebSpeech) {
+      _usingWebSpeech = false;
+      stopWebSpeech();
+      setState(() {
+        _recording = false;
+        _transcribing = false;
+      });
+      return;
+    }
+
     String? recordingPath;
     setState(() {
       _recording = false;
@@ -393,9 +604,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _send(String value) async {
     final question = value.trim();
     if (question.isEmpty || _sending) return;
-    final inScope = ChatPrivacyPolicy.isPersonalFinanceQuestion(question);
+    final effectiveQuestion = _enToViPromptMap[question] ?? question;
+    final inScope = ChatPrivacyPolicy.isPersonalFinanceQuestion(question) ||
+        ChatPrivacyPolicy.isPersonalFinanceQuestion(effectiveQuestion);
     final draftRequest =
-        _draftConversation != null || _looksLikeTransactionEntry(question);
+        _draftConversation != null || _looksLikeTransactionEntry(effectiveQuestion);
     final userMessage = ChatMessage(
       id: _uuid.v4(),
       role: ChatMessageRole.user,
@@ -412,12 +625,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     try {
       if (draftRequest) {
-        await _handleTransactionMessage(question, inScope: inScope);
+        await _handleTransactionMessage(effectiveQuestion, inScope: inScope);
         return;
       }
       final reply = inScope
-          ? await ref.read(localChatAssistantProvider).answer(question)
-          : const ChatReply(text: ChatPrivacyPolicy.outOfScopeMessage);
+          ? await ref.read(localChatAssistantProvider).answer(effectiveQuestion)
+          : ChatReply(
+              text: context.tr.isEn
+                  ? 'I can only assist with questions regarding your personal finances in the app, such as income, expenses, invoices, and budgets.'
+                  : ChatPrivacyPolicy.outOfScopeMessage,
+            );
       final assistantMessage = ChatMessage(
         id: _uuid.v4(),
         role: ChatMessageRole.assistant,
@@ -931,15 +1148,26 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isEn = context.tr.isEn;
     final isUser = message.role == ChatMessageRole.user;
     final scheme = Theme.of(context).colorScheme;
     final color = isUser
         ? scheme.primaryContainer
         : scheme.surfaceContainerHigh;
+    final displayText = message.id == 'welcome'
+        ? (isEn
+            ? 'Hello! I can help you check total income, total expense, budgets, categories, '
+              'month comparisons, and recurring transactions. You can also describe income or expenses '
+              'to create drafts before confirming and saving.'
+            : 'Xin chào! Mình có thể giúp bạn xem tổng thu, tổng chi, ngân sách, danh mục, '
+              'so sánh tháng và khoản chi định kỳ. Bạn cũng có thể mô tả khoản thu/chi để '
+              'tạo bản nháp rồi xác nhận trước khi lưu.')
+        : message.text;
+
     return Semantics(
-      label: message.text.isEmpty
-          ? 'Bản nháp giao dịch'
-          : '${isUser ? 'Bạn' : 'Trợ lý'}: ${message.text}',
+      label: displayText.isEmpty
+          ? (isEn ? 'Transaction draft' : 'Bản nháp giao dịch')
+          : '${isUser ? (isEn ? 'You' : 'Bạn') : (isEn ? 'Assistant' : 'Trợ lý')}: $displayText',
       explicitChildNodes: true,
       child: Align(
         alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -953,7 +1181,7 @@ class _MessageBubble extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (message.text.isNotEmpty) Text(message.text),
+                  if (displayText.isNotEmpty) Text(displayText),
                   if (accessory != null) ...[
                     const SizedBox(height: 10),
                     accessory!,

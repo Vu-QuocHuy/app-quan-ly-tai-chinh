@@ -113,7 +113,12 @@ class FinmiSectionLabel extends StatelessWidget {
   final Widget? trailing;
   @override
   Widget build(BuildContext context) {
-    final label = Text(title, style: Theme.of(context).textTheme.titleSmall);
+    final label = Text(
+      title,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+        fontWeight: FontWeight.w600,
+      ),
+    );
     if (trailing == null) return label;
     return context.needsStackedLayout
         ? Column(

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/theme_mode_provider.dart';
+import '../../../core/localization/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
@@ -41,23 +42,30 @@ class _CloudProfileSettingsScreenState
     final user = ref.watch(authUserProvider).value;
     final store = ref.watch(profilePreferencesStoreProvider);
     final preferences = _preferences;
+    final tr = context.tr;
+    final isEn = tr.isEn;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Khôi phục tùy chỉnh', maxLines: 3)),
+      appBar: AppBar(
+        title: Text(isEn ? 'Restore Customizations' : 'Khôi phục tùy chỉnh', maxLines: 3),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          const AppCallout(
+          AppCallout(
             icon: Icons.cloud_download_outlined,
-            message:
-                'Giao diện và cảnh báo được chỉnh tại Cài đặt và tự lưu lên tài khoản. Khi đổi thiết bị, áp dụng bản đã lưu tại đây.',
+            message: isEn
+                ? 'Themes and alert preferences are configured in Settings and synced to your cloud account. Restore them here when switching devices.'
+                : 'Giao diện và cảnh báo được chỉnh tại Cài đặt và tự lưu lên tài khoản. Khi đổi thiết bị, áp dụng bản đã lưu tại đây.',
           ),
           const SizedBox(height: 16),
           if (user == null || store == null)
             Card(
               child: ListTile(
-                title: const Text(
-                  'Cần đăng nhập để khôi phục tùy chỉnh.',
+                title: Text(
+                  isEn
+                      ? 'Sign in to restore customizations.'
+                      : 'Cần đăng nhập để khôi phục tùy chỉnh.',
                   maxLines: 3,
                 ),
                 trailing: const Icon(Icons.chevron_right),
@@ -69,13 +77,20 @@ class _CloudProfileSettingsScreenState
           else if (preferences == null)
             Card(
               child: ListTile(
-                title: const Text(
-                  'Không tải được tùy chỉnh đã lưu',
+                title: Text(
+                  isEn
+                      ? 'Could not load saved customizations'
+                      : 'Không tải được tùy chỉnh đã lưu',
                   maxLines: 3,
                 ),
-                subtitle: Text(_error ?? 'Kiểm tra kết nối rồi thử lại.'),
+                subtitle: Text(
+                  _error ??
+                      (isEn
+                          ? 'Check your connection and try again.'
+                          : 'Kiểm tra kết nối rồi thử lại.'),
+                ),
                 trailing: IconButton(
-                  tooltip: 'Thử lại',
+                  tooltip: tr.retry,
                   onPressed: _load,
                   icon: const Icon(Icons.refresh),
                 ),
@@ -87,20 +102,28 @@ class _CloudProfileSettingsScreenState
                 children: [
                   ListTile(
                     leading: const Icon(Icons.brightness_6_outlined),
-                    title: const Text('Giao diện đã lưu', maxLines: 3),
+                    title: Text(
+                      isEn ? 'Saved Theme' : 'Giao diện đã lưu',
+                      maxLines: 3,
+                    ),
                     subtitle: Text(switch (_themeFromName(
                       preferences.themeMode,
                     )) {
-                      ThemeMode.light => 'Sáng',
-                      ThemeMode.dark => 'Tối',
-                      ThemeMode.system => 'Theo hệ thống',
+                      ThemeMode.light => isEn ? 'Light' : 'Sáng',
+                      ThemeMode.dark => isEn ? 'Dark' : 'Tối',
+                      ThemeMode.system => isEn ? 'System default' : 'Theo hệ thống',
                     }),
                   ),
                   ListTile(
                     leading: const Icon(Icons.notifications_active_outlined),
-                    title: const Text('Cảnh báo ngân sách đã lưu', maxLines: 3),
+                    title: Text(
+                      isEn ? 'Saved Budget Alerts' : 'Cảnh báo ngân sách đã lưu',
+                      maxLines: 3,
+                    ),
                     subtitle: Text(
-                      preferences.budgetAlertsEnabled ? 'Bật' : 'Tắt',
+                      preferences.budgetAlertsEnabled
+                          ? (isEn ? 'On' : 'Bật')
+                          : (isEn ? 'Off' : 'Tắt'),
                     ),
                   ),
                 ],
@@ -126,7 +149,9 @@ class _CloudProfileSettingsScreenState
                     )
                   : const Icon(Icons.cloud_download_outlined),
               label: Text(
-                _applying ? 'Đang áp dụng…' : 'Áp dụng trên thiết bị',
+                _applying
+                    ? (isEn ? 'Applying…' : 'Đang áp dụng…')
+                    : (isEn ? 'Apply to Device' : 'Áp dụng trên thiết bị'),
               ),
             ),
           ],
@@ -155,7 +180,7 @@ class _CloudProfileSettingsScreenState
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = friendlyMessage(error);
+        _error = friendlyMessage(error, isEn: context.tr.isEn);
         _loading = false;
       });
     }
@@ -178,10 +203,18 @@ class _CloudProfileSettingsScreenState
       ref.invalidate(budgetAlertsEnabledProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã áp dụng tùy chỉnh trên thiết bị.')),
+        SnackBar(
+          content: Text(
+            context.tr.isEn
+                ? 'Applied customizations to device.'
+                : 'Đã áp dụng tùy chỉnh trên thiết bị.',
+          ),
+        ),
       );
     } on Object catch (error) {
-      if (mounted) setState(() => _error = friendlyMessage(error));
+      if (mounted) {
+        setState(() => _error = friendlyMessage(error, isEn: context.tr.isEn));
+      }
     } finally {
       if (mounted) setState(() => _applying = false);
     }

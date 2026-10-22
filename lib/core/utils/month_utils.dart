@@ -11,8 +11,10 @@ abstract final class MonthUtils {
     return '${month.year}-${month.month.toString().padLeft(2, '0')}';
   }
 
-  static String label(DateTime date) {
+  static String label(DateTime date, {bool isEn = false}) {
     final month = normalize(date);
-    return 'Tháng ${month.month.toString().padLeft(2, '0')}/${month.year}';
+    return isEn
+        ? 'Month ${month.month}, ${month.year}'
+        : 'Tháng ${month.month.toString().padLeft(2, '0')}/${month.year}';
   }
 }

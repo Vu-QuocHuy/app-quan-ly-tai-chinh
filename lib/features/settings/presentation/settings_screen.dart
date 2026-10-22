@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/config/feature_flags.dart';
+import '../../../core/localization/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../export/application/invoice_restore_service.dart';
 import '../../export/data/supabase_backup_provider.dart';
@@ -36,23 +37,24 @@ class SettingsScreen extends ConsumerWidget {
     final visibleAppearance = selectedAppearance.isDark == isDark
         ? selectedAppearance
         : FinmiAppearance.fromId(isDark ? 'midnight' : 'white');
+    final tr = context.tr;
     final themeLabel = switch (themeMode) {
-      ThemeMode.light => 'Sáng',
-      ThemeMode.dark => 'Tối',
-      ThemeMode.system => 'Theo hệ thống',
+      ThemeMode.light => tr.isEn ? 'Light' : 'Sáng',
+      ThemeMode.dark => tr.isEn ? 'Dark' : 'Tối',
+      ThemeMode.system => tr.isEn ? 'System default' : 'Theo hệ thống',
     };
     final categories = categoriesAsync.value ?? const <CategoryEntity>[];
 
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const FinmiSliverHeader(title: 'Cài đặt và đồng bộ'),
+          FinmiSliverHeader(title: tr.settingsTitle),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 100),
             sliver: SliverList.list(
               children: [
                 _Section(
-                  title: 'Tài khoản & đồng bộ',
+                  title: tr.secAccountAndSync,
                   children: [
                     ListTile(
                       leading: Icon(
@@ -60,15 +62,15 @@ class SettingsScreen extends ConsumerWidget {
                             ? Icons.cloud_sync_outlined
                             : Icons.cloud_off_outlined,
                       ),
-                      title: const Text('Tài khoản'),
+                      title: Text(tr.accountTitle),
                       subtitle: Text(
                         !supabaseConfigured
-                            ? 'Tài khoản chưa được cấu hình.'
+                            ? (tr.isEn ? 'Account not configured.' : 'Tài khoản chưa được cấu hình.')
                             : authUser.when(
-                                data: (user) => user?.email ?? 'Chưa đăng nhập',
-                                loading: () => 'Đang tải tài khoản…',
+                                data: (user) => user?.email ?? (tr.isEn ? 'Not logged in' : 'Chưa đăng nhập'),
+                                loading: () => tr.isEn ? 'Loading account…' : 'Đang tải tài khoản…',
                                 error: (_, _) =>
-                                    'Không tải được thông tin tài khoản.',
+                                    tr.isEn ? 'Failed to load account info.' : 'Không tải được thông tin tài khoản.',
                               ),
                       ),
                       trailing: const Icon(Icons.chevron_right),
@@ -81,17 +83,17 @@ class SettingsScreen extends ConsumerWidget {
                               ? Icons.cloud_done_outlined
                               : Icons.cloud_off_outlined,
                         ),
-                        title: const Text('Đồng bộ dữ liệu', maxLines: 3),
+                        title: Text(tr.isEn ? 'Data synchronization' : 'Đồng bộ dữ liệu', maxLines: 3),
                         subtitle: Text(
                           !featureFlags.cloudSync
-                              ? 'Đồng bộ hiện đang tạm tắt.'
+                              ? (tr.isEn ? 'Sync is currently paused.' : 'Đồng bộ hiện đang tạm tắt.')
                               : !health.cloudConfigured
-                              ? 'Đăng nhập để đồng bộ dữ liệu lên cloud.'
+                              ? (tr.isEn ? 'Log in to sync data to the cloud.' : 'Đăng nhập để đồng bộ dữ liệu lên cloud.')
                               : health.failedCount > 0
-                              ? '${health.failedCount} thay đổi cần thử lại.'
+                              ? (tr.isEn ? '${health.failedCount} changes need retry.' : '${health.failedCount} thay đổi cần thử lại.')
                               : health.pendingCount > 0
-                              ? '${health.pendingCount} thay đổi đang chờ gửi.'
-                              : 'Dữ liệu đã được cập nhật.',
+                              ? (tr.isEn ? '${health.pendingCount} changes waiting to upload.' : '${health.pendingCount} thay đổi đang chờ gửi.')
+                              : (tr.isEn ? 'Data is up to date.' : 'Dữ liệu đã được cập nhật.'),
                         ),
                         trailing:
                             featureFlags.cloudSync && health.cloudConfigured
@@ -104,15 +106,17 @@ class SettingsScreen extends ConsumerWidget {
                       loading: () => const _LoadingTile(),
                       error: (error, _) => _ErrorTile(
                         error: error,
-                        label: 'Không đọc được trạng thái đồng bộ',
+                        label: tr.isEn ? 'Cannot load sync status' : 'Không đọc được trạng thái đồng bộ',
                         onRetry: () => ref.invalidate(syncHealthProvider),
                       ),
                     ),
                     ListTile(
                       leading: const Icon(Icons.cloud_download_outlined),
-                      title: const Text('Khôi phục tùy chỉnh', maxLines: 3),
-                      subtitle: const Text(
-                        'Lấy giao diện và cảnh báo từ tài khoản khi đổi thiết bị.',
+                      title: Text(tr.isEn ? 'Restore customizations' : 'Khôi phục tùy chỉnh', maxLines: 3),
+                      subtitle: Text(
+                        tr.isEn
+                            ? 'Fetch theme and alerts from cloud when switching devices.'
+                            : 'Lấy giao diện và cảnh báo từ tài khoản khi đổi thiết bị.',
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/settings/cloud'),
@@ -121,18 +125,29 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 _Section(
-                  title: 'Tùy chỉnh',
+                  title: tr.secCustomization,
                   children: [
                     ListTile(
+                      leading: const Icon(Icons.language_outlined),
+                      title: Text(tr.languageTitle, maxLines: 3),
+                      subtitle: Text(
+                        ref.watch(appLocaleProvider).languageCode == 'en'
+                            ? tr.english
+                            : tr.vietnamese,
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _chooseLanguage(context, ref),
+                    ),
+                    ListTile(
                       leading: const Icon(Icons.brightness_6_outlined),
-                      title: const Text('Giao diện', maxLines: 3),
+                      title: Text(tr.appearanceTitle, maxLines: 3),
                       subtitle: Text('${visibleAppearance.name} · $themeLabel'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => _chooseAppearance(context, ref),
                     ),
                     ListTile(
                       leading: const Icon(Icons.contrast_outlined),
-                      title: const Text('Chế độ sáng tối', maxLines: 3),
+                      title: Text(tr.themeModeTitle, maxLines: 3),
                       subtitle: Text(themeLabel),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => _chooseThemeMode(context, ref),
@@ -142,9 +157,11 @@ class SettingsScreen extends ConsumerWidget {
                         secondary: const Icon(
                           Icons.notifications_active_outlined,
                         ),
-                        title: const Text('Cảnh báo ngân sách', maxLines: 3),
-                        subtitle: const Text(
-                          'Hiện cảnh báo khi dùng từ 80% hoặc vượt ngân sách.',
+                        title: Text(tr.budgetAlertsTitle, maxLines: 3),
+                        subtitle: Text(
+                          tr.isEn
+                              ? 'Show warnings when using 80% or exceeding budget.'
+                              : 'Hiện cảnh báo khi dùng từ 80% hoặc vượt ngân sách.',
                         ),
                         value: enabled,
                         onChanged: (value) =>
@@ -153,7 +170,7 @@ class SettingsScreen extends ConsumerWidget {
                       loading: () => const _LoadingTile(),
                       error: (error, _) => _ErrorTile(
                         error: error,
-                        label: 'Không đọc được cài đặt thông báo',
+                        label: tr.isEn ? 'Cannot load alert settings' : 'Không đọc được cài đặt thông báo',
                         onRetry: () =>
                             ref.invalidate(budgetAlertsEnabledProvider),
                       ),
@@ -163,16 +180,18 @@ class SettingsScreen extends ConsumerWidget {
                 if (conflictCount > 0) ...[
                   const SizedBox(height: 12),
                   _Section(
-                    title: 'Cần xử lý',
+                    title: tr.isEn ? 'Action required' : 'Cần xử lý',
                     children: [
                       ListTile(
                         leading: Icon(
                           Icons.warning_amber_outlined,
                           color: Theme.of(context).colorScheme.error,
                         ),
-                        title: const Text('Xung đột dữ liệu', maxLines: 3),
+                        title: Text(tr.isEn ? 'Data conflicts' : 'Xung đột dữ liệu', maxLines: 3),
                         subtitle: Text(
-                          '$conflictCount hóa đơn cần bạn chọn bản giữ lại.',
+                          tr.isEn
+                              ? '$conflictCount receipts need your choice on which version to keep.'
+                              : '$conflictCount hóa đơn cần bạn chọn bản giữ lại.',
                         ),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/settings/conflicts'),
@@ -182,13 +201,15 @@ class SettingsScreen extends ConsumerWidget {
                 ],
                 const SizedBox(height: 12),
                 _Section(
-                  title: 'Dữ liệu',
+                  title: tr.isEn ? 'Data' : 'Dữ liệu',
                   children: [
                     ExpansionTile(
                       leading: const Icon(Icons.backup_outlined),
-                      title: const Text('Khôi phục dữ liệu', maxLines: 3),
-                      subtitle: const Text(
-                        'Khôi phục từ tệp hoặc backup cloud.',
+                      title: Text(tr.isEn ? 'Data restore' : 'Khôi phục dữ liệu', maxLines: 3),
+                      subtitle: Text(
+                        tr.isEn
+                            ? 'Restore from file or cloud backup.'
+                            : 'Khôi phục từ tệp hoặc backup cloud.',
                       ),
                       children: [
                         _BackupManagement(
@@ -212,12 +233,12 @@ class SettingsScreen extends ConsumerWidget {
                             Icons.delete_outline,
                             color: Theme.of(context).colorScheme.error,
                           ),
-                          title: const Text(
-                            'Xóa dữ liệu trên thiết bị',
+                          title: Text(
+                            tr.isEn ? 'Erase local data' : 'Xóa dữ liệu trên thiết bị',
                             maxLines: 3,
                           ),
-                          subtitle: const Text(
-                            'Thao tác này không thể hoàn tác.',
+                          subtitle: Text(
+                            tr.isEn ? 'This action cannot be undone.' : 'Thao tác này không thể hoàn tác.',
                           ),
                           onTap: () => _confirmDelete(context, ref),
                         ),
@@ -234,12 +255,14 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final isEn = context.tr.isEn;
     final confirmed = await showConfirmDialog(
       context,
-      title: 'Xóa toàn bộ dữ liệu?',
-      message:
-          'Thao tác này không thể hoàn tác. Danh mục mặc định vẫn được giữ lại.',
-      confirmLabel: 'Xóa dữ liệu',
+      title: isEn ? 'Erase all data?' : 'Xóa toàn bộ dữ liệu?',
+      message: isEn
+          ? 'This action cannot be undone. Default categories will be kept.'
+          : 'Thao tác này không thể hoàn tác. Danh mục mặc định vẫn được giữ lại.',
+      confirmLabel: isEn ? 'Erase data' : 'Xóa dữ liệu',
       destructive: true,
     );
     if (!confirmed || !context.mounted) return;
@@ -248,13 +271,23 @@ class SettingsScreen extends ConsumerWidget {
       await ref.read(invoiceRepositoryProvider).deleteAllUserData();
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã xóa toàn bộ dữ liệu trên thiết bị.')),
+        SnackBar(
+          content: Text(
+            isEn
+                ? 'All device data has been erased.'
+                : 'Đã xóa toàn bộ dữ liệu trên thiết bị.',
+          ),
+        ),
       );
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Không thể xóa dữ liệu: ${friendlyMessage(error)}'),
+          content: Text(
+            isEn
+                ? 'Cannot erase data: ${friendlyMessage(error)}'
+                : 'Không thể xóa dữ liệu: ${friendlyMessage(error)}',
+          ),
         ),
       );
     }
@@ -286,7 +319,13 @@ class SettingsScreen extends ConsumerWidget {
           await provider.delete(selection.entry);
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đã xóa backup khỏi tài khoản.')),
+            SnackBar(
+              content: Text(
+                context.tr.isEn
+                    ? 'Deleted cloud backup from account.'
+                    : 'Đã xóa backup khỏi tài khoản.',
+              ),
+            ),
           );
           continue;
         }
@@ -323,7 +362,9 @@ class SettingsScreen extends ConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Đã khôi phục ${preview.readyCount} mục từ bản sao lưu trực tuyến.',
+              context.tr.isEn
+                  ? 'Restored ${preview.readyCount} items from cloud backup.'
+                  : 'Đã khôi phục ${preview.readyCount} mục từ bản sao lưu trực tuyến.',
             ),
           ),
         );
@@ -363,14 +404,20 @@ class SettingsScreen extends ConsumerWidget {
       showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const PopScope(
+        builder: (_) => PopScope(
           canPop: false,
           child: AlertDialog(
             content: Row(
               children: [
-                CircularProgressIndicator(),
-                SizedBox(width: 20),
-                Expanded(child: Text('Đang khôi phục dữ liệu…')),
+                const CircularProgressIndicator(),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Text(
+                    context.tr.isEn
+                        ? 'Restoring data…'
+                        : 'Đang khôi phục dữ liệu…',
+                  ),
+                ),
               ],
             ),
           ),
@@ -387,7 +434,13 @@ class SettingsScreen extends ConsumerWidget {
       Navigator.of(context, rootNavigator: true).pop();
       progressVisible = false;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đã khôi phục ${preview.readyCount} mục.')),
+        SnackBar(
+          content: Text(
+            context.tr.isEn
+                ? 'Restored ${preview.readyCount} items.'
+                : 'Đã khôi phục ${preview.readyCount} mục.',
+          ),
+        ),
       );
     } on Object catch (error) {
       if (!context.mounted) return;
@@ -495,6 +548,7 @@ class SettingsScreen extends ConsumerWidget {
         : FinmiAppearance.fromId(isDark ? 'midnight' : 'white');
     final selected = await showModalBottomSheet<FinmiAppearance>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (sheetContext) => SafeArea(
@@ -507,12 +561,14 @@ class SettingsScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
             children: [
               Text(
-                'Chọn giao diện',
+                context.tr.isEn ? 'Select Theme' : 'Chọn giao diện',
                 style: Theme.of(sheetContext).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Màu sắc thay đổi, dữ liệu và thao tác được giữ nguyên.',
+              Text(
+                context.tr.isEn
+                    ? 'Colors change, your data and actions stay the same.'
+                    : 'Màu sắc thay đổi, dữ liệu và thao tác được giữ nguyên.',
               ),
               const SizedBox(height: 16),
               for (final appearance in FinmiAppearance.values)
@@ -581,24 +637,29 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _chooseThemeMode(BuildContext context, WidgetRef ref) async {
+    final tr = context.tr;
     final current = ref.read(themeModeProvider);
     final selected = await showModalBottomSheet<ThemeMode>(
       context: context,
+      useRootNavigator: true,
       builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(24, 20, 24, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Chọn giao diện'),
+                child: Text(
+                  tr.themeModeTitle,
+                  style: Theme.of(sheetContext).textTheme.titleMedium,
+                ),
               ),
             ),
-            for (final option in const [
-              (ThemeMode.system, 'Theo hệ thống'),
-              (ThemeMode.light, 'Sáng'),
-              (ThemeMode.dark, 'Tối'),
+            for (final option in [
+              (ThemeMode.system, tr.isEn ? 'System default' : 'Theo hệ thống'),
+              (ThemeMode.light, tr.isEn ? 'Light' : 'Sáng'),
+              (ThemeMode.dark, tr.isEn ? 'Dark' : 'Tối'),
             ])
               ListTile(
                 title: Text(option.$2),
@@ -613,6 +674,47 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (selected == null || selected == current || !context.mounted) return;
     await _setThemeMode(context, ref, selected);
+  }
+
+  Future<void> _chooseLanguage(BuildContext context, WidgetRef ref) async {
+    final tr = context.tr;
+    final current = ref.read(appLocaleProvider).languageCode;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      useRootNavigator: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  tr.chooseLanguage,
+                  style: Theme.of(sheetContext).textTheme.titleMedium,
+                ),
+              ),
+            ),
+            ListTile(
+              title: Text(tr.vietnamese),
+              selected: current == 'vi',
+              trailing: current == 'vi' ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.of(sheetContext).pop('vi'),
+            ),
+            ListTile(
+              title: Text(tr.english),
+              selected: current == 'en',
+              trailing: current == 'en' ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.of(sheetContext).pop('en'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || selected == current) return;
+    await ref.read(appLocaleProvider.notifier).setLocale(selected);
   }
 
   Future<void> _setThemeMode(
@@ -666,18 +768,21 @@ Future<_CloudBackupSelection?> _showCloudBackupDialog(
   BuildContext context,
   List<CloudBackupEntry> entries,
 ) {
+  final isEn = context.tr.isEn;
   return showDialog<_CloudBackupSelection>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       icon: const Icon(Icons.cloud_queue_outlined),
-      title: const Text('Bản sao lưu trực tuyến', maxLines: 3),
+      title: Text(isEn ? 'Cloud Backups' : 'Bản sao lưu trực tuyến', maxLines: 3),
       content: SizedBox(
         width: 520,
         child: entries.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Text(
-                  'Tài khoản chưa có backup cloud.',
+                  isEn
+                      ? 'No cloud backups found.'
+                      : 'Tài khoản chưa có backup cloud.',
                   textAlign: TextAlign.center,
                 ),
               )
@@ -704,13 +809,13 @@ Future<_CloudBackupSelection?> _showCloudBackupDialog(
                         overflow: TextOverflow.ellipsis,
                       ),
                       subtitle: details.isEmpty
-                          ? const Text('Backup mã hóa')
+                          ? Text(isEn ? 'Encrypted backup' : 'Backup mã hóa')
                           : Text(details.join(' · ')),
                       trailing: Wrap(
                         spacing: 0,
                         children: [
                           IconButton(
-                            tooltip: 'Khôi phục',
+                            tooltip: isEn ? 'Restore' : 'Khôi phục',
                             onPressed: () => Navigator.pop(
                               dialogContext,
                               _CloudBackupSelection(
@@ -721,7 +826,7 @@ Future<_CloudBackupSelection?> _showCloudBackupDialog(
                             icon: const Icon(Icons.restore),
                           ),
                           IconButton(
-                            tooltip: 'Xóa khỏi cloud',
+                            tooltip: isEn ? 'Delete from cloud' : 'Xóa khỏi cloud',
                             onPressed: () => Navigator.pop(
                               dialogContext,
                               _CloudBackupSelection(
@@ -741,7 +846,7 @@ Future<_CloudBackupSelection?> _showCloudBackupDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('Đóng'),
+          child: Text(isEn ? 'Close' : 'Đóng'),
         ),
       ],
     ),
@@ -752,22 +857,25 @@ Future<bool?> _confirmCloudBackupDelete(
   BuildContext context,
   CloudBackupEntry entry,
 ) {
+  final isEn = context.tr.isEn;
   return showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       icon: const Icon(Icons.delete_outline),
-      title: const Text('Xóa backup cloud?', maxLines: 3),
+      title: Text(isEn ? 'Delete cloud backup?' : 'Xóa backup cloud?', maxLines: 3),
       content: Text(
-        '“${entry.fileName}” sẽ bị xóa khỏi tài khoản và không thể khôi phục.',
+        isEn
+            ? '“${entry.fileName}” will be deleted from your account and cannot be recovered.'
+            : '“${entry.fileName}” sẽ bị xóa khỏi tài khoản và không thể khôi phục.',
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, false),
-          child: const Text('Hủy'),
+          child: Text(isEn ? 'Cancel' : 'Hủy'),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(dialogContext, true),
-          child: const Text('Xóa backup'),
+          child: Text(isEn ? 'Delete backup' : 'Xóa backup'),
         ),
       ],
     ),
@@ -784,11 +892,12 @@ Future<bool?> _showRestorePreview(
   BuildContext context,
   InvoiceRestorePreview preview,
 ) {
+  final isEn = context.tr.isEn;
   return showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       icon: const Icon(Icons.restore_page_outlined),
-      title: const Text('Xem trước bản khôi phục', maxLines: 3),
+      title: Text(isEn ? 'Restore Preview' : 'Xem trước bản khôi phục', maxLines: 3),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480, maxHeight: 420),
         child: SingleChildScrollView(
@@ -804,24 +913,24 @@ Future<bool?> _showRestorePreview(
               ),
               const SizedBox(height: 16),
               _RestoreStat(
-                label: 'Sẵn sàng khôi phục',
+                label: isEn ? 'Ready to restore' : 'Sẵn sàng khôi phục',
                 value: preview.readyCount,
                 icon: Icons.check_circle_outline,
               ),
               _RestoreStat(
-                label: 'Bỏ qua do trùng',
+                label: isEn ? 'Skipped (duplicate)' : 'Bỏ qua do trùng',
                 value: preview.duplicateCount,
                 icon: Icons.content_copy_outlined,
               ),
               _RestoreStat(
-                label: 'Dữ liệu không hợp lệ',
+                label: isEn ? 'Invalid data' : 'Dữ liệu không hợp lệ',
                 value: preview.invalidCount,
                 icon: Icons.error_outline,
               ),
               if (preview.issues.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Chi tiết cần kiểm tra',
+                  isEn ? 'Details to review' : 'Chi tiết cần kiểm tra',
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 const SizedBox(height: 6),
@@ -839,14 +948,16 @@ Future<bool?> _showRestorePreview(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, false),
-          child: const Text('Hủy'),
+          child: Text(isEn ? 'Cancel' : 'Hủy'),
         ),
         FilledButton.icon(
           onPressed: preview.canRestore
               ? () => Navigator.pop(dialogContext, true)
               : null,
           icon: const Icon(Icons.restore),
-          label: Text('Khôi phục ${preview.readyCount}'),
+          label: Text(
+            isEn ? 'Restore ${preview.readyCount}' : 'Khôi phục ${preview.readyCount}',
+          ),
         ),
       ],
     ),
@@ -854,6 +965,7 @@ Future<bool?> _showRestorePreview(
 }
 
 Future<String?> _showBackupPasswordDialog(BuildContext context) async {
+  final isEn = context.tr.isEn;
   final passwordController = TextEditingController();
   final formKey = GlobalKey<FormState>();
   try {
@@ -861,7 +973,7 @@ Future<String?> _showBackupPasswordDialog(BuildContext context) async {
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.lock_outline),
-        title: const Text('Mở backup mã hóa', maxLines: 3),
+        title: Text(isEn ? 'Unlock Encrypted Backup' : 'Mở backup mã hóa', maxLines: 3),
         content: Form(
           key: formKey,
           child: Column(
@@ -872,14 +984,16 @@ Future<String?> _showBackupPasswordDialog(BuildContext context) async {
                 autofocus: true,
                 obscureText: true,
                 textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(
-                  labelText: 'Mật khẩu backup',
-                  hintText: 'Ít nhất 8 ký tự',
-                  prefixIcon: Icon(Icons.key_outlined),
+                decoration: InputDecoration(
+                  labelText: isEn ? 'Backup password' : 'Mật khẩu backup',
+                  hintText: isEn ? 'At least 8 characters' : 'Ít nhất 8 ký tự',
+                  prefixIcon: const Icon(Icons.key_outlined),
                 ),
                 validator: (value) {
                   if (value == null || value.length < 8) {
-                    return 'Mật khẩu phải có ít nhất 8 ký tự';
+                    return isEn
+                        ? 'Password must have at least 8 characters'
+                        : 'Mật khẩu phải có ít nhất 8 ký tự';
                   }
                   return null;
                 },
@@ -890,7 +1004,7 @@ Future<String?> _showBackupPasswordDialog(BuildContext context) async {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Hủy'),
+            child: Text(isEn ? 'Cancel' : 'Hủy'),
           ),
           FilledButton.icon(
             onPressed: () {
@@ -899,7 +1013,7 @@ Future<String?> _showBackupPasswordDialog(BuildContext context) async {
               }
             },
             icon: const Icon(Icons.lock_open),
-            label: const Text('Mở backup'),
+            label: Text(isEn ? 'Unlock' : 'Mở backup'),
           ),
         ],
       ),
@@ -952,24 +1066,36 @@ class _BackupManagement extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isEn = context.tr.isEn;
     return Column(
       children: [
         ListTile(
           leading: const Icon(Icons.cloud_queue_outlined),
-          title: const Text('Quản lý bản sao lưu', maxLines: 3),
+          title: Text(isEn ? 'Manage Backups' : 'Quản lý bản sao lưu', maxLines: 3),
           subtitle: Text(
             onManageCloud == null
-                ? 'Đăng nhập để xem và khôi phục backup cloud.'
-                : 'Xem, khôi phục hoặc xóa các backup mã hóa của tài khoản.',
+                ? (isEn
+                    ? 'Sign in to view and restore cloud backups.'
+                    : 'Đăng nhập để xem và khôi phục backup cloud.')
+                : (isEn
+                    ? 'View, restore or delete encrypted account backups.'
+                    : 'Xem, khôi phục hoặc xóa các backup mã hóa của tài khoản.'),
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: onManageCloud,
         ),
         ListTile(
           leading: const Icon(Icons.restore_page_outlined),
-          title: const Text('Khôi phục JSON hoặc backup mã hóa', maxLines: 3),
-          subtitle: const Text(
-            'Hỗ trợ JSON cũ và .hdbak; xem trước, bỏ qua bản trùng rồi mới ghi dữ liệu.',
+          title: Text(
+            isEn
+                ? 'Restore JSON or encrypted backup'
+                : 'Khôi phục JSON hoặc backup mã hóa',
+            maxLines: 3,
+          ),
+          subtitle: Text(
+            isEn
+                ? 'Supports legacy JSON and .hdbak; preview, skip duplicates before writing.'
+                : 'Hỗ trợ JSON cũ và .hdbak; xem trước, bỏ qua bản trùng rồi mới ghi dữ liệu.',
           ),
           trailing: const Icon(Icons.upload_file_outlined),
           onTap: onRestoreJson,
@@ -984,13 +1110,14 @@ class _LoadingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ListTile(
-      leading: SizedBox(
+    final isEn = context.tr.isEn;
+    return ListTile(
+      leading: const SizedBox(
         width: 24,
         height: 24,
         child: CircularProgressIndicator(strokeWidth: 2),
       ),
-      title: Text('Đang tải…', maxLines: 3),
+      title: Text(isEn ? 'Loading…' : 'Đang tải…', maxLines: 3),
     );
   }
 }

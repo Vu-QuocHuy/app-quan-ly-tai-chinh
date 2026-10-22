@@ -19,4 +19,13 @@ abstract final class AuthValidators {
     }
     return null;
   }
+
+  static String? phone(String? value) {
+    final phone = value?.trim() ?? '';
+    if (phone.isEmpty) return 'Vui lòng nhập số điện thoại.';
+    if (!RegExp(r'^0[0-9]{9}$').hasMatch(phone)) {
+      return 'Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.';
+    }
+    return null;
+  }
 }

@@ -2,7 +2,11 @@
   "name": "quan-ly-tai-chinh-tools",
   "private": true,
   "scripts": {
-    "supabase": "supabase"
+    "supabase": "supabase",
+    "start-8080": "flutter run -d web-server --web-port=8080 --web-hostname=localhost --dart-define=APP_ENV=dev --dart-define-from-file=config/supabase.local.json",
+    "start-8081": "flutter run -d web-server --web-port=8081 --web-hostname=localhost --dart-define=APP_ENV=dev --dart-define-from-file=config/supabase.local.json",
+    "start-dual": "tool\\run_dual_instances.bat",
+    "start-dual-ps": "powershell -ExecutionPolicy Bypass -File tool\\run_dual_instances.ps1"
   },
   "devDependencies": {
     "supabase": "^2.116.0"

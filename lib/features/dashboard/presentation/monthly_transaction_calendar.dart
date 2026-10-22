@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/localization/app_strings.dart';
 import '../../../app/theme/finance_colors.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
@@ -41,88 +42,61 @@ class MonthlyTransactionCalendar extends StatelessWidget {
     final leadingDays = firstWeekday - DateTime.monday;
     final daysInMonth = DateUtils.getDaysInMonth(month.year, month.month);
     final finance = Theme.of(context).extension<AppFinanceColors>()!;
+    final isEn = context.tr.isEn;
+    final weekdays = isEn
+        ? const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        : const ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
-    final scale = MediaQuery.textScalerOf(context).scale(12) / 12;
-    final rows = ((leadingDays + daysInMonth) / 7).ceil();
     return AppCard(
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final minimumWidth = 48.0 * scale * 7;
-              final width = constraints.maxWidth > minimumWidth
-                  ? constraints.maxWidth
-                  : minimumWidth;
-              return SizedBox(
-                height: rows * 68 * scale + 28 * scale + 8,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: width,
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          height: 28 * scale,
-                          child: Row(
-                            children: [
-                              for (final weekday in const [
-                                'T2',
-                                'T3',
-                                'T4',
-                                'T5',
-                                'T6',
-                                'T7',
-                                'CN',
-                              ])
-                                Expanded(
-                                  child: Center(
-                                    child: Text(
-                                      weekday,
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.labelSmall,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: leadingDays + daysInMonth,
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 7,
-                                mainAxisExtent: 68 * scale,
-                              ),
-                          itemBuilder: (context, index) {
-                            if (index < leadingDays) {
-                              return const SizedBox.shrink();
-                            }
-                            final day = index - leadingDays + 1;
-                            final date = DateTime(month.year, month.month, day);
-                            return _CalendarDay(
-                              date: date,
-                              selected: DateUtils.isSameDay(selectedDay, date),
-                              net:
-                                  (incomeByDay[day] ?? 0) -
-                                  (snapshot.dailyTotals[day] ?? 0),
-                              positiveColor: finance.income.color,
-                              negativeColor: Theme.of(
-                                context,
-                              ).colorScheme.error,
-                              onTap: () => onSelectDay(date),
-                            );
-                          },
-                        ),
-                      ],
+          Row(
+            children: [
+              for (final weekday in weekdays)
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      weekday,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            itemCount: leadingDays + daysInMonth,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              mainAxisExtent: 46,
+              crossAxisSpacing: 4,
+              mainAxisSpacing: 4,
+            ),
+            itemBuilder: (context, index) {
+              if (index < leadingDays) {
+                return const SizedBox.shrink();
+              }
+              final day = index - leadingDays + 1;
+              final date = DateTime(month.year, month.month, day);
+              return _CalendarDay(
+                date: date,
+                selected: DateUtils.isSameDay(selectedDay, date),
+                net:
+                    (incomeByDay[day] ?? 0) -
+                    (snapshot.dailyTotals[day] ?? 0),
+                positiveColor: finance.income.color,
+                negativeColor: Theme.of(
+                  context,
+                ).colorScheme.error,
+                onTap: () => onSelectDay(date),
               );
             },
           ),
@@ -153,59 +127,65 @@ class _CalendarDay extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isToday = DateUtils.isSameDay(date, DateTime.now());
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(6),
-      side: BorderSide(
-        color: selected || isToday
-            ? theme.colorScheme.primary
-            : theme.colorScheme.outlineVariant,
-      ),
-    );
-    final color = net > 0
-        ? positiveColor
-        : net < 0
-        ? negativeColor
-        : theme.colorScheme.onSurfaceVariant;
-    final label = net == 0
-        ? 'Ngày ${date.day}, thu chi cân bằng'
-        : 'Ngày ${date.day}, ${net > 0 ? 'dư' : 'thiếu'} ${MoneyFormatter.format(net.abs())}';
+    final hasTransaction = net != 0;
+    final color = net > 0 ? positiveColor : negativeColor;
 
     return Semantics(
       button: true,
-      excludeSemantics: true,
-      onTap: onTap,
       selected: selected,
-      label: label,
-      child: Material(
-        color: selected
-            ? theme.colorScheme.primaryContainer
-            : theme.colorScheme.surfaceContainerLow,
-        shape: shape,
-        child: InkWell(
-          customBorder: shape,
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
-            child: Column(
-              children: [
-                Text(
-                  '${date.day}',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: isToday ? FontWeight.bold : null,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                const Spacer(),
-                Text(
-                  compactNet(net),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-              ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: selected
+                ? theme.colorScheme.primaryContainer
+                : (isToday
+                    ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
+                    : theme.colorScheme.surfaceContainerLow),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected
+                  ? theme.colorScheme.primary
+                  : (isToday
+                      ? theme.colorScheme.outline
+                      : theme.colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              width: selected ? 1.5 : 1,
             ),
+          ),
+          padding: const EdgeInsets.only(top: 4, bottom: 2, left: 1, right: 1),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Text(
+                '${date.day}',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: selected || isToday ? FontWeight.w800 : FontWeight.w500,
+                  color: selected
+                      ? theme.colorScheme.onPrimaryContainer
+                      : theme.colorScheme.onSurface,
+                  fontSize: 12,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              SizedBox(
+                height: 13,
+                child: hasTransaction
+                    ? Text(
+                        compactNet(net),
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                          height: 1.1,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    : null,
+              ),
+            ],
           ),
         ),
       ),

@@ -3,7 +3,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants/app_constants.dart';
+import '../core/localization/app_strings.dart';
 import '../shared/widgets/finmi_responsive_theme.dart';
+import '../shared/widgets/finmi_web_frame.dart';
 import 'router/app_router.dart';
 import 'theme/app_scroll_behavior.dart';
 import 'theme/app_theme.dart';
@@ -15,10 +17,13 @@ class HoaDonInsightApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final locale = ref.watch(appLocaleProvider);
     return MaterialApp.router(
+      key: ValueKey('finmi-app-${locale.languageCode}'),
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
-      builder: (context, child) => FinmiResponsiveTheme(child: child!),
+      builder: (context, child) =>
+          FinmiWebFrame(child: FinmiResponsiveTheme(child: child!)),
       theme: ref.watch(finmiAppearanceProvider).isDark
           ? AppTheme.light()
           : AppTheme.forAppearance(ref.watch(finmiAppearanceProvider)),
@@ -26,9 +31,7 @@ class HoaDonInsightApp extends ConsumerWidget {
           ? AppTheme.forAppearance(ref.watch(finmiAppearanceProvider))
           : AppTheme.dark(),
       themeMode: ref.watch(themeModeProvider),
-      // Toàn bộ app là tiếng Việt nhưng trước đây không có delegate nào, nên
-      // showDatePicker và semantics của widget Material render bằng tiếng Anh.
-      locale: const Locale('vi'),
+      locale: ref.watch(appLocaleProvider),
       supportedLocales: const [Locale('vi'), Locale('en')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       // Kéo-chuột để cuộn trên web/desktop.

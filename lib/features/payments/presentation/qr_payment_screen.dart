@@ -1,4 +1,5 @@
 import '../../../shared/widgets/finmi_text_field.dart';
+import '../../../shared/widgets/qr_scanner_overlay.dart';
 import 'dart:async';
 
 import 'package:camera/camera.dart';
@@ -39,7 +40,7 @@ class QrPaymentScreen extends ConsumerStatefulWidget {
 }
 
 class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _scannerController = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
@@ -52,6 +53,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   late final TextEditingController _accountController;
   late final TextEditingController _recipientController;
   late final TextEditingController _memoController;
+  late final TabController _tabController;
 
   QrPaymentDraft? _draft;
   List<VietQrBank> _banks = const [];
@@ -78,7 +80,12 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   @override
   void initState() {
     super.initState();
-    _activeScanTab = widget.initialScanTab;
+    _activeScanTab = widget.initialScanTab.clamp(0, 1);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: _activeScanTab,
+    )..addListener(_handleTabChanged);
     _store = ref.read(qrPaymentDraftStoreProvider);
     WidgetsBinding.instance.addObserver(this);
     _amountController = TextEditingController();
@@ -87,11 +94,26 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
     _memoController = TextEditingController();
     unawaited(_restoreDraft());
     unawaited(_restoreLastBankApp());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_activeScanTab == 1 && widget.showScanTabs && _draft == null) {
+        unawaited(_activateOcrCamera());
+      }
+    });
+  }
+
+  void _handleTabChanged() {
+    if (_tabController.indexIsChanging) return;
+    if (_tabController.index != _activeScanTab) {
+      _onScanTabSelected(_tabController.index);
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _tabController.removeListener(_handleTabChanged);
+    _tabController.dispose();
     _amountController.dispose();
     _accountController.dispose();
     _recipientController.dispose();
@@ -113,7 +135,9 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
     }
     if (state == AppLifecycleState.resumed) {
       if (_activeScanTab == 1 && widget.showScanTabs && _draft == null) {
-        unawaited(_startOcrCamera());
+        unawaited(_activateOcrCamera());
+      } else if (_activeScanTab == 0 && _draft == null) {
+        unawaited(_activateQrScanner());
       }
       if (_leftForBank && _awaitingBankReturn && _draft != null) {
         _leftForBank = false;
@@ -135,8 +159,12 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
         _returnedFromBank = draft.bankAppId != null;
       }
     });
-    if (draft == null && _activeScanTab == 1 && widget.showScanTabs) {
-      unawaited(_startOcrCamera());
+    if (draft == null) {
+      if (_activeScanTab == 1 && widget.showScanTabs) {
+        unawaited(_activateOcrCamera());
+      } else if (_activeScanTab == 0) {
+        unawaited(_activateQrScanner());
+      }
     }
     if (draft != null) {
       unawaited(_loadBanks());
@@ -350,6 +378,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   Future<VietQrBankApp?> _showBankAppPicker(List<VietQrBankApp> apps) {
     return showModalBottomSheet<VietQrBankApp>(
       context: context,
+      useRootNavigator: true,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetContext) {
@@ -553,6 +582,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
       if (!mounted) return;
       final action = await showModalBottomSheet<_PaymentReturnAction>(
         context: context,
+        useRootNavigator: true,
         isDismissible: false,
         enableDrag: false,
         showDragHandle: true,
@@ -691,71 +721,70 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   @override
   Widget build(BuildContext context) {
     final draft = _draft;
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            draft == null
-                ? widget.showScanTabs
-                      ? 'Quét'
-                      : 'Quét QR thanh toán'
-                : 'Kiểm tra khoản chi',
-          ),
-          bottom: widget.showScanTabs && draft == null && !_loadingDraft
-              ? TabBar(
-                  tabs: [
-                    Tab(
-                      height:
-                          64 *
-                          (MediaQuery.textScalerOf(context).scale(14) / 14),
-                      icon: const Icon(Icons.qr_code_scanner),
-                      child: const Text(
-                        'QR thanh toán',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    Tab(
-                      height:
-                          64 *
-                          (MediaQuery.textScalerOf(context).scale(14) / 14),
-                      icon: const Icon(Icons.document_scanner_outlined),
-                      child: const Text('Hóa đơn', textAlign: TextAlign.center),
-                    ),
-                  ],
-                  onTap: _onScanTabSelected,
-                )
-              : null,
-          actions: [
-            IconButton(
-              tooltip: 'Lịch sử thanh toán QR',
-              onPressed: () => context.push('/qr-payment/history'),
-              icon: const Icon(Icons.history),
-            ),
-            const SizedBox(width: 8),
-          ],
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          draft == null
+              ? widget.showScanTabs
+                    ? 'Quét'
+                    : 'Quét QR thanh toán'
+              : 'Kiểm tra khoản chi',
         ),
-        body: _loadingDraft
-            ? const Center(child: CircularProgressIndicator())
-            : draft != null
-            ? _buildDetails(context, draft)
-            : widget.showScanTabs
-            ? TabBarView(
-                physics: const NeverScrollableScrollPhysics(),
-                children: [_buildScanner(context), _buildOcrPicker(context)],
+        bottom: widget.showScanTabs && draft == null && !_loadingDraft
+            ? TabBar(
+                controller: _tabController,
+                tabs: [
+                  Tab(
+                    height:
+                        64 *
+                        (MediaQuery.textScalerOf(context).scale(14) / 14),
+                    icon: const Icon(Icons.qr_code_scanner),
+                    child: const Text(
+                      'QR thanh toán',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Tab(
+                    height:
+                        64 *
+                        (MediaQuery.textScalerOf(context).scale(14) / 14),
+                    icon: const Icon(Icons.document_scanner_outlined),
+                    child: const Text('Hóa đơn', textAlign: TextAlign.center),
+                  ),
+                ],
+                onTap: _onScanTabSelected,
               )
-            : _buildScanner(context),
-        bottomNavigationBar: draft == null ? null : _buildActions(context),
+            : null,
+        actions: [
+          IconButton(
+            tooltip: 'Lịch sử thanh toán QR',
+            onPressed: () => context.push('/qr-payment/history'),
+            icon: const Icon(Icons.history),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
+      body: _loadingDraft
+          ? const Center(child: CircularProgressIndicator())
+          : draft != null
+          ? _buildDetails(context, draft)
+          : widget.showScanTabs
+          ? TabBarView(
+              controller: _tabController,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [_buildScanner(context), _buildOcrPicker(context)],
+            )
+          : _buildScanner(context),
+      bottomNavigationBar: draft == null ? null : _buildActions(context),
     );
   }
 
   void _onScanTabSelected(int index) {
-    if (index == _activeScanTab) {
-      if (index == 1) unawaited(_startOcrCamera());
-      return;
+    if (index == _activeScanTab) return;
+    setState(() => _activeScanTab = index);
+    if (_tabController.index != index) {
+      _tabController.animateTo(index);
     }
-    _activeScanTab = index;
     if (index == 1) {
       unawaited(_activateOcrCamera());
     } else {
@@ -764,13 +793,24 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   }
 
   Future<void> _activateOcrCamera() async {
-    await _scannerController.stop();
-    if (_activeScanTab == 1) await _startOcrCamera();
+    try {
+      if (_scannerController.value.isRunning) {
+        await _scannerController.stop();
+      }
+    } on Object catch (_) {}
+    if (!mounted || _activeScanTab != 1) return;
+    await _startOcrCamera();
   }
 
   Future<void> _activateQrScanner() async {
     await _stopOcrCamera();
-    if (_activeScanTab == 0) await _scannerController.start();
+    if (!mounted || _activeScanTab != 0) return;
+    try {
+      if (!_scannerController.value.isRunning &&
+          !_scannerController.value.isStarting) {
+        await _scannerController.start();
+      }
+    } on Object catch (_) {}
   }
 
   Future<void> _startOcrCamera() async {
@@ -785,9 +825,15 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
     });
     CameraController? controller;
     try {
+      try {
+        if (_scannerController.value.isRunning) {
+          await _scannerController.stop();
+        }
+      } catch (_) {}
+
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        throw CameraException('NoCamera', 'No camera found.');
+        throw CameraException('NoCamera', 'Không tìm thấy camera trên thiết bị.');
       }
       var description = cameras.first;
       for (final camera in cameras) {
@@ -811,16 +857,16 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
       if (mounted && request == _ocrCameraRequest) {
         setState(() {
           _ocrCameraError = error.code == 'CameraAccessDenied'
-              ? 'Hãy cấp quyền camera cho trình duyệt để chụp hóa đơn.'
-              : 'Không thể mở camera. Hãy kiểm tra quyền truy cập camera.';
+              ? 'Hãy cấp quyền truy cập camera trong trình duyệt để chụp hóa đơn.'
+              : 'Không thể mở camera (${error.description ?? error.code}). Hãy kiểm tra quyền truy cập camera.';
         });
       }
       if (controller != null) await controller.dispose();
-    } on Object {
+    } on Object catch (error) {
       if (mounted && request == _ocrCameraRequest) {
         setState(() {
           _ocrCameraError =
-              'Không tìm thấy camera. Bạn có thể chọn ảnh bằng nút thư viện.';
+              'Không thể kết nối camera ($error). Bạn có thể chọn ảnh bằng nút thư viện.';
         });
       }
       if (controller != null) await controller.dispose();
@@ -889,18 +935,47 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
       fit: StackFit.expand,
       children: [
         if (_ocrCameraController case final controller?
-            when controller.value.isInitialized)
-          Positioned.fill(child: CameraPreview(controller))
+            when controller.value.isInitialized) ...[
+          Positioned.fill(child: CameraPreview(controller)),
+          const Positioned.fill(
+            child: QrScannerOverlay(
+              windowSize: Size(280, 360),
+              hintText: 'Đặt hóa đơn vào trong khung để chụp',
+            ),
+          ),
+        ]
         else
           ColoredBox(
             color: theme.colorScheme.surfaceContainerLow,
             child: Center(
               child: _isStartingOcrCamera
                   ? const CircularProgressIndicator()
-                  : Text(
-                      _ocrCameraError ?? 'Đang mở camera…',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium,
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.camera_alt_outlined,
+                          size: 48,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            _ocrCameraError ?? 'Đang mở camera…',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ),
+                        if (_ocrCameraError != null) ...[
+                          const SizedBox(height: 16),
+                          FilledButton.tonalIcon(
+                            onPressed: _startOcrCamera,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Thử lại camera'),
+                          ),
+                        ],
+                      ],
                     ),
             ),
           ),
@@ -952,19 +1027,40 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
               MobileScanner(
                 controller: _scannerController,
                 onDetect: _onQrDetected,
-              ),
-              Center(
-                child: Semantics(
-                  label: 'Khung quét mã VietQR',
-                  child: Container(
-                    width: 264,
-                    height: 264,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white, width: 3),
-                      borderRadius: BorderRadius.circular(28),
+                errorBuilder: (context, error) => ColoredBox(
+                  color: theme.colorScheme.surface,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.videocam_off_outlined,
+                            size: 48,
+                            color: theme.colorScheme.error,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Không mở được camera để quét QR. '
+                            'Hãy kiểm tra quyền truy cập camera trong trình duyệt hoặc thiết bị của bạn.',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 16),
+                          FilledButton.tonalIcon(
+                            onPressed: _activateQrScanner,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Thử lại camera'),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
+              ),
+              const QrScannerOverlay(
+                hintText: 'Đặt mã VietQR thanh toán vào khung để quét',
               ),
               if (_scanError != null)
                 Positioned(

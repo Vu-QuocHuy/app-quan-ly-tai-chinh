@@ -16,6 +16,7 @@ import '../../features/invoices/presentation/invoice_detail_screen.dart';
 import '../../features/invoices/presentation/invoice_attachments_screen.dart';
 import '../../features/invoices/presentation/daily_expense_history_screen.dart';
 import '../../features/invoices/presentation/invoice_list_screen.dart';
+import '../../features/debts/presentation/debt_screen.dart';
 import '../../features/groups/presentation/group_screen.dart';
 import '../../features/groups/presentation/group_fund_screen.dart';
 import '../../features/ingestion/presentation/import_job_history_screen.dart';
@@ -31,6 +32,8 @@ import '../shell/app_shell.dart';
 import '../theme/app_tokens.dart';
 import 'auth_redirect.dart';
 import '../../core/security/supabase_bootstrap.dart';
+
+import '../../shared/widgets/finmi_assistant_button.dart';
 
 /// Trang tab có crossfade nhẹ.
 ///
@@ -56,6 +59,7 @@ final authRouterRefresh = _AuthRouterRefresh();
 
 final appRouter = GoRouter(
   navigatorKey: _rootKey,
+  observers: [FinmiModalObserver()],
   refreshListenable: authRouterRefresh,
   initialLocation: '/',
   redirect: (context, state) =>
@@ -90,6 +94,7 @@ final appRouter = GoRouter(
           AppShell(navigationShell: navigationShell),
       branches: [
         StatefulShellBranch(
+          observers: [FinmiModalObserver()],
           routes: [
             GoRoute(
               path: '/',
@@ -99,6 +104,7 @@ final appRouter = GoRouter(
           ],
         ),
         StatefulShellBranch(
+          observers: [FinmiModalObserver()],
           routes: [
             GoRoute(
               path: '/budgets',
@@ -108,6 +114,7 @@ final appRouter = GoRouter(
           ],
         ),
         StatefulShellBranch(
+          observers: [FinmiModalObserver()],
           routes: [
             GoRoute(
               path: '/groups',
@@ -135,6 +142,7 @@ final appRouter = GoRouter(
           ],
         ),
         StatefulShellBranch(
+          observers: [FinmiModalObserver()],
           routes: [
             GoRoute(
               path: '/settings',
@@ -175,6 +183,7 @@ final appRouter = GoRouter(
         initialMonthKey: state.uri.queryParameters['month'],
         initialCategoryId: state.uri.queryParameters['category'],
         initialReview: state.uri.queryParameters['review'] == '1',
+        initialTab: state.uri.queryParameters['tab'],
       ),
       routes: [
         GoRoute(
@@ -245,6 +254,13 @@ final appRouter = GoRouter(
       path: '/plans',
       parentNavigatorKey: _rootKey,
       builder: (context, state) => const PlanScreen(),
+    ),
+    GoRoute(
+      path: '/debts',
+      parentNavigatorKey: _rootKey,
+      builder: (context, state) => DebtScreen(
+        initialDebtId: state.uri.queryParameters['debtId'],
+      ),
     ),
     GoRoute(
       path: '/review',

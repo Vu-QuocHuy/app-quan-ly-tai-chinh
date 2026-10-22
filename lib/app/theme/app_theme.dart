@@ -292,6 +292,7 @@ abstract final class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: AppElevations.none,
         shape: cardShape,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         titleTextStyle: text.headlineSmall?.copyWith(color: scheme.onSurface),
         contentTextStyle: text.bodyLarge?.copyWith(
           color: scheme.onSurfaceVariant,

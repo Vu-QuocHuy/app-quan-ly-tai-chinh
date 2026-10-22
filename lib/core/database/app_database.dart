@@ -478,6 +478,9 @@ class AppDatabase extends _$AppDatabase {
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
       await _createIndexes();
+      await batch((b) {
+        b.insertAllOnConflictUpdate(categories, _defaultCategories);
+      });
     },
   );
 
@@ -590,6 +593,62 @@ class AppDatabase extends _$AppDatabase {
       name: 'Khác',
       iconName: 'category',
       colorValue: 0xFF64748B,
+    ),
+    CategoriesCompanion.insert(
+      id: 'income_salary',
+      name: 'Tiền lương',
+      iconName: 'payments',
+      colorValue: 0xFF16A34A,
+      kind: const Value('income'),
+    ),
+    CategoriesCompanion.insert(
+      id: 'income_bonus',
+      name: 'Thưởng & Hoa hồng',
+      iconName: 'card_giftcard',
+      colorValue: 0xFFEA580C,
+      kind: const Value('income'),
+    ),
+    CategoriesCompanion.insert(
+      id: 'income_investment',
+      name: 'Đầu tư & Sinh lời',
+      iconName: 'trending_up',
+      colorValue: 0xFF0284C7,
+      kind: const Value('income'),
+    ),
+    CategoriesCompanion.insert(
+      id: 'income_business',
+      name: 'Kinh doanh & Bán hàng',
+      iconName: 'storefront',
+      colorValue: 0xFF7C3AED,
+      kind: const Value('income'),
+    ),
+    CategoriesCompanion.insert(
+      id: 'income_allowance',
+      name: 'Phụ cấp & Trợ cấp',
+      iconName: 'work',
+      colorValue: 0xFF0891B2,
+      kind: const Value('income'),
+    ),
+    CategoriesCompanion.insert(
+      id: 'income_gift',
+      name: 'Được tặng & Biếu',
+      iconName: 'card_giftcard',
+      colorValue: 0xFFDB2777,
+      kind: const Value('income'),
+    ),
+    CategoriesCompanion.insert(
+      id: 'income_interest',
+      name: 'Tiền lãi & Cổ tức',
+      iconName: 'savings',
+      colorValue: 0xFFCA8A04,
+      kind: const Value('income'),
+    ),
+    CategoriesCompanion.insert(
+      id: 'income_other',
+      name: 'Thu nhập khác',
+      iconName: 'category',
+      colorValue: 0xFF64748B,
+      kind: const Value('income'),
     ),
     _unclassifiedIncomeCategory,
   ];

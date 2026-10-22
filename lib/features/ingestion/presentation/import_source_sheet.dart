@@ -52,7 +52,7 @@ class ImportSourceSheet extends StatelessWidget {
               const Divider(),
               _SourceTile(
                 icon: Icons.receipt_long_outlined,
-                title: 'Lịch sử thu chi',
+                title: 'Lịch sử',
                 subtitle: 'Tìm kiếm và lọc các khoản thu chi đã ghi',
                 onTap: () => Navigator.pop(context, ImportSource.history),
               ),
