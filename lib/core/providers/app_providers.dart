@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/auth/data/supabase_auth_service.dart';
+import '../../features/chat/data/ai_chat_client.dart';
 import '../../features/chat/data/chat_history_store.dart';
 import '../../features/chat/domain/local_chat_assistant.dart';
 import '../../features/groups/data/group_service.dart';
@@ -261,6 +262,13 @@ final localChatAssistantProvider = Provider<LocalChatAssistant>((ref) {
     ref.watch(invoiceRepositoryProvider),
     ref.watch(incomeRepositoryProvider),
   );
+});
+
+final aiChatClientProvider = Provider<AiChatClient>((ref) {
+  ref.watch(authUserProvider);
+  final client = ref.watch(supabaseClientProvider);
+  final flags = ref.watch(featureFlagsProvider).value ?? FeatureFlags.defaults;
+  return AiChatClient(supabaseClient: client, enabled: flags.onlineAi);
 });
 
 final aiExtractionClientProvider = Provider<AiExtractionClient>((ref) {

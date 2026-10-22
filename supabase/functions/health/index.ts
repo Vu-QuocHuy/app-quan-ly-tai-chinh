@@ -33,7 +33,7 @@ async function readiness(request: Request): Promise<Response> {
     supabaseConfig: Boolean(supabaseUrl && serviceRoleKey),
     supabaseAnonKey: Boolean(Deno.env.get("SUPABASE_ANON_KEY")?.trim()),
     database: false,
-    aiKey: Boolean(Deno.env.get("GEMINI_API_KEY")?.trim()),
+    aiProviderConfig: aiProviderConfigured(),
     workerSecret: (Deno.env.get("AI_WORKER_SECRET")?.trim().length ?? 0) >= 32,
     aiOriginAllowlist: originAllowlistEnforced("AI_REQUIRE_ORIGIN_ALLOWLIST", "AI_ALLOWED_ORIGINS"),
     deleteAccountOriginAllowlist: originAllowlistEnforced("DELETE_ACCOUNT_REQUIRE_ORIGIN_ALLOWLIST", "DELETE_ACCOUNT_ALLOWED_ORIGINS"),
@@ -106,6 +106,19 @@ function originAllowlistEnforced(requiredName: string, originsName: string): boo
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0);
   return origins.length > 0 && origins.every((origin) => normalizeOrigin(origin) !== null);
+}
+
+function aiProviderConfigured(): boolean {
+  const key = Deno.env.get("NINER_ROUTER_API_KEY")?.trim();
+  const value = Deno.env.get("NINER_ROUTER_BASE_URL")?.trim();
+  if (!key || !value) return false;
+  try {
+    const url = new URL(value);
+    const approvedHttp = url.protocol === "http:" && url.hostname === "103.199.18.103" && url.port === "20128";
+    return (url.protocol === "https:" || approvedHttp) && !url.username && !url.password && !url.search && !url.hash;
+  } catch {
+    return false;
+  }
 }
 
 function normalizeOrigin(value: string): string | null {

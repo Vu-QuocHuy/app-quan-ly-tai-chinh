@@ -46,6 +46,14 @@ class ChatFact {
 }
 
 @immutable
+class ChatToolCall {
+  const ChatToolCall({required this.name, required this.period});
+
+  final String name;
+  final String period;
+}
+
+@immutable
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -98,11 +106,13 @@ class ChatReply {
     required this.text,
     this.citations = const [],
     this.facts = const [],
+    this.toolCall,
   });
 
   final String text;
   final List<ChatCitation> citations;
   final List<ChatFact> facts;
+  final ChatToolCall? toolCall;
 }
 
 DateTime? _parseDate(Object? value) {
