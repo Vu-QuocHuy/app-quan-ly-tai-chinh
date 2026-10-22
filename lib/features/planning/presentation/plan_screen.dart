@@ -40,7 +40,9 @@ class PlanScreen extends ConsumerWidget {
               actions: [
                 FinmiHeaderAction(
                   icon: Icons.add,
-                  tooltip: tr.isEn ? 'Add recurring item' : 'Thêm khoản định kỳ',
+                  tooltip: tr.isEn
+                      ? 'Add recurring item'
+                      : 'Thêm khoản định kỳ',
                   onPressed: () async {
                     final kind = await showModalBottomSheet<int>(
                       context: context,
@@ -53,18 +55,28 @@ class PlanScreen extends ConsumerWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             ListTile(
-                              title: Text(tr.isEn ? 'Recurring income' : 'Khoản thu định kỳ'),
+                              title: Text(
+                                tr.isEn
+                                    ? 'Recurring income'
+                                    : 'Khoản thu định kỳ',
+                              ),
                               leading: const Icon(Icons.south_west),
                               enabled: incomeCategories.isNotEmpty,
                               onTap: () => Navigator.pop(context, 0),
                             ),
                             ListTile(
-                              title: Text(tr.isEn ? 'Recurring expense' : 'Khoản chi định kỳ'),
+                              title: Text(
+                                tr.isEn
+                                    ? 'Recurring expense'
+                                    : 'Khoản chi định kỳ',
+                              ),
                               leading: const Icon(Icons.north_east),
                               onTap: () => Navigator.pop(context, 1),
                             ),
                             ListTile(
-                              title: Text(tr.isEn ? 'Savings goal' : 'Mục tiêu tiết kiệm'),
+                              title: Text(
+                                tr.isEn ? 'Savings goal' : 'Mục tiêu tiết kiệm',
+                              ),
                               leading: const Icon(Icons.savings_outlined),
                               onTap: () => Navigator.pop(context, 2),
                             ),
@@ -137,11 +149,15 @@ class PlanScreen extends ConsumerWidget {
                       const SizedBox(height: 10),
                       if (incomes.isEmpty)
                         _EmptyPlanCard(
-                          title: tr.isEn ? 'No recurring income yet' : 'Chưa có khoản thu định kỳ',
+                          title: tr.isEn
+                              ? 'No recurring income yet'
+                              : 'Chưa có khoản thu định kỳ',
                           subtitle: tr.isEn
                               ? 'Add salary or fixed monthly income sources to monitor steady cash flow.'
                               : 'Thêm lương hoặc các nguồn thu nhập cố định hàng tháng để theo dõi dòng tiền ổn định.',
-                          buttonLabel: tr.isEn ? 'Add income' : 'Thêm khoản thu',
+                          buttonLabel: tr.isEn
+                              ? 'Add income'
+                              : 'Thêm khoản thu',
                           icon: Icons.south_west_rounded,
                           accentColor: context.finance.income.color,
                           onAdd: () => _editRecurringIncome(
@@ -162,7 +178,8 @@ class PlanScreen extends ConsumerWidget {
                               incomeCategories,
                               tr: tr,
                             ),
-                            due: '${tr.isEn ? 'Receive' : 'Nhận'} ${_dateLabel(income.nextDueDate)}',
+                            due:
+                                '${tr.isEn ? 'Receive' : 'Nhận'} ${_dateLabel(income.nextDueDate)}',
                             onTap: () => _incomeActions(
                               context,
                               ref,
@@ -189,18 +206,19 @@ class PlanScreen extends ConsumerWidget {
                       const SizedBox(height: 10),
                       if (bills.isEmpty)
                         _EmptyPlanCard(
-                          title: tr.isEn ? 'No recurring expense yet' : 'Chưa có khoản chi định kỳ',
+                          title: tr.isEn
+                              ? 'No recurring expense yet'
+                              : 'Chưa có khoản chi định kỳ',
                           subtitle: tr.isEn
                               ? 'Add rent, internet, subscriptions... to get reminders when due.'
                               : 'Thêm tiền thuê nhà, internet, gói cước... để được Finmi nhắc nhở khi đến hạn thanh toán.',
-                          buttonLabel: tr.isEn ? 'Add expense' : 'Thêm khoản chi',
+                          buttonLabel: tr.isEn
+                              ? 'Add expense'
+                              : 'Thêm khoản chi',
                           icon: Icons.north_east_rounded,
                           accentColor: context.finance.expense.color,
-                          onAdd: () => _editBill(
-                            context,
-                            ref,
-                            expenseCategories,
-                          ),
+                          onAdd: () =>
+                              _editBill(context, ref, expenseCategories),
                         ),
                       for (final bill in bills)
                         Padding(
@@ -233,7 +251,9 @@ class PlanScreen extends ConsumerWidget {
                       const SizedBox(height: 10),
                       if (goals.isEmpty)
                         _EmptyPlanCard(
-                          title: tr.isEn ? 'No savings goals yet' : 'Chưa có mục tiêu tiết kiệm',
+                          title: tr.isEn
+                              ? 'No savings goals yet'
+                              : 'Chưa có mục tiêu tiết kiệm',
                           subtitle: tr.isEn
                               ? 'Set goals for shopping, emergency funds or travel to track saving progress.'
                               : 'Đặt mục tiêu mua sắm, tích lũy khẩn cấp hoặc du lịch để kiểm soát tiến độ để dành tiền.',
@@ -265,7 +285,9 @@ class PlanScreen extends ConsumerWidget {
                                 const SizedBox(height: 8),
                                 Text(
                                   goal.remainingMinor == 0
-                                      ? (tr.isEn ? 'Goal achieved' : 'Đã đạt mục tiêu')
+                                      ? (tr.isEn
+                                            ? 'Goal achieved'
+                                            : 'Đã đạt mục tiêu')
                                       : '${tr.isEn ? 'Need to save' : 'Cần dành'} ${MoneyFormatter.format(goal.monthlyNeeded(DateTime.now()))}/${tr.isEn ? 'mo' : 'tháng'} · ${tr.isEn ? 'Due' : 'Hạn'} ${_dateLabel(goal.targetDate)}',
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),
@@ -312,8 +334,13 @@ class PlanScreen extends ConsumerWidget {
         builder: (context, setState) {
           final theme = Theme.of(context);
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 24,
+            ),
             title: Row(
               children: [
                 Container(
@@ -331,7 +358,9 @@ class PlanScreen extends ConsumerWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    income == null ? 'Thêm khoản thu cố định' : 'Sửa khoản thu cố định',
+                    income == null
+                        ? 'Thêm khoản thu cố định'
+                        : 'Sửa khoản thu cố định',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -383,7 +412,10 @@ class PlanScreen extends ConsumerWidget {
                         labelText: 'Danh mục thu',
                         floatingLabelBehavior: FloatingLabelBehavior.always,
                         prefixIcon: Icon(Icons.category_outlined),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                       ),
                       selectedItemBuilder: (context) {
                         return categories.map((c) {
@@ -412,7 +444,10 @@ class PlanScreen extends ConsumerWidget {
                               value: category.id,
                               child: Row(
                                 children: [
-                                  CategoryAvatar(category: category, radius: 12),
+                                  CategoryAvatar(
+                                    category: category,
+                                    radius: 12,
+                                  ),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
@@ -444,7 +479,10 @@ class PlanScreen extends ConsumerWidget {
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: theme.colorScheme.surfaceContainerLow,
                           borderRadius: BorderRadius.circular(12),
@@ -466,7 +504,9 @@ class PlanScreen extends ConsumerWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    income == null ? 'Ngày nhận' : 'Lần nhận tiếp',
+                                    income == null
+                                        ? 'Ngày nhận'
+                                        : 'Lần nhận tiếp',
                                     style: theme.textTheme.bodySmall?.copyWith(
                                       color: theme.colorScheme.onSurfaceVariant,
                                     ),
@@ -566,8 +606,13 @@ class PlanScreen extends ConsumerWidget {
         builder: (context, setState) {
           final theme = Theme.of(context);
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 24,
+            ),
             title: Row(
               children: [
                 Container(
@@ -585,7 +630,9 @@ class PlanScreen extends ConsumerWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    bill == null ? 'Thêm khoản chi cố định' : 'Sửa khoản chi cố định',
+                    bill == null
+                        ? 'Thêm khoản chi cố định'
+                        : 'Sửa khoản chi cố định',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -605,7 +652,8 @@ class PlanScreen extends ConsumerWidget {
                       maxLength: 120,
                       decoration: const InputDecoration(
                         labelText: 'Tên khoản',
-                        hintText: 'Ví dụ: Tiền thuê nhà, Internet, Điện nước...',
+                        hintText:
+                            'Ví dụ: Tiền thuê nhà, Internet, Điện nước...',
                         floatingLabelBehavior: FloatingLabelBehavior.always,
                         prefixIcon: Icon(Icons.edit_note_rounded),
                       ),
@@ -636,7 +684,10 @@ class PlanScreen extends ConsumerWidget {
                         labelText: 'Tần suất lặp lại',
                         floatingLabelBehavior: FloatingLabelBehavior.always,
                         prefixIcon: Icon(Icons.repeat_rounded),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                       ),
                       items: BillFrequency.values
                           .map(
@@ -666,7 +717,10 @@ class PlanScreen extends ConsumerWidget {
                         labelText: 'Danh mục ngân sách',
                         floatingLabelBehavior: FloatingLabelBehavior.always,
                         prefixIcon: Icon(Icons.category_outlined),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                       ),
                       selectedItemBuilder: (context) {
                         return [
@@ -675,7 +729,12 @@ class PlanScreen extends ConsumerWidget {
                             children: [
                               Icon(Icons.help_outline, size: 20),
                               SizedBox(width: 10),
-                              Flexible(child: Text('Chưa phân loại', overflow: TextOverflow.ellipsis)),
+                              Flexible(
+                                child: Text(
+                                  'Chưa phân loại',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             ],
                           ),
                           if (categoryId != null &&
@@ -685,7 +744,12 @@ class PlanScreen extends ConsumerWidget {
                               children: [
                                 Icon(Icons.error_outline, size: 20),
                                 SizedBox(width: 10),
-                                Flexible(child: Text('Danh mục hiện không có sẵn', overflow: TextOverflow.ellipsis)),
+                                Flexible(
+                                  child: Text(
+                                    'Danh mục hiện không có sẵn',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                               ],
                             ),
                           for (final category in categories)
@@ -727,7 +791,9 @@ class PlanScreen extends ConsumerWidget {
                               children: [
                                 Icon(Icons.error_outline, size: 20),
                                 SizedBox(width: 10),
-                                Expanded(child: Text('Danh mục hiện không có sẵn')),
+                                Expanded(
+                                  child: Text('Danh mục hiện không có sẵn'),
+                                ),
                               ],
                             ),
                           ),
@@ -767,7 +833,10 @@ class PlanScreen extends ConsumerWidget {
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: theme.colorScheme.surfaceContainerLow,
                           borderRadius: BorderRadius.circular(12),
@@ -889,8 +958,13 @@ class PlanScreen extends ConsumerWidget {
         builder: (context, setState) {
           final theme = Theme.of(context);
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 24,
+            ),
             title: Row(
               children: [
                 Container(
@@ -908,7 +982,9 @@ class PlanScreen extends ConsumerWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    goal == null ? 'Thêm mục tiêu tiết kiệm' : 'Sửa mục tiêu tiết kiệm',
+                    goal == null
+                        ? 'Thêm mục tiêu tiết kiệm'
+                        : 'Sửa mục tiêu tiết kiệm',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -957,7 +1033,10 @@ class PlanScreen extends ConsumerWidget {
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: theme.colorScheme.surfaceContainerLow,
                           borderRadius: BorderRadius.circular(12),
@@ -1031,8 +1110,8 @@ class PlanScreen extends ConsumerWidget {
                       parsed > maxPlanMoney ||
                       (goal?.savedMinor ?? 0) > parsed) {
                     setState(
-                      () =>
-                          error = 'Nhập tên và mục tiêu lớn hơn số tiền đã dành.',
+                      () => error =
+                          'Nhập tên và mục tiêu lớn hơn số tiền đã dành.',
                     );
                     return;
                   }
@@ -1084,7 +1163,10 @@ class PlanScreen extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: Text(tr.isEn ? 'Stop recurring income' : 'Ngừng khoản thu định kỳ', maxLines: 3),
+              title: Text(
+                tr.isEn ? 'Stop recurring income' : 'Ngừng khoản thu định kỳ',
+                maxLines: 3,
+              ),
               onTap: () => Navigator.pop(context, 'delete'),
             ),
           ],
@@ -1120,13 +1202,20 @@ class PlanScreen extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.check_circle_outline),
-              title: Text(tr.isEn ? 'Mark paid and record expense' : 'Đã thanh toán và ghi khoản chi', maxLines: 3),
+              title: Text(
+                tr.isEn
+                    ? 'Mark paid and record expense'
+                    : 'Đã thanh toán và ghi khoản chi',
+                maxLines: 3,
+              ),
               onTap: () => Navigator.pop(context, 'paid'),
             ),
             ListTile(
               leading: const Icon(Icons.skip_next_outlined),
               title: Text(
-                tr.isEn ? 'Already recorded or skip this period' : 'Đã ghi chi trước đó hoặc bỏ qua kỳ này',
+                tr.isEn
+                    ? 'Already recorded or skip this period'
+                    : 'Đã ghi chi trước đó hoặc bỏ qua kỳ này',
                 maxLines: 3,
               ),
               onTap: () => Navigator.pop(context, 'skip'),
@@ -1173,7 +1262,8 @@ class PlanScreen extends ConsumerWidget {
               createdAt: now,
               updatedAt: now,
               confirmedAt: now,
-              notes: '${tr.isEn ? "Recurring bill" : "Khoản định kỳ"}: ${_dateLabel(current.nextDueDate)}',
+              notes:
+                  '${tr.isEn ? "Recurring bill" : "Khoản định kỳ"}: ${_dateLabel(current.nextDueDate)}',
             ),
           );
         }
@@ -1192,7 +1282,9 @@ class PlanScreen extends ConsumerWidget {
             content: Text(
               action == 'paid'
                   ? (tr.isEn ? 'Expense recorded.' : 'Đã ghi khoản chi.')
-                  : (tr.isEn ? 'Moved to next period.' : 'Đã chuyển sang kỳ tiếp theo.'),
+                  : (tr.isEn
+                        ? 'Moved to next period.'
+                        : 'Đã chuyển sang kỳ tiếp theo.'),
             ),
           ),
         );
@@ -1217,7 +1309,10 @@ class PlanScreen extends ConsumerWidget {
             ListTile(title: Text(goal.name)),
             ListTile(
               leading: const Icon(Icons.add_circle_outline),
-              title: Text(tr.isEn ? 'Update saved amount' : 'Cập nhật tiền đã để dành', maxLines: 3),
+              title: Text(
+                tr.isEn ? 'Update saved amount' : 'Cập nhật tiền đã để dành',
+                maxLines: 3,
+              ),
               onTap: () => Navigator.pop(context, 'add'),
             ),
             ListTile(
@@ -1246,8 +1341,13 @@ class PlanScreen extends ConsumerWidget {
         builder: (context, setState) {
           final theme = Theme.of(context);
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 24,
+            ),
             title: Row(
               children: [
                 Container(
@@ -1264,10 +1364,7 @@ class PlanScreen extends ConsumerWidget {
                 ),
                 const SizedBox(width: 12),
                 const Expanded(
-                  child: Text(
-                    'Cập nhật tiền đã để dành',
-                    maxLines: 2,
-                  ),
+                  child: Text('Cập nhật tiền đã để dành', maxLines: 2),
                 ),
               ],
             ),
@@ -1292,7 +1389,10 @@ class PlanScreen extends ConsumerWidget {
                     const SizedBox(height: 8),
                     Text(
                       error!,
-                      style: TextStyle(color: theme.colorScheme.error, fontSize: 13),
+                      style: TextStyle(
+                        color: theme.colorScheme.error,
+                        fontSize: 13,
+                      ),
                     ),
                   ],
                 ],
@@ -1466,11 +1566,12 @@ class _RecurringPlanCard extends StatelessWidget {
   }
 }
 
-String _frequencyLabel(BillFrequency frequency, {bool isEn = false}) => switch (frequency) {
-  BillFrequency.weekly => isEn ? 'Weekly' : 'Hàng tuần',
-  BillFrequency.monthly => isEn ? 'Monthly' : 'Hàng tháng',
-  BillFrequency.yearly => isEn ? 'Yearly' : 'Hàng năm',
-};
+String _frequencyLabel(BillFrequency frequency, {bool isEn = false}) =>
+    switch (frequency) {
+      BillFrequency.weekly => isEn ? 'Weekly' : 'Hàng tuần',
+      BillFrequency.monthly => isEn ? 'Monthly' : 'Hàng tháng',
+      BillFrequency.yearly => isEn ? 'Yearly' : 'Hàng năm',
+    };
 
 String _dateKey(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
@@ -1480,7 +1581,11 @@ bool _isOverdue(DateTime date) =>
       DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
     );
 
-String _categoryName(String id, List<CategoryEntity> categories, {AppStrings? tr}) {
+String _categoryName(
+  String id,
+  List<CategoryEntity> categories, {
+  AppStrings? tr,
+}) {
   final cat = categories.where((category) => category.id == id).firstOrNull;
   if (cat == null) return tr?.isEn ?? false ? 'Unclassified' : 'Chưa phân loại';
   return tr != null ? tr.categoryName(cat.name, categoryId: cat.id) : cat.name;
@@ -1575,7 +1680,10 @@ class _EmptyPlanCard extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 visualDensity: VisualDensity.compact,
               ),
             ),
@@ -1585,4 +1693,3 @@ class _EmptyPlanCard extends StatelessWidget {
     );
   }
 }
-

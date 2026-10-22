@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,7 +34,12 @@ void main() {
               (ref) => Stream.value(const []),
             ),
           ],
-          child: const MaterialApp(home: PlanScreen()),
+          child: const MaterialApp(
+            locale: Locale('vi'),
+            supportedLocales: [Locale('vi'), Locale('en')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            home: PlanScreen(),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -73,7 +79,12 @@ void main() {
               (ref) => Stream.value(const []),
             ),
           ],
-          child: const MaterialApp(home: PlanScreen()),
+          child: const MaterialApp(
+            locale: Locale('vi'),
+            supportedLocales: [Locale('vi'), Locale('en')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            home: PlanScreen(),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -133,7 +144,12 @@ void main() {
             (ref) => Stream.value(categories),
           ),
         ],
-        child: const MaterialApp(home: PlanScreen()),
+        child: const MaterialApp(
+          locale: Locale('vi'),
+          supportedLocales: [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: PlanScreen(),
+        ),
       ),
     );
     await tester.pumpAndSettle();

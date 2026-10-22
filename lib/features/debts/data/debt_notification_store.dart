@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../notifications/data/budget_notification_service.dart';
+import '../../auth/data/personal_profile_store.dart';
 import '../domain/debt_notification.dart';
 import 'debt_cookie_sync.dart';
 
@@ -21,8 +22,9 @@ class DebtNotificationStore {
     '0912345678',
   };
 
-  static String _userPhoneKey(String? userId) =>
-      userId == null ? 'finmi.user_phone.guest.v1' : 'finmi.user_phone.$userId.v1';
+  static String _userPhoneKey(String? userId) => userId == null
+      ? 'finmi.user_phone.guest.v1'
+      : 'finmi.user_phone.$userId.v1';
 
   /// Lấy số điện thoại của người dùng hiện tại (từ cache local hoặc Supabase)
   static Future<String?> getCurrentUserPhone(
@@ -30,8 +32,7 @@ class DebtNotificationStore {
     String? userId,
     SupabaseClient? client,
   }) async {
-    final effectiveClient =
-        client ?? ref?.read(supabaseClientProvider);
+    final effectiveClient = client ?? ref?.read(supabaseClientProvider);
     final user = effectiveClient?.auth.currentUser;
     final effectiveUserId = userId ?? user?.id;
 
@@ -77,10 +78,10 @@ class DebtNotificationStore {
     dynamic ref,
     SupabaseClient? client,
     String? userId,
+    bool syncProfile = true,
   }) async {
     final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '').trim();
-    final effectiveClient =
-        client ?? ref?.read(supabaseClientProvider);
+    final effectiveClient = client ?? ref?.read(supabaseClientProvider);
     final user = effectiveClient?.auth.currentUser;
     final effectiveUserId = userId ?? user?.id;
 
@@ -91,18 +92,17 @@ class DebtNotificationStore {
       await _recordLocalPhoneOwnership(cleanPhone, effectiveUserId, prefs);
     }
 
-    if (effectiveClient != null && user != null && cleanPhone.isNotEmpty) {
+    if (syncProfile &&
+        effectiveClient != null &&
+        user != null &&
+        cleanPhone.isNotEmpty) {
       try {
-        final currentName = (user.userMetadata?['full_name'] as String?)?.trim();
-        final effectiveName = (currentName != null && currentName.isNotEmpty) ? currentName : 'Người dùng';
-        await effectiveClient.rpc('save_personal_profile', params: {
-          'p_display_name': effectiveName,
-          'p_phone': cleanPhone,
-        });
+        final store = PersonalProfileStore(effectiveClient);
+        final profile = await store.load();
+        await store.save(displayName: profile.displayName, phone: cleanPhone);
       } catch (_) {
-        try {
-          await effectiveClient.from('profiles').update({'phone': cleanPhone}).eq('user_id', user.id);
-        } catch (_) {}
+        // Keep the local phone available offline; the profile stays unchanged
+        // when its current name cannot be loaded or the server rejects a save.
       }
     }
   }
@@ -142,7 +142,9 @@ class DebtNotificationStore {
       try {
         final map = Map<String, dynamic>.from(jsonDecode(rawMap) as Map);
         final ownerId = map[cleanPhone] as String?;
-        if (ownerId != null && effectiveUserId != null && ownerId != effectiveUserId) {
+        if (ownerId != null &&
+            effectiveUserId != null &&
+            ownerId != effectiveUserId) {
           return true;
         }
       } catch (_) {}
@@ -204,7 +206,10 @@ class DebtNotificationStore {
     }
 
     // 4. Kiểm tra với tài khoản hiện tại
-    final currentPhone = await getCurrentUserPhone(ref, client: effectiveClient);
+    final currentPhone = await getCurrentUserPhone(
+      ref,
+      client: effectiveClient,
+    );
     if (currentPhone != null && cleanPhone == currentPhone) {
       return true;
     }
@@ -325,9 +330,9 @@ class DebtNotificationStore {
     try {
       final cookieList = readSharedDebtNotificationsCookie().toList();
       if (debtId != null) {
-        cookieList.removeWhere((e) =>
-            e['debtId'] == debtId &&
-            e['targetPhone'] == cleanPhone);
+        cookieList.removeWhere(
+          (e) => e['debtId'] == debtId && e['targetPhone'] == cleanPhone,
+        );
       }
       cookieList.removeWhere((e) => e['id'] == notif.id);
       cookieList.add(jsonItem);
@@ -337,12 +342,16 @@ class DebtNotificationStore {
     // Kích hoạt thông báo hệ thống / đẩy kèm rung và hiển thị màn hình khóa
     try {
       final money = MoneyFormatter.format(amountMinor);
-      final fromInfo = (senderPhone != null && senderPhone.isNotEmpty && senderName != senderPhone)
+      final fromInfo =
+          (senderPhone != null &&
+              senderPhone.isNotEmpty &&
+              senderName != senderPhone)
           ? '$senderName ($senderPhone)'
           : senderName;
       await BudgetNotificationService.instance.showDebtNotification(
         title: 'Thông báo nợ từ $fromInfo',
-        body: 'Khoản nợ: $money${notes != null && notes.isNotEmpty ? ' · $notes' : ''}',
+        body:
+            'Khoản nợ: $money${notes != null && notes.isNotEmpty ? ' · $notes' : ''}',
         payload: '/invoices?tab=debts',
       );
     } catch (_) {}
@@ -358,8 +367,9 @@ class DebtNotificationStore {
 
     if (raw != null) {
       try {
-        final list = (jsonDecode(raw) as List)
-            .map((e) => DebtInAppNotification.fromJson(e as Map<String, dynamic>));
+        final list = (jsonDecode(raw) as List).map(
+          (e) => DebtInAppNotification.fromJson(e as Map<String, dynamic>),
+        );
         for (final item in list) {
           mergedMap[item.id] = item;
         }
@@ -389,7 +399,9 @@ class DebtNotificationStore {
   }
 
   /// Lấy thông báo gửi đi của một khoản nợ cụ thể
-  static Future<DebtInAppNotification?> getNotificationForDebt(String debtId) async {
+  static Future<DebtInAppNotification?> getNotificationForDebt(
+    String debtId,
+  ) async {
     final all = await getAllNotifications();
     final matching = all.where((n) => n.debtId == debtId).toList();
     if (matching.isEmpty) return null;
@@ -409,7 +421,9 @@ class DebtNotificationStore {
     if (raw != null) {
       try {
         currentList = (jsonDecode(raw) as List)
-            .map((e) => DebtInAppNotification.fromJson(e as Map<String, dynamic>))
+            .map(
+              (e) => DebtInAppNotification.fromJson(e as Map<String, dynamic>),
+            )
             .toList();
       } catch (_) {}
     }
@@ -417,18 +431,27 @@ class DebtNotificationStore {
     final targetNotif = currentList.where((n) => n.id == notifId).firstOrNull;
     final targetDebtId = targetNotif?.debtId;
 
-    final updated = currentList.map((n) {
-      if (n.id == notifId || (targetDebtId != null && n.debtId == targetDebtId)) {
-        return n.copyWith(isSaved: true, savedDebtId: savedDebtId, isRead: true);
-      }
-      return n;
-    }).map((n) => n.toJson()).toList();
+    final updated = currentList
+        .map((n) {
+          if (n.id == notifId ||
+              (targetDebtId != null && n.debtId == targetDebtId)) {
+            return n.copyWith(
+              isSaved: true,
+              savedDebtId: savedDebtId,
+              isRead: true,
+            );
+          }
+          return n;
+        })
+        .map((n) => n.toJson())
+        .toList();
     await prefs.setString(_storageKey, jsonEncode(updated));
 
     // Cập nhật cookie chung để bên người gửi cũng thấy trạng thái đã lưu
     try {
       final cookieList = readSharedDebtNotificationsCookie().map((e) {
-        if (e['id'] == notifId || (targetDebtId != null && e['debtId'] == targetDebtId)) {
+        if (e['id'] == notifId ||
+            (targetDebtId != null && e['debtId'] == targetDebtId)) {
           e['isSaved'] = true;
           e['savedDebtId'] = savedDebtId;
           e['isRead'] = true;
@@ -440,7 +463,9 @@ class DebtNotificationStore {
   }
 
   /// Lấy danh sách thông báo gửi đến số điện thoại (tổng hợp từ local và cookie đa cổng)
-  static Future<List<DebtInAppNotification>> getNotificationsForPhone(String phone) async {
+  static Future<List<DebtInAppNotification>> getNotificationsForPhone(
+    String phone,
+  ) async {
     final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '').trim();
     final all = await getAllNotifications();
     final result = all.where((n) => n.targetPhone == cleanPhone).toList();
@@ -456,7 +481,9 @@ class DebtNotificationStore {
     if (raw != null) {
       try {
         currentList = (jsonDecode(raw) as List)
-            .map((e) => DebtInAppNotification.fromJson(e as Map<String, dynamic>))
+            .map(
+              (e) => DebtInAppNotification.fromJson(e as Map<String, dynamic>),
+            )
             .toList();
       } catch (_) {}
     }
@@ -485,26 +512,25 @@ final userPhoneProvider = FutureProvider.autoDispose<String?>((ref) async {
   return DebtNotificationStore.getCurrentUserPhone(ref, userId: user?.id);
 });
 
-final debtNotificationsProvider = FutureProvider.autoDispose<List<DebtInAppNotification>>((ref) async {
-  final phone = await ref.watch(userPhoneProvider.future);
-  if (phone == null || phone.isEmpty) return const [];
-  
-  // Tự động làm mới mỗi 3 giây để người nhận thấy thông báo từ máy người gửi ngay lập tức
-  final timer = Timer(const Duration(seconds: 3), () {
-    ref.invalidateSelf();
-  });
-  ref.onDispose(() => timer.cancel());
+final debtNotificationsProvider =
+    FutureProvider.autoDispose<List<DebtInAppNotification>>((ref) async {
+      final phone = await ref.watch(userPhoneProvider.future);
+      if (phone == null || phone.isEmpty) return const [];
 
-  return DebtNotificationStore.getNotificationsForPhone(phone);
-});
+      // Tự động làm mới mỗi 3 giây để người nhận thấy thông báo từ máy người gửi ngay lập tức
+      final timer = Timer(const Duration(seconds: 3), () {
+        ref.invalidateSelf();
+      });
+      ref.onDispose(() => timer.cancel());
 
-final sentDebtNotificationStatusProvider =
-    FutureProvider.autoDispose.family<DebtInAppNotification?, String>((ref, debtId) async {
-  final timer = Timer(const Duration(seconds: 3), () {
-    ref.invalidateSelf();
-  });
-  ref.onDispose(() => timer.cancel());
-  return DebtNotificationStore.getNotificationForDebt(debtId);
-});
+      return DebtNotificationStore.getNotificationsForPhone(phone);
+    });
 
-
+final sentDebtNotificationStatusProvider = FutureProvider.autoDispose
+    .family<DebtInAppNotification?, String>((ref, debtId) async {
+      final timer = Timer(const Duration(seconds: 3), () {
+        ref.invalidateSelf();
+      });
+      ref.onDispose(() => timer.cancel());
+      return DebtNotificationStore.getNotificationForDebt(debtId);
+    });

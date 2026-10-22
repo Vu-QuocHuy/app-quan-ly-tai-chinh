@@ -170,10 +170,18 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
               final isMatch = sum == total;
               final isOver = sum > total;
               final color = isMatch
-                  ? (Theme.of(context).extension<AppFinanceColors>()?.income.color ?? Colors.green)
-                  : (isOver ? theme.colorScheme.error : theme.colorScheme.primary);
+                  ? (Theme.of(
+                          context,
+                        ).extension<AppFinanceColors>()?.income.color ??
+                        Colors.green)
+                  : (isOver
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.primary);
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
@@ -184,7 +192,9 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
                     Icon(
                       isMatch
                           ? Icons.check_circle_outline
-                          : (isOver ? Icons.warning_amber_rounded : Icons.info_outline),
+                          : (isOver
+                                ? Icons.warning_amber_rounded
+                                : Icons.info_outline),
                       size: 18,
                       color: color,
                     ),
@@ -194,8 +204,8 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
                         isMatch
                             ? 'Tổng tiền chia đã khớp hoàn toàn (${MoneyFormatter.format(total)}).'
                             : (isOver
-                                ? 'Tổng tiền chia (${MoneyFormatter.format(sum)}) đang vượt quá tổng tiền (${MoneyFormatter.format(total)}).'
-                                : 'Tổng tiền chia: ${MoneyFormatter.format(sum)} / ${MoneyFormatter.format(total)} (còn thiếu ${MoneyFormatter.format(total - sum)}).'),
+                                  ? 'Tổng tiền chia (${MoneyFormatter.format(sum)}) đang vượt quá tổng tiền (${MoneyFormatter.format(total)}).'
+                                  : 'Tổng tiền chia: ${MoneyFormatter.format(sum)} / ${MoneyFormatter.format(total)} (còn thiếu ${MoneyFormatter.format(total - sum)}).'),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -222,14 +232,16 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
   }
 
   int get _totalMinor =>
-      int.tryParse(_amountController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      int.tryParse(_amountController.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
+      0;
 
   int get _currentExactSum {
     var sum = 0;
     for (final id in _selectedIds) {
       final ctrl = _splitControllers[id];
       if (ctrl != null) {
-        final val = int.tryParse(ctrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+        final val =
+            int.tryParse(ctrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
         sum += val;
       }
     }
@@ -247,13 +259,19 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
       final n = _selectedIds.length;
       var i = 0;
       for (final id in _selectedIds) {
-        final ctrl = _splitControllers.putIfAbsent(id, TextEditingController.new);
+        final ctrl = _splitControllers.putIfAbsent(
+          id,
+          TextEditingController.new,
+        );
         final share = total ~/ n + (i++ < total % n ? 1 : 0);
         ctrl.text = share.toString();
       }
     } else if (_selectedIds.length == 1) {
       final singleId = _selectedIds.first;
-      final ctrl = _splitControllers.putIfAbsent(singleId, TextEditingController.new);
+      final ctrl = _splitControllers.putIfAbsent(
+        singleId,
+        TextEditingController.new,
+      );
       ctrl.text = total.toString();
     }
   }
@@ -268,7 +286,10 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
       final n = _selectedIds.length;
       final base = (100 / n).toStringAsFixed(1);
       for (final id in _selectedIds) {
-        final ctrl = _splitControllers.putIfAbsent(id, TextEditingController.new);
+        final ctrl = _splitControllers.putIfAbsent(
+          id,
+          TextEditingController.new,
+        );
         ctrl.text = base;
       }
     }
@@ -280,27 +301,54 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
       if (total > 0) {
         if (_selectedIds.length == 2) {
           final otherId = _selectedIds.firstWhere((id) => id != editingId);
-          final enteredVal = int.tryParse(value.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+          final enteredVal =
+              int.tryParse(value.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
           final remaining = total - enteredVal;
           if (remaining >= 0) {
-            final otherCtrl = _splitControllers.putIfAbsent(otherId, TextEditingController.new);
+            final otherCtrl = _splitControllers.putIfAbsent(
+              otherId,
+              TextEditingController.new,
+            );
             otherCtrl.text = remaining.toString();
-            otherCtrl.selection = TextSelection.collapsed(offset: otherCtrl.text.length);
+            otherCtrl.selection = TextSelection.collapsed(
+              offset: otherCtrl.text.length,
+            );
           }
         } else if (_selectedIds.length > 2) {
           final otherIds = _selectedIds.where((id) => id != editingId).toList();
-          final otherWithText = otherIds.where((id) => (_splitControllers[id]?.text.trim().isNotEmpty ?? false)).toList();
+          final otherWithText = otherIds
+              .where(
+                (id) =>
+                    (_splitControllers[id]?.text.trim().isNotEmpty ?? false),
+              )
+              .toList();
           if (otherWithText.length == otherIds.length - 1) {
-            final remainderId = otherIds.firstWhere((id) => (_splitControllers[id]?.text.trim().isEmpty ?? true));
-            var sumOthers = int.tryParse(value.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+            final remainderId = otherIds.firstWhere(
+              (id) => (_splitControllers[id]?.text.trim().isEmpty ?? true),
+            );
+            var sumOthers =
+                int.tryParse(value.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
             for (final oid in otherWithText) {
-              sumOthers += int.tryParse(_splitControllers[oid]?.text.replaceAll(RegExp(r'[^0-9]'), '') ?? '') ?? 0;
+              sumOthers +=
+                  int.tryParse(
+                    _splitControllers[oid]?.text.replaceAll(
+                          RegExp(r'[^0-9]'),
+                          '',
+                        ) ??
+                        '',
+                  ) ??
+                  0;
             }
             final remaining = total - sumOthers;
             if (remaining >= 0) {
-              final remCtrl = _splitControllers.putIfAbsent(remainderId, TextEditingController.new);
+              final remCtrl = _splitControllers.putIfAbsent(
+                remainderId,
+                TextEditingController.new,
+              );
               remCtrl.text = remaining.toString();
-              remCtrl.selection = TextSelection.collapsed(offset: remCtrl.text.length);
+              remCtrl.selection = TextSelection.collapsed(
+                offset: remCtrl.text.length,
+              );
             }
           }
         }
@@ -311,9 +359,16 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
         final enteredVal = double.tryParse(value.replaceAll(',', '.')) ?? 0;
         final remaining = 100 - enteredVal;
         if (remaining >= 0) {
-          final otherCtrl = _splitControllers.putIfAbsent(otherId, TextEditingController.new);
-          otherCtrl.text = remaining.toStringAsFixed(remaining.truncateToDouble() == remaining ? 0 : 1);
-          otherCtrl.selection = TextSelection.collapsed(offset: otherCtrl.text.length);
+          final otherCtrl = _splitControllers.putIfAbsent(
+            otherId,
+            TextEditingController.new,
+          );
+          otherCtrl.text = remaining.toStringAsFixed(
+            remaining.truncateToDouble() == remaining ? 0 : 1,
+          );
+          otherCtrl.selection = TextSelection.collapsed(
+            offset: otherCtrl.text.length,
+          );
         }
       }
     }
@@ -332,11 +387,22 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
         final total = _totalMinor;
         if (_selectedIds.length == 1) {
           final singleId = _selectedIds.first;
-          final ctrl = _splitControllers.putIfAbsent(singleId, TextEditingController.new);
+          final ctrl = _splitControllers.putIfAbsent(
+            singleId,
+            TextEditingController.new,
+          );
           ctrl.text = total.toString();
         } else if (_selectedIds.length == 2 && total > 0) {
           final ids = _selectedIds.toList();
-          final id0Val = int.tryParse(_splitControllers[ids[0]]?.text.replaceAll(RegExp(r'[^0-9]'), '') ?? '') ?? 0;
+          final id0Val =
+              int.tryParse(
+                _splitControllers[ids[0]]?.text.replaceAll(
+                      RegExp(r'[^0-9]'),
+                      '',
+                    ) ??
+                    '',
+              ) ??
+              0;
           if (id0Val > 0 && id0Val <= total) {
             _splitControllers[ids[1]]?.text = (total - id0Val).toString();
           } else {
@@ -379,9 +445,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
   GroupExpenseDraft? submit() {
     final total = _totalMinor;
     final description = _descriptionController.text.trim();
-    if (description.length < 2 ||
-        total <= 0 ||
-        _selectedIds.isEmpty) {
+    if (description.length < 2 || total <= 0 || _selectedIds.isEmpty) {
       setState(
         () => _error = 'Hãy nhập nội dung, tổng tiền và chọn thành viên.',
       );
@@ -464,7 +528,8 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                onChanged: (text) => _onMemberAmountChanged(member.userId, text),
+                onChanged: (text) =>
+                    _onMemberAmountChanged(member.userId, text),
                 style: const TextStyle(fontSize: 14),
                 decoration: InputDecoration(
                   isDense: true,

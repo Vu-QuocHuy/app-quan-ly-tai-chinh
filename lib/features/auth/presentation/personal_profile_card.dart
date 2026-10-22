@@ -55,6 +55,7 @@ class _PersonalProfileCardState extends State<PersonalProfileCard> {
           profile.phone.trim(),
           client: widget.client,
           userId: widget.client.auth.currentUser?.id,
+          syncProfile: false,
         );
       }
     } on Object catch (error) {
@@ -105,25 +106,30 @@ class _PersonalProfileCardState extends State<PersonalProfileCard> {
         cleanPhone,
         client: widget.client,
         userId: currentUserId,
+        syncProfile: false,
       );
 
       if (mounted) {
         setState(
-          () => _success =
-              isEn ? 'Personal profile saved.' : 'Đã lưu thông tin cá nhân.',
+          () => _success = isEn
+              ? 'Personal profile saved.'
+              : 'Đã lưu thông tin cá nhân.',
         );
       }
     } on Object catch (error) {
       final str = error.toString();
-      final isDuplicate = str.contains('23505') ||
+      final isDuplicate =
+          str.contains('23505') ||
           str.contains('đã được sử dụng') ||
           str.contains('profiles_phone_unique_idx');
       if (mounted) {
-        setState(() => _error = isDuplicate
-            ? (isEn
-                ? 'This phone number is already registered by another account.'
-                : 'Số điện thoại này đã được sử dụng bởi tài khoản khác.')
-            : friendlyMessage(error, isEn: isEn));
+        setState(
+          () => _error = isDuplicate
+              ? (isEn
+                    ? 'This phone number is already registered by another account.'
+                    : 'Số điện thoại này đã được sử dụng bởi tài khoản khác.')
+              : friendlyMessage(error, isEn: isEn),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -170,8 +176,8 @@ class _PersonalProfileCardState extends State<PersonalProfileCard> {
                   maxLength: 120,
                   validator: (value) => (value?.trim().length ?? 0) < 2
                       ? (isEn
-                          ? 'Enter at least 2 characters.'
-                          : 'Nhập họ tên ít nhất 2 ký tự.')
+                            ? 'Enter at least 2 characters.'
+                            : 'Nhập họ tên ít nhất 2 ký tự.')
                       : null,
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -198,8 +204,8 @@ class _PersonalProfileCardState extends State<PersonalProfileCard> {
                     return RegExp(r'^0[0-9]{9}$').hasMatch(phone)
                         ? null
                         : (isEn
-                            ? 'Phone number must have 10 digits starting with 0.'
-                            : 'Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.');
+                              ? 'Phone number must have 10 digits starting with 0.'
+                              : 'Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.');
                   },
                 ),
                 if (_error != null || _success != null) ...[

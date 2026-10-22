@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -42,7 +43,12 @@ void main() {
         overrides: [
           categoriesProvider.overrideWith((ref) => Stream.value(const [])),
         ],
-        child: MaterialApp(home: ReviewInvoiceScreen(invoice: invoice)),
+        child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ReviewInvoiceScreen(invoice: invoice),
+        ),
       ),
     );
 
@@ -76,7 +82,12 @@ void main() {
           invoiceRepositoryProvider.overrideWithValue(repository),
           categoriesProvider.overrideWith((ref) => Stream.value(const [])),
         ],
-        child: MaterialApp(home: ReviewInvoiceScreen(invoice: invoice)),
+        child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ReviewInvoiceScreen(invoice: invoice),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -210,6 +221,10 @@ void main() {
           categoriesProvider.overrideWith((ref) => Stream.value(const [])),
         ],
         child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
           home: Builder(
             builder: (context) => Scaffold(
               body: Center(
@@ -266,7 +281,12 @@ void main() {
         overrides: [
           categoriesProvider.overrideWith((ref) => Stream.value(const [])),
         ],
-        child: MaterialApp(home: ReviewInvoiceScreen(invoice: invoice)),
+        child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ReviewInvoiceScreen(invoice: invoice),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -310,7 +330,12 @@ void main() {
         overrides: [
           categoriesProvider.overrideWith((ref) => Stream.value(const [])),
         ],
-        child: MaterialApp(home: ReviewInvoiceScreen(invoice: invoice)),
+        child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ReviewInvoiceScreen(invoice: invoice),
+        ),
       ),
     );
 
@@ -437,7 +462,12 @@ void main() {
           invoiceRepositoryProvider.overrideWithValue(repository),
           categoriesProvider.overrideWith((ref) => categoryStream.stream),
         ],
-        child: MaterialApp(home: ReviewInvoiceScreen(invoice: invoice)),
+        child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ReviewInvoiceScreen(invoice: invoice),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -484,7 +514,12 @@ void main() {
         overrides: [
           categoriesProvider.overrideWith((ref) => Stream.value(const [])),
         ],
-        child: MaterialApp(home: ReviewInvoiceScreen(invoice: invoice)),
+        child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ReviewInvoiceScreen(invoice: invoice),
+        ),
       ),
     );
     await tester.pumpAndSettle();

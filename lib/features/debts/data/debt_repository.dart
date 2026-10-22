@@ -90,7 +90,10 @@ class DebtRepository {
     final index = current.indexWhere((d) => d.id == id);
     if (index < 0) return;
     final target = current[index];
-    final newPaid = (target.paidAmountMinor + paymentAmountMinor).clamp(0, target.amountMinor);
+    final newPaid = (target.paidAmountMinor + paymentAmountMinor).clamp(
+      0,
+      target.amountMinor,
+    );
     final isDone = newPaid >= target.amountMinor;
     final updatedRecord = target.copyWith(
       paidAmountMinor: newPaid,
@@ -146,9 +149,11 @@ class DebtNotifier extends AsyncNotifier<List<DebtRecord>> {
   }
 }
 
-final debtsListProvider = AsyncNotifierProvider<DebtNotifier, List<DebtRecord>>(() {
-  return DebtNotifier();
-});
+final debtsListProvider = AsyncNotifierProvider<DebtNotifier, List<DebtRecord>>(
+  () {
+    return DebtNotifier();
+  },
+);
 
 final debtSummaryProvider = Provider<DebtSummary>((ref) {
   final debts = ref.watch(debtsListProvider).valueOrNull ?? const [];

@@ -181,7 +181,9 @@ class _CategoryManagementScreenState
     final tr = context.tr;
     final confirmed = await showConfirmDialog(
       context,
-      title: tr.deleteCategoryPrompt(tr.categoryName(category.name, categoryId: category.id)),
+      title: tr.deleteCategoryPrompt(
+        tr.categoryName(category.name, categoryId: category.id),
+      ),
       message: category.kind == CategoryKind.income
           ? tr.deleteCategoryIncomeDesc
           : tr.deleteCategoryExpenseDesc,
@@ -192,14 +194,20 @@ class _CategoryManagementScreenState
     try {
       await ref.read(invoiceRepositoryProvider).deleteCategory(category.id);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(tr.isEn ? 'Category deleted.' : 'Đã xóa danh mục.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr.isEn ? 'Category deleted.' : 'Đã xóa danh mục.'),
+        ),
+      );
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(tr.isEn ? 'Cannot delete category: ${friendlyMessage(error)}' : 'Không thể xóa danh mục: ${friendlyMessage(error)}'),
+          content: Text(
+            tr.isEn
+                ? 'Cannot delete category: ${friendlyMessage(error)}'
+                : 'Không thể xóa danh mục: ${friendlyMessage(error)}',
+          ),
         ),
       );
     }
@@ -253,7 +261,11 @@ Future<CategoryEntity?> createCategoryFromEntry(
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(tr.isEn ? 'Cannot save category: ${friendlyMessage(error)}' : 'Không thể lưu danh mục: ${friendlyMessage(error)}'),
+          content: Text(
+            tr.isEn
+                ? 'Cannot save category: ${friendlyMessage(error)}'
+                : 'Không thể lưu danh mục: ${friendlyMessage(error)}',
+          ),
         ),
       );
     }
@@ -280,7 +292,13 @@ class _CategoryList extends StatelessWidget {
         if (categories.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 32),
-            child: Center(child: Text(context.tr.isEn ? 'No categories yet.' : 'Chưa có danh mục nào.')),
+            child: Center(
+              child: Text(
+                context.tr.isEn
+                    ? 'No categories yet.'
+                    : 'Chưa có danh mục nào.',
+              ),
+            ),
           )
         else
           for (final category in categories)
@@ -290,7 +308,12 @@ class _CategoryList extends StatelessWidget {
               child: ListTile(
                 minTileHeight: 64,
                 leading: CategoryAvatar(category: category, radius: 18),
-                title: Text(context.tr.categoryName(category.name, categoryId: category.id)),
+                title: Text(
+                  context.tr.categoryName(
+                    category.name,
+                    categoryId: category.id,
+                  ),
+                ),
                 subtitle: Text(
                   category.isSystem
                       ? context.tr.defaultCategory
@@ -406,9 +429,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
   Widget build(BuildContext context) {
     final tr = context.tr;
     return AlertDialog(
-      title: Text(
-        widget.editing == null ? tr.addCategory : tr.editCategory,
-      ),
+      title: Text(widget.editing == null ? tr.addCategory : tr.editCategory),
       content: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -454,14 +475,19 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                     if (text.isEmpty) return null;
                     final amount = MoneyFormatter.tryParse(text);
                     if (amount == null || amount < 0) {
-                      return tr.isEn ? 'Please enter a valid amount.' : 'Hãy nhập hạn mức hợp lệ.';
+                      return tr.isEn
+                          ? 'Please enter a valid amount.'
+                          : 'Hãy nhập hạn mức hợp lệ.';
                     }
                     return null;
                   },
                 ),
               ],
               const SizedBox(height: 20),
-              Text(tr.categoryIcons, style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                tr.categoryIcons,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -481,7 +507,10 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                 ],
               ),
               const SizedBox(height: 20),
-              Text(tr.categoryColors, style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                tr.categoryColors,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 10,

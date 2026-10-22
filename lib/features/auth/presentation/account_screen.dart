@@ -267,8 +267,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                       children: [
                         Text(
                           _registering
-                              ? (context.tr.isEn ? 'New Account' : 'Tài khoản mới')
-                              : (context.tr.isEn ? 'Welcome Back' : 'Chào mừng trở lại'),
+                              ? (context.tr.isEn
+                                    ? 'New Account'
+                                    : 'Tài khoản mới')
+                              : (context.tr.isEn
+                                    ? 'Welcome Back'
+                                    : 'Chào mừng trở lại'),
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: scheme.tertiary,
                             letterSpacing: 0,
@@ -278,7 +282,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                         const SizedBox(height: AppSpacing.xs),
                         Text(
                           _registering
-                              ? (context.tr.isEn ? 'Create Account' : 'Tạo tài khoản')
+                              ? (context.tr.isEn
+                                    ? 'Create Account'
+                                    : 'Tạo tài khoản')
                               : (context.tr.isEn ? 'Sign In' : 'Đăng nhập'),
                           style: theme.textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.w700,
@@ -293,11 +299,11 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               Text(
                 _registering
                     ? (context.tr.isEn
-                        ? 'Start tracking your personal finances.'
-                        : 'Bắt đầu theo dõi thu chi của bạn.')
+                          ? 'Start tracking your personal finances.'
+                          : 'Bắt đầu theo dõi thu chi của bạn.')
                     : (context.tr.isEn
-                        ? 'Sign in to continue managing your personal finances.'
-                        : 'Đăng nhập để tiếp tục quản lý tài chính cá nhân.'),
+                          ? 'Sign in to continue managing your personal finances.'
+                          : 'Đăng nhập để tiếp tục quản lý tài chính cá nhân.'),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                   height: 1.45,
@@ -353,15 +359,17 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                         ? Icons.error_outline
                         : Icons.mark_email_read_outlined,
                     title: _messageIsError
-                        ? (context.tr.isEn ? 'An error occurred' : 'Có lỗi xảy ra')
+                        ? (context.tr.isEn
+                              ? 'An error occurred'
+                              : 'Có lỗi xảy ra')
                         : (context.tr.isEn ? 'Processed' : 'Đã xử lý'),
                     message: _message!,
                     isError: _messageIsError,
                     actionLabel: _verificationEmail == null
                         ? null
                         : (context.tr.isEn
-                            ? 'Resend confirmation email'
-                            : 'Gửi lại email xác nhận'),
+                              ? 'Resend confirmation email'
+                              : 'Gửi lại email xác nhận'),
                     onAction: _verificationEmail == null
                         ? null
                         : _resendSignupConfirmation,
@@ -426,8 +434,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     return RegExp(r'^0[0-9]{9}$').hasMatch(phone)
                         ? null
                         : (context.tr.isEn
-                            ? 'Phone number must have 10 digits starting with 0.'
-                            : 'Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.');
+                              ? 'Phone number must have 10 digits starting with 0.'
+                              : 'Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.');
                   },
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -470,8 +478,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   labelText: context.tr.isEn ? 'Password' : 'Mật khẩu',
                   helperText: _registering
                       ? (context.tr.isEn
-                          ? 'At least 8 characters. You can use a password manager.'
-                          : 'Tối thiểu 8 ký tự. Bạn có thể dùng trình quản lý mật khẩu.')
+                            ? 'At least 8 characters. You can use a password manager.'
+                            : 'Tối thiểu 8 ký tự. Bạn có thể dùng trình quản lý mật khẩu.')
                       : null,
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
@@ -543,8 +551,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     }
                     return value != _passwordController.text
                         ? (context.tr.isEn
-                            ? 'Passwords do not match.'
-                            : 'Hai mật khẩu chưa khớp.')
+                              ? 'Passwords do not match.'
+                              : 'Hai mật khẩu chưa khớp.')
                         : null;
                   },
                 ),
@@ -568,8 +576,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                       child: Text(
                         _registering
                             ? (context.tr.isEn
-                                ? 'Create Account'
-                                : 'Tạo tài khoản')
+                                  ? 'Create Account'
+                                  : 'Tạo tài khoản')
                             : (context.tr.isEn ? 'Sign In' : 'Đăng nhập'),
                         textAlign: TextAlign.center,
                       ),
@@ -582,7 +590,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 children: [
                   const Expanded(child: Divider()),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                    ),
                     child: Text(
                       context.tr.isEn ? 'or' : 'hoặc',
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -607,11 +617,14 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   children: [
                     const GoogleLogo(size: 20),
                     const SizedBox(width: 12),
-                    Text(
-                      context.tr.isEn
-                          ? 'Continue with Google'
-                          : 'Đăng nhập với Google',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    Flexible(
+                      child: Text(
+                        context.tr.isEn
+                            ? 'Continue with Google'
+                            : 'Đăng nhập với Google',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                 ),
@@ -632,7 +645,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         _StatusCard(
           icon: Icons.cloud_done_outlined,
           title: isEn ? 'Account connected' : 'Đã kết nối tài khoản',
-          message: user.email ??
+          message:
+              user.email ??
               (isEn ? 'Account ${user.id}' : 'Tài khoản ${user.id}'),
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -760,11 +774,11 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                     subtitle: Text(
                       identity.provider == 'email'
                           ? (isEn
-                              ? 'Signed in with email and password'
-                              : 'Đăng nhập bằng email và mật khẩu')
+                                ? 'Signed in with email and password'
+                                : 'Đăng nhập bằng email và mật khẩu')
                           : (isEn
-                              ? 'Linked to this account'
-                              : 'Đã liên kết với tài khoản này'),
+                                ? 'Linked to this account'
+                                : 'Đã liên kết với tài khoản này'),
                     ),
                     trailing:
                         identity.provider == 'email' || identities.length < 2
@@ -811,7 +825,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     });
     try {
       if (_registering) {
-        final phone = _phoneController.text.replaceAll(RegExp(r'\s+'), '').trim();
+        final phone = _phoneController.text
+            .replaceAll(RegExp(r'\s+'), '')
+            .trim();
         final client = ref.read(supabaseClientProvider);
         final isTaken = await DebtNotificationStore.isPhoneTakenByAnotherUser(
           phone,
@@ -844,10 +860,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         if (response.session != null) {
           if (client != null) {
             try {
-              await PersonalProfileStore(client).save(
-                displayName: _nameController.text.trim(),
-                phone: phone,
-              );
+              await PersonalProfileStore(
+                client,
+              ).save(displayName: _nameController.text.trim(), phone: phone);
             } catch (_) {}
           }
           await DebtNotificationStore.setCurrentUserPhone(
@@ -855,6 +870,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             ref: ref,
             client: client,
             userId: response.user?.id,
+            syncProfile: false,
           );
           await _runSync();
         }
@@ -902,7 +918,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     } on AuthException catch (error) {
       if (!mounted) return;
       final msg = error.message.toLowerCase();
-      final isProviderDisabled = msg.contains('unsupported provider') ||
+      final isProviderDisabled =
+          msg.contains('unsupported provider') ||
           msg.contains('provider is not enabled') ||
           msg.contains('provider not enabled');
       if (isProviderDisabled) {
@@ -935,8 +952,11 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final client = ref.read(supabaseClientProvider);
-    final supabaseOrigin = client != null ? Uri.parse(client.rest.url).origin : '';
-    final redirectUri = SupabaseBootstrap.oauthRedirectUri ??
+    final supabaseOrigin = client != null
+        ? Uri.parse(client.rest.url).origin
+        : '';
+    final redirectUri =
+        SupabaseBootstrap.oauthRedirectUri ??
         (supabaseOrigin.isNotEmpty
             ? '$supabaseOrigin/auth/v1/callback'
             : 'https://<project-ref>.supabase.co/auth/v1/callback');
@@ -955,16 +975,17 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 child: CircleAvatar(
                   radius: 8,
                   backgroundColor: Colors.amber,
-                  child: Icon(Icons.priority_high, size: 11, color: Colors.black),
+                  child: Icon(
+                    Icons.priority_high,
+                    size: 11,
+                    color: Colors.black,
+                  ),
                 ),
               ),
             ],
           ),
         ),
-        title: const Text(
-          'Google OAuth chưa bật',
-          textAlign: TextAlign.center,
-        ),
+        title: const Text('Google OAuth chưa bật', textAlign: TextAlign.center),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -979,7 +1000,11 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded, size: 18, color: scheme.error),
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 18,
+                      color: scheme.error,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -999,10 +1024,19 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: 10),
-              _buildSetupStep('1', 'Vào Supabase Dashboard → Authentication → Providers → Google.'),
+              _buildSetupStep(
+                '1',
+                'Vào Supabase Dashboard → Authentication → Providers → Google.',
+              ),
               _buildSetupStep('2', 'Bật toggle "Enable Sign in with Google".'),
-              _buildSetupStep('3', 'Nhập Client ID và Client Secret từ Google Cloud Console.'),
-              _buildSetupStep('4', 'Cấu hình Authorized Redirect URI: $redirectUri'),
+              _buildSetupStep(
+                '3',
+                'Nhập Client ID và Client Secret từ Google Cloud Console.',
+              ),
+              _buildSetupStep(
+                '4',
+                'Cấu hình Authorized Redirect URI: $redirectUri',
+              ),
               const SizedBox(height: 14),
               const Divider(),
               const SizedBox(height: 8),
@@ -1060,7 +1094,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           Expanded(
             child: Text(
               text,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.3),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(height: 1.3),
             ),
           ),
         ],
@@ -1099,7 +1135,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       if (!mounted) return;
       setState(() {
         _messageIsError = true;
-        _message = 'Không thể đăng nhập tài khoản demo: ${friendlyMessage(error)}';
+        _message =
+            'Không thể đăng nhập tài khoản demo: ${friendlyMessage(error)}';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1275,15 +1312,15 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       _messageIsError = result.upload.failed > 0 || result.conflicts > 0;
       _message = result.conflicts > 0
           ? (isEn
-              ? 'Uploaded ${result.upload.pushed}, downloaded ${result.applied}; ${result.conflicts} conflict(s) need review.'
-              : 'Đã gửi ${result.upload.pushed}, tải về ${result.applied}; có ${result.conflicts} xung đột cần kiểm tra.')
+                ? 'Uploaded ${result.upload.pushed}, downloaded ${result.applied}; ${result.conflicts} conflict(s) need review.'
+                : 'Đã gửi ${result.upload.pushed}, tải về ${result.applied}; có ${result.conflicts} xung đột cần kiểm tra.')
           : result.upload.failed > 0
           ? (isEn
-              ? 'Uploaded ${result.upload.pushed} changes, ${result.upload.failed} changes failed.'
-              : 'Đã gửi ${result.upload.pushed} thay đổi, ${result.upload.failed} thay đổi bị lỗi.')
+                ? 'Uploaded ${result.upload.pushed} changes, ${result.upload.failed} changes failed.'
+                : 'Đã gửi ${result.upload.pushed} thay đổi, ${result.upload.failed} thay đổi bị lỗi.')
           : (isEn
-              ? 'Uploaded ${result.upload.pushed}, downloaded ${result.applied} changes from account.'
-              : 'Đã gửi ${result.upload.pushed}, tải về ${result.applied} thay đổi từ tài khoản.');
+                ? 'Uploaded ${result.upload.pushed}, downloaded ${result.applied} changes from account.'
+                : 'Đã gửi ${result.upload.pushed}, tải về ${result.applied} thay đổi từ tài khoản.');
     });
   }
 
@@ -1326,7 +1363,10 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           final scheme = Theme.of(context).colorScheme;
           return AlertDialog(
             icon: Icon(Icons.delete_forever_outlined, color: scheme.error),
-            title: Text(isEn ? 'Delete account?' : 'Xóa tài khoản?', maxLines: 3),
+            title: Text(
+              isEn ? 'Delete account?' : 'Xóa tài khoản?',
+              maxLines: 3,
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1342,7 +1382,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   autofocus: true,
                   textCapitalization: TextCapitalization.characters,
                   decoration: InputDecoration(
-                    labelText: isEn ? 'Type DELETE to confirm' : 'Nhập XÓA để xác nhận',
+                    labelText: isEn
+                        ? 'Type DELETE to confirm'
+                        : 'Nhập XÓA để xác nhận',
                     border: const OutlineInputBorder(),
                   ),
                   onChanged: (_) => setState(() {}),
@@ -1512,8 +1554,8 @@ class _ConfigurationMissingCard extends StatelessWidget {
       message: isEn
           ? 'The application requires sign-in before use. This build is missing account service configuration. Please contact your app administrator.'
           : 'Ứng dụng yêu cầu đăng nhập trước khi sử dụng. Bản build này chưa có '
-              'cấu hình dịch vụ tài khoản. Hãy liên hệ người quản lý ứng dụng. '
-              'SUPABASE_PUBLISHABLE_KEY. Lần đăng nhập đầu cần có kết nối mạng.',
+                'cấu hình dịch vụ tài khoản. Hãy liên hệ người quản lý ứng dụng. '
+                'SUPABASE_PUBLISHABLE_KEY. Lần đăng nhập đầu cần có kết nối mạng.',
     );
   }
 }
@@ -1565,8 +1607,8 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
               ),
               validator: (value) => (value?.length ?? 0) < 8
                   ? (isEn
-                      ? 'Password must have at least 8 characters.'
-                      : 'Mật khẩu cần ít nhất 8 ký tự.')
+                        ? 'Password must have at least 8 characters.'
+                        : 'Mật khẩu cần ít nhất 8 ký tự.')
                   : null,
             ),
             const SizedBox(height: 12),
@@ -1577,7 +1619,9 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
                 labelText: isEn ? 'Confirm password' : 'Nhập lại mật khẩu',
               ),
               validator: (value) => value != _passwordController.text
-                  ? (isEn ? 'Passwords do not match.' : 'Hai mật khẩu chưa khớp.')
+                  ? (isEn
+                        ? 'Passwords do not match.'
+                        : 'Hai mật khẩu chưa khớp.')
                   : null,
             ),
           ],

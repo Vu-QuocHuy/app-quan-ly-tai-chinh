@@ -479,7 +479,11 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
       await _createIndexes();
       await batch((b) {
-        b.insertAllOnConflictUpdate(categories, _defaultCategories);
+        b.insertAll(
+          categories,
+          _defaultCategories,
+          mode: InsertMode.insertOrIgnore,
+        );
       });
     },
   );

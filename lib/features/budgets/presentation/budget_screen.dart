@@ -138,7 +138,10 @@ class BudgetScreen extends ConsumerWidget {
     final initialValue = current?.limitMinor.toString() ?? '';
     var inputValue = initialValue;
     final tr = context.tr;
-    final categoryTitle = tr.categoryName(category.name, categoryId: category.id);
+    final categoryTitle = tr.categoryName(
+      category.name,
+      categoryId: category.id,
+    );
     final result = await showDialog<_BudgetDialogResult>(
       context: context,
       builder: (context) => AlertDialog(
@@ -278,13 +281,18 @@ class _BudgetTile extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        context.tr.categoryName(category.name, categoryId: category.id),
+                        context.tr.categoryName(
+                          category.name,
+                          categoryId: category.id,
+                        ),
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                     ),
                     if (isOver)
                       Tooltip(
-                        message: context.tr.isEn ? 'Over budget' : 'Vượt hạn mức',
+                        message: context.tr.isEn
+                            ? 'Over budget'
+                            : 'Vượt hạn mức',
                         child: Icon(
                           Icons.warning_amber_rounded,
                           size: 18,
@@ -296,7 +304,9 @@ class _BudgetTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   unlimited
-                      ? context.tr.unlimitedSpent(MoneyFormatter.format(spentMinor))
+                      ? context.tr.unlimitedSpent(
+                          MoneyFormatter.format(spentMinor),
+                        )
                       : context.tr.budgetLimitSpent(
                           MoneyFormatter.format(limit),
                           MoneyFormatter.format(spentMinor),
@@ -318,11 +328,11 @@ class _BudgetTile extends StatelessWidget {
                   Text(
                     isOver
                         ? (context.tr.isEn
-                            ? 'Over by ${MoneyFormatter.format(-remaining)}'
-                            : 'Vượt hạn mức ${MoneyFormatter.format(-remaining)}')
+                              ? 'Over by ${MoneyFormatter.format(-remaining)}'
+                              : 'Vượt hạn mức ${MoneyFormatter.format(-remaining)}')
                         : (context.tr.isEn
-                            ? 'Remaining ${MoneyFormatter.format(remaining)}'
-                            : 'Còn lại ${MoneyFormatter.format(remaining)}'),
+                              ? 'Remaining ${MoneyFormatter.format(remaining)}'
+                              : 'Còn lại ${MoneyFormatter.format(remaining)}'),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: isOver
                           ? finance.budgetOver.color
@@ -398,11 +408,12 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
                     Expanded(
                       child: Text(
                         tr.monthlySpending,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
                       ),
                     ),
                     IconButton(
@@ -438,8 +449,7 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
-                  if (overBudget.isEmpty)
-                    Text(tr.noOverBudgetCategories),
+                  if (overBudget.isEmpty) Text(tr.noOverBudgetCategories),
                   for (final item in overBudget)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -464,7 +474,9 @@ class _BudgetSummaryState extends State<_BudgetSummary> {
                                   ),
                                 ),
                                 Text(
-                                  tr.overBy(MoneyFormatter.format(item.overMinor)),
+                                  tr.overBy(
+                                    MoneyFormatter.format(item.overMinor),
+                                  ),
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(color: scheme.error),
                                 ),

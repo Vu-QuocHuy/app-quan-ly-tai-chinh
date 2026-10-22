@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/features/groups/presentation/bill_invite_qr_sheet.dart';
@@ -8,6 +9,10 @@ void main() {
     var closed = 0;
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('vi'),
+        supportedLocales: const [Locale('vi'), Locale('en')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(

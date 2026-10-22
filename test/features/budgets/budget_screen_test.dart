@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,7 +37,13 @@ void main() {
           ),
           dashboardProvider.overrideWith((ref) => Stream.value(snapshot)),
         ],
-        child: MaterialApp(theme: AppTheme.light(), home: const BudgetScreen()),
+        child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          theme: AppTheme.light(),
+          home: const BudgetScreen(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -83,7 +90,13 @@ void main() {
           ),
           dashboardProvider.overrideWith((ref) => Stream.value(snapshot)),
         ],
-        child: MaterialApp(theme: AppTheme.light(), home: const BudgetScreen()),
+        child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          theme: AppTheme.light(),
+          home: const BudgetScreen(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -139,7 +152,13 @@ void main() {
           ),
           dashboardProvider.overrideWith((ref) => Stream.value(snapshot)),
         ],
-        child: MaterialApp(theme: AppTheme.light(), home: const BudgetScreen()),
+        child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          theme: AppTheme.light(),
+          home: const BudgetScreen(),
+        ),
       ),
     );
     await tester.pumpAndSettle();

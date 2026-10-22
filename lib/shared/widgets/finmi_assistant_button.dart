@@ -68,8 +68,9 @@ class FinmiModalObserver extends NavigatorObserver {
   }
 }
 
-final hasActiveModalProvider =
-    ChangeNotifierProvider<ModalRouteTracker>((ref) => ModalRouteTracker.instance);
+final hasActiveModalProvider = ChangeNotifierProvider<ModalRouteTracker>(
+  (ref) => ModalRouteTracker.instance,
+);
 
 class FinmiAssistantButton extends ConsumerWidget {
   const FinmiAssistantButton({super.key});
@@ -105,4 +106,3 @@ class FinmiAssistantButton extends ConsumerWidget {
     );
   }
 }
-

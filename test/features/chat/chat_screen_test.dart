@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -48,6 +49,10 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
           home: Scaffold(
             body: Builder(
               builder: (context) => TextButton(
@@ -91,6 +96,10 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            locale: const Locale('vi'),
+            supportedLocales: const [Locale('vi'), Locale('en')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
             theme: AppTheme.light(),
             home: const Scaffold(body: Center(child: FinmiAssistantButton())),
           ),
@@ -130,7 +139,12 @@ void main() {
           ),
           chatHistoryStoreProvider.overrideWithValue(history),
         ],
-        child: const MaterialApp(home: ChatScreen()),
+        child: const MaterialApp(
+          locale: Locale('vi'),
+          supportedLocales: [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ChatScreen(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -166,7 +180,12 @@ void main() {
           ),
           chatHistoryStoreProvider.overrideWithValue(history),
         ],
-        child: const MaterialApp(home: ChatScreen()),
+        child: const MaterialApp(
+          locale: Locale('vi'),
+          supportedLocales: [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ChatScreen(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -215,7 +234,12 @@ void main() {
           chatHistoryStoreProvider.overrideWithValue(const ChatHistoryStore()),
           invoiceRepositoryProvider.overrideWithValue(_InvoiceRepository()),
         ],
-        child: const MaterialApp(home: ChatScreen()),
+        child: const MaterialApp(
+          locale: Locale('vi'),
+          supportedLocales: [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ChatScreen(),
+        ),
       ),
     );
     await tester.pumpAndSettle();

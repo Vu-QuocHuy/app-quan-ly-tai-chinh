@@ -55,10 +55,12 @@ const chatQuickPromptsEn = [
 const _enToViPromptMap = {
   'How much did I spend this month?': 'Tháng này tôi đã chi bao nhiêu?',
   'How much did I earn this month?': 'Tháng này tôi đã thu bao nhiêu?',
-  'Compare spending this month with last month': 'So sánh chi tiêu tháng này với tháng trước',
+  'Compare spending this month with last month':
+      'So sánh chi tiêu tháng này với tháng trước',
   'Which category has the highest spending?': 'Danh mục nào chi nhiều nhất?',
   'How much budget do I have left?': 'Tôi còn bao nhiêu hạn mức ngân sách?',
-  'Forecast spending until the end of the month': 'Dự báo chi tiêu đến cuối tháng',
+  'Forecast spending until the end of the month':
+      'Dự báo chi tiêu đến cuối tháng',
   'My recent invoices': 'Hóa đơn gần đây của tôi',
   'Do I have any recurring expenses?': 'Tôi có khoản chi định kỳ nào không?',
   'Are there any unusual expenses?': 'Có khoản chi nào bất thường không?',
@@ -175,9 +177,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               Expanded(
                 child: Text(
                   context.tr.isEn ? 'Finmi Assistant' : 'Trợ lý Finmi',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
               IconButton(
@@ -243,7 +245,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Semantics(
-                label: context.tr.isEn ? 'Assistant is thinking' : 'Trợ lý đang suy nghĩ',
+                label: context.tr.isEn
+                    ? 'Assistant is thinking'
+                    : 'Trợ lý đang suy nghĩ',
                 child: const CircularProgressIndicator(strokeWidth: 2),
               ),
             ),
@@ -312,11 +316,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         child: Text(
                           _transcribing
                               ? (context.tr.isEn
-                                  ? 'Transcribing speech to text…'
-                                  : 'Đang chuyển lời nói thành văn bản…')
+                                    ? 'Transcribing speech to text…'
+                                    : 'Đang chuyển lời nói thành văn bản…')
                               : (context.tr.isEn
-                                  ? 'Listening · tap mic to stop (auto-stops after $_maxVoiceRecordingSeconds s)'
-                                  : 'Đang lắng nghe · chạm mic để dừng (tự dừng sau $_maxVoiceRecordingSeconds giây)'),
+                                    ? 'Listening · tap mic to stop (auto-stops after $_maxVoiceRecordingSeconds s)'
+                                    : 'Đang lắng nghe · chạm mic để dừng (tự dừng sau $_maxVoiceRecordingSeconds giây)'),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.primary,
                             fontWeight: FontWeight.w600,
@@ -348,9 +352,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ),
                         decoration: InputDecoration(
                           isDense: true,
-                          hintText: context.tr.isEn ? 'Message assistant…' : 'Nhắn trợ lý…',
+                          hintText: context.tr.isEn
+                              ? 'Message assistant…'
+                              : 'Nhắn trợ lý…',
                           hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                            color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                            color: scheme.onSurfaceVariant.withValues(
+                              alpha: 0.7,
+                            ),
                           ),
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -416,20 +424,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     button: true,
                     label: context.tr.isEn ? 'Send question' : 'Gửi câu hỏi',
                     child: IconButton(
-                      tooltip: context.tr.isEn ? 'Send question' : 'Gửi câu hỏi',
-                      onPressed: canSend ? () => _send(_inputController.text) : null,
+                      tooltip: context.tr.isEn
+                          ? 'Send question'
+                          : 'Gửi câu hỏi',
+                      onPressed: canSend
+                          ? () => _send(_inputController.text)
+                          : null,
                       style: IconButton.styleFrom(
                         fixedSize: const Size(44, 44),
                         minimumSize: const Size(44, 44),
                         padding: EdgeInsets.zero,
                         backgroundColor: canSend
                             ? scheme.primary
-                            : scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                            : scheme.surfaceContainerHighest.withValues(
+                                alpha: 0.5,
+                              ),
                         foregroundColor: canSend
                             ? Colors.white
                             : scheme.onSurfaceVariant.withValues(alpha: 0.38),
-                        disabledBackgroundColor: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                        disabledForegroundColor: scheme.onSurfaceVariant.withValues(alpha: 0.38),
+                        disabledBackgroundColor: scheme.surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        disabledForegroundColor: scheme.onSurfaceVariant
+                            .withValues(alpha: 0.38),
                       ),
                       icon: Icon(
                         Icons.send_rounded,
@@ -473,9 +489,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         lang: tr.isEn ? 'en-US' : 'vi-VN',
         onResult: (text) {
           if (!mounted) return;
-          final combined = _webSpeechBaseText.isEmpty ? text : '$_webSpeechBaseText $text';
+          final combined = _webSpeechBaseText.isEmpty
+              ? text
+              : '$_webSpeechBaseText $text';
           _inputController.text = combined;
-          _inputController.selection = TextSelection.collapsed(offset: combined.length);
+          _inputController.selection = TextSelection.collapsed(
+            offset: combined.length,
+          );
         },
         onError: (err) {
           if (!mounted) return;
@@ -494,7 +514,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     try {
       if (!await _audioRecorder.hasPermission()) {
-        throw StateError(tr.isEn ? 'Microphone permission required for voice input.' : 'Bạn cần cấp quyền micro để nhập bằng giọng nói.');
+        throw StateError(
+          tr.isEn
+              ? 'Microphone permission required for voice input.'
+              : 'Bạn cần cấp quyền micro để nhập bằng giọng nói.',
+        );
       }
       final path = kIsWeb
           ? ''
@@ -605,10 +629,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final question = value.trim();
     if (question.isEmpty || _sending) return;
     final effectiveQuestion = _enToViPromptMap[question] ?? question;
-    final inScope = ChatPrivacyPolicy.isPersonalFinanceQuestion(question) ||
+    final inScope =
+        ChatPrivacyPolicy.isPersonalFinanceQuestion(question) ||
         ChatPrivacyPolicy.isPersonalFinanceQuestion(effectiveQuestion);
     final draftRequest =
-        _draftConversation != null || _looksLikeTransactionEntry(effectiveQuestion);
+        _draftConversation != null ||
+        _looksLikeTransactionEntry(effectiveQuestion);
     final userMessage = ChatMessage(
       id: _uuid.v4(),
       role: ChatMessageRole.user,
@@ -1156,12 +1182,12 @@ class _MessageBubble extends StatelessWidget {
         : scheme.surfaceContainerHigh;
     final displayText = message.id == 'welcome'
         ? (isEn
-            ? 'Hello! I can help you check total income, total expense, budgets, categories, '
-              'month comparisons, and recurring transactions. You can also describe income or expenses '
-              'to create drafts before confirming and saving.'
-            : 'Xin chào! Mình có thể giúp bạn xem tổng thu, tổng chi, ngân sách, danh mục, '
-              'so sánh tháng và khoản chi định kỳ. Bạn cũng có thể mô tả khoản thu/chi để '
-              'tạo bản nháp rồi xác nhận trước khi lưu.')
+              ? 'Hello! I can help you check total income, total expense, budgets, categories, '
+                    'month comparisons, and recurring transactions. You can also describe income or expenses '
+                    'to create drafts before confirming and saving.'
+              : 'Xin chào! Mình có thể giúp bạn xem tổng thu, tổng chi, ngân sách, danh mục, '
+                    'so sánh tháng và khoản chi định kỳ. Bạn cũng có thể mô tả khoản thu/chi để '
+                    'tạo bản nháp rồi xác nhận trước khi lưu.')
         : message.text;
 
     return Semantics(

@@ -78,7 +78,10 @@ class _FinmiWebFrameState extends State<FinmiWebFrame> {
         // Phone Frame dimensions
         const phoneWidth = 412.0;
         final availableHeight = constraints.maxHeight;
-        final phoneHeight = math.min(880.0, math.max(600.0, availableHeight - 64.0));
+        final phoneHeight = math.min(
+          880.0,
+          math.max(600.0, availableHeight - 64.0),
+        );
 
         // Modern canvas background
         final canvasBg = isDark
@@ -161,7 +164,8 @@ class _FinmiWebFrameState extends State<FinmiWebFrame> {
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                       ),
-                      onPressed: () => setState(() => _phoneFrameEnabled = false),
+                      onPressed: () =>
+                          setState(() => _phoneFrameEnabled = false),
                       icon: const Icon(Icons.fullscreen, size: 18),
                       label: Text(
                         tr.fullScreenMode,
@@ -182,13 +186,12 @@ class _FinmiWebFrameState extends State<FinmiWebFrame> {
                     decoration: BoxDecoration(
                       color: Theme.of(context).scaffoldBackgroundColor,
                       borderRadius: BorderRadius.circular(44),
-                      border: Border.all(
-                        color: frameBorderColor,
-                        width: 9,
-                      ),
+                      border: Border.all(color: frameBorderColor, width: 9),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: isDark ? 0.6 : 0.25),
+                          color: Colors.black.withValues(
+                            alpha: isDark ? 0.6 : 0.25,
+                          ),
                           blurRadius: 32,
                           spreadRadius: 2,
                           offset: const Offset(0, 16),
@@ -204,8 +207,14 @@ class _FinmiWebFrameState extends State<FinmiWebFrame> {
                             child: MediaQuery(
                               data: MediaQuery.of(context).copyWith(
                                 size: Size(phoneWidth, phoneHeight),
-                                padding: const EdgeInsets.only(top: 32, bottom: 12),
-                                viewPadding: const EdgeInsets.only(top: 32, bottom: 12),
+                                padding: const EdgeInsets.only(
+                                  top: 32,
+                                  bottom: 12,
+                                ),
+                                viewPadding: const EdgeInsets.only(
+                                  top: 32,
+                                  bottom: 12,
+                                ),
                               ),
                               child: widget.child,
                             ),

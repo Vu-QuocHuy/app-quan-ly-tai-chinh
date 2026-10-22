@@ -736,8 +736,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                 tabs: [
                   Tab(
                     height:
-                        64 *
-                        (MediaQuery.textScalerOf(context).scale(14) / 14),
+                        64 * (MediaQuery.textScalerOf(context).scale(14) / 14),
                     icon: const Icon(Icons.qr_code_scanner),
                     child: const Text(
                       'QR thanh toán',
@@ -746,8 +745,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                   ),
                   Tab(
                     height:
-                        64 *
-                        (MediaQuery.textScalerOf(context).scale(14) / 14),
+                        64 * (MediaQuery.textScalerOf(context).scale(14) / 14),
                     icon: const Icon(Icons.document_scanner_outlined),
                     child: const Text('Hóa đơn', textAlign: TextAlign.center),
                   ),
@@ -833,7 +831,10 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
 
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        throw CameraException('NoCamera', 'Không tìm thấy camera trên thiết bị.');
+        throw CameraException(
+          'NoCamera',
+          'Không tìm thấy camera trên thiết bị.',
+        );
       }
       var description = cameras.first;
       for (final camera in cameras) {
@@ -943,8 +944,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
               hintText: 'Đặt hóa đơn vào trong khung để chụp',
             ),
           ),
-        ]
-        else
+        ] else
           ColoredBox(
             color: theme.colorScheme.surfaceContainerLow,
             child: Center(

@@ -17,7 +17,8 @@ Future<void> showCompleteProfileDialogIfNeeded(
 
   try {
     final profile = await PersonalProfileStore(client).load();
-    if (profile.phone.trim().isNotEmpty && profile.displayName.trim().isNotEmpty) {
+    if (profile.phone.trim().isNotEmpty &&
+        profile.displayName.trim().isNotEmpty) {
       return;
     }
 
@@ -80,17 +81,16 @@ Future<void> showCompleteProfileDialogIfNeeded(
                             isEn
                                 ? 'Complete Profile'
                                 : 'Hoàn tất thông tin cá nhân',
-                            style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
+                            style: Theme.of(ctx).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                           Text(
                             isEn
                                 ? 'Required for debts and group funds'
                                 : 'Cần thiết để quản lý nợ và quỹ nhóm',
                             style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                                  color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                                ),
+                              color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                            ),
                           ),
                         ],
                       ),
@@ -165,13 +165,16 @@ Future<void> showCompleteProfileDialogIfNeeded(
                           setState(() => saving = true);
                           try {
                             final name = nameController.text.trim();
-                            final phone = phoneController.text.replaceAll(RegExp(r'\s+'), '').trim();
+                            final phone = phoneController.text
+                                .replaceAll(RegExp(r'\s+'), '')
+                                .trim();
 
-                            final isTaken = await DebtNotificationStore.isPhoneTakenByAnotherUser(
-                              phone,
-                              client: client,
-                              currentUserId: user.id,
-                            );
+                            final isTaken =
+                                await DebtNotificationStore.isPhoneTakenByAnotherUser(
+                                  phone,
+                                  client: client,
+                                  currentUserId: user.id,
+                                );
                             if (isTaken) {
                               if (ctx.mounted) {
                                 setState(() => saving = false);
@@ -193,15 +196,15 @@ Future<void> showCompleteProfileDialogIfNeeded(
                               return;
                             }
 
-                            await PersonalProfileStore(client).save(
-                              displayName: name,
-                              phone: phone,
-                            );
+                            await PersonalProfileStore(
+                              client,
+                            ).save(displayName: name, phone: phone);
                             await DebtNotificationStore.setCurrentUserPhone(
                               phone,
                               ref: ref,
                               client: client,
                               userId: user.id,
+                              syncProfile: false,
                             );
                             if (bottomSheetCtx.mounted) {
                               Navigator.pop(bottomSheetCtx);
@@ -227,10 +230,12 @@ Future<void> showCompleteProfileDialogIfNeeded(
                               final messenger = ScaffoldMessenger.of(ctx);
                               messenger.clearSnackBars();
                               final str = e.toString();
-                              final msg = str.contains('23505') || str.contains('đã được sử dụng')
+                              final msg =
+                                  str.contains('23505') ||
+                                      str.contains('đã được sử dụng')
                                   ? (isEn
-                                      ? 'This phone number is already registered by another account.'
-                                      : 'Số điện thoại này đã được sử dụng bởi tài khoản khác.')
+                                        ? 'This phone number is already registered by another account.'
+                                        : 'Số điện thoại này đã được sử dụng bởi tài khoản khác.')
                                   : 'Error: $e';
                               messenger.showSnackBar(
                                 SnackBar(

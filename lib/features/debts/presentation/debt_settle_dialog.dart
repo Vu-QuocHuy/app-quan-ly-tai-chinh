@@ -37,7 +37,9 @@ Future<void> showDebtSettleDialog(
   final isEn = tr.isEn;
 
   final controller = TextEditingController(
-    text: MoneyFormatter.format(remaining).replaceAll(' ₫', '').replaceAll('.', ''),
+    text: MoneyFormatter.format(
+      remaining,
+    ).replaceAll(' ₫', '').replaceAll('.', ''),
   );
   bool isFull = true;
   bool recordTransaction = false;
@@ -60,7 +62,9 @@ Future<void> showDebtSettleDialog(
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(isEn ? 'Confirm Settlement' : 'Xác nhận thanh toán'),
+                child: Text(
+                  isEn ? 'Confirm Settlement' : 'Xác nhận thanh toán',
+                ),
               ),
             ],
           ),
@@ -72,11 +76,11 @@ Future<void> showDebtSettleDialog(
                 Text(
                   isTheyOwe
                       ? (isEn
-                          ? 'Confirm that ${debt.personName} paid debt:'
-                          : 'Xác nhận ${debt.personName} đã thanh toán khoản nợ:')
+                            ? 'Confirm that ${debt.personName} paid debt:'
+                            : 'Xác nhận ${debt.personName} đã thanh toán khoản nợ:')
                       : (isEn
-                          ? 'Confirm you paid ${debt.personName}:'
-                          : 'Xác nhận bạn đã thanh toán cho ${debt.personName}:'),
+                            ? 'Confirm you paid ${debt.personName}:'
+                            : 'Xác nhận bạn đã thanh toán cho ${debt.personName}:'),
                   style: theme.textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 12),
@@ -95,7 +99,10 @@ Future<void> showDebtSettleDialog(
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(isEn ? 'Total debt:' : 'Tổng số nợ:', style: theme.textTheme.bodySmall),
+                          Text(
+                            isEn ? 'Total debt:' : 'Tổng số nợ:',
+                            style: theme.textTheme.bodySmall,
+                          ),
                           Text(
                             MoneyFormatter.format(debt.amountMinor),
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -109,7 +116,10 @@ Future<void> showDebtSettleDialog(
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(isEn ? 'Paid:' : 'Đã thanh toán:', style: theme.textTheme.bodySmall),
+                            Text(
+                              isEn ? 'Paid:' : 'Đã thanh toán:',
+                              style: theme.textTheme.bodySmall,
+                            ),
                             Text(
                               MoneyFormatter.format(debt.paidAmountMinor),
                               style: theme.textTheme.bodySmall?.copyWith(
@@ -124,12 +134,19 @@ Future<void> showDebtSettleDialog(
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(isEn ? 'Remaining:' : 'Còn lại:', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                          Text(
+                            isEn ? 'Remaining:' : 'Còn lại:',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                           Text(
                             MoneyFormatter.format(remaining),
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700,
-                              color: isTheyOwe ? context.finance.income.color : context.finance.expense.color,
+                              color: isTheyOwe
+                                  ? context.finance.income.color
+                                  : context.finance.expense.color,
                             ),
                           ),
                         ],
@@ -138,34 +155,37 @@ Future<void> showDebtSettleDialog(
                   ),
                 ),
                 const SizedBox(height: 16),
-                RadioListTile<bool>(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: Text(isEn
-                      ? 'Pay in full (${MoneyFormatter.format(remaining)})'
-                      : 'Thanh toán toàn bộ (${MoneyFormatter.format(remaining)})'),
-                  value: true,
+                RadioGroup<bool>(
                   groupValue: isFull,
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        isFull = val;
-                        controller.text = remaining.toString();
-                      });
-                    }
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      isFull = value;
+                      if (value) controller.text = remaining.toString();
+                    });
                   },
-                ),
-                RadioListTile<bool>(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: Text(isEn ? 'Partial payment' : 'Thanh toán một phần'),
-                  value: false,
-                  groupValue: isFull,
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() => isFull = val);
-                    }
-                  },
+                  child: Column(
+                    children: [
+                      RadioListTile<bool>(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        title: Text(
+                          isEn
+                              ? 'Pay in full (${MoneyFormatter.format(remaining)})'
+                              : 'Thanh toán toàn bộ (${MoneyFormatter.format(remaining)})',
+                        ),
+                        value: true,
+                      ),
+                      RadioListTile<bool>(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        title: Text(
+                          isEn ? 'Partial payment' : 'Thanh toán một phần',
+                        ),
+                        value: false,
+                      ),
+                    ],
+                  ),
                 ),
                 if (!isFull) ...[
                   const SizedBox(height: 8),
@@ -174,7 +194,9 @@ Future<void> showDebtSettleDialog(
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: InputDecoration(
-                      labelText: isEn ? 'Payment amount this time (₫)' : 'Số tiền thanh toán lần này (₫)',
+                      labelText: isEn
+                          ? 'Payment amount this time (₫)'
+                          : 'Số tiền thanh toán lần này (₫)',
                       border: const OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -187,12 +209,14 @@ Future<void> showDebtSettleDialog(
                   title: Text(
                     isTheyOwe
                         ? (isEn
-                            ? 'Record as income transaction in wallet'
-                            : 'Ghi nhận thành một khoản thu vào ví')
+                              ? 'Record as income transaction in wallet'
+                              : 'Ghi nhận thành một khoản thu vào ví')
                         : (isEn
-                            ? 'Record as expense transaction'
-                            : 'Ghi nhận thành một khoản chi tiêu'),
-                    style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500),
+                              ? 'Record as expense transaction'
+                              : 'Ghi nhận thành một khoản chi tiêu'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   value: recordTransaction,
                   onChanged: (val) {
@@ -209,7 +233,9 @@ Future<void> showDebtSettleDialog(
             ),
             FilledButton(
               onPressed: () {
-                final inputAmount = int.tryParse(controller.text.trim()) ?? (isFull ? remaining : 0);
+                final inputAmount =
+                    int.tryParse(controller.text.trim()) ??
+                    (isFull ? remaining : 0);
                 if (inputAmount <= 0) return;
                 Navigator.pop(
                   context,
@@ -244,7 +270,9 @@ Future<void> showDebtSettleDialog(
       if (debt.type == DebtType.theyOwe) {
         // Thu tiền người khác trả nợ -> Ghi nhận khoản thu
         final incomeRepo = ref.read(incomeRepositoryProvider);
-        final noteSuffix = debt.notes?.isNotEmpty == true ? ' (${debt.notes})' : '';
+        final noteSuffix = debt.notes?.isNotEmpty == true
+            ? ' (${debt.notes})'
+            : '';
         await incomeRepo.save(
           result.amountMinor,
           source: IncomeSource.manual,
@@ -258,7 +286,9 @@ Future<void> showDebtSettleDialog(
         final invoiceRepo = ref.read(invoiceRepositoryProvider);
         final invoice = InvoiceEntity(
           id: const Uuid().v4(),
-          sellerName: isEn ? 'Debt repayment: ${debt.personName}' : 'Trả nợ: ${debt.personName}',
+          sellerName: isEn
+              ? 'Debt repayment: ${debt.personName}'
+              : 'Trả nợ: ${debt.personName}',
           notes: debt.notes,
           currencyCode: 'VND',
           subtotalMinor: result.amountMinor,
@@ -284,11 +314,11 @@ Future<void> showDebtSettleDialog(
         content: Text(
           result.isFullSettlement
               ? (isEn
-                  ? 'Settled full debt with ${debt.personName}.'
-                  : 'Đã xác nhận tất toán khoản nợ của ${debt.personName}.')
+                    ? 'Settled full debt with ${debt.personName}.'
+                    : 'Đã xác nhận tất toán khoản nợ của ${debt.personName}.')
               : (isEn
-                  ? 'Recorded payment of ${MoneyFormatter.format(result.amountMinor)}.'
-                  : 'Đã ghi nhận thanh toán ${MoneyFormatter.format(result.amountMinor)}.'),
+                    ? 'Recorded payment of ${MoneyFormatter.format(result.amountMinor)}.'
+                    : 'Đã ghi nhận thanh toán ${MoneyFormatter.format(result.amountMinor)}.'),
         ),
       ),
     );

@@ -129,7 +129,8 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
       _selectedInvoiceIds.clear();
       _selectionMode = false;
     }
-    if (widget.initialTab != oldWidget.initialTab && widget.initialTab != null) {
+    if (widget.initialTab != oldWidget.initialTab &&
+        widget.initialTab != null) {
       _applyTab(widget.initialTab!);
       _selectedInvoiceIds.clear();
       _selectionMode = false;
@@ -197,7 +198,8 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
     final tr = context.tr;
     final isEn = tr.isEn;
     final debts = ref.watch(debtsListProvider);
-    final debtNotifs = ref.watch(debtNotificationsProvider).valueOrNull ?? const [];
+    final debtNotifs =
+        ref.watch(debtNotificationsProvider).valueOrNull ?? const [];
 
     return Scaffold(
       body: ReadingPane(
@@ -245,7 +247,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                       query: _query,
                       filterCount: activeFilterCount,
                       kind: _kind,
-                      reviewSelected: _status == InvoiceStatus.needsReview || _kind == _TransactionKind.review,
+                      reviewSelected:
+                          _status == InvoiceStatus.needsReview ||
+                          _kind == _TransactionKind.review,
                       onReviewTap: _toggleReviewFilter,
                       currentMonthSelected:
                           _month != null &&
@@ -294,12 +298,16 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                 ),
               if (_kind == _TransactionKind.debts)
                 ..._buildDebtsSlivers(context, tr, debts, debtNotifs)
-              else if (_kind != _TransactionKind.expense && _kind != _TransactionKind.review && incomes.isLoading)
+              else if (_kind != _TransactionKind.expense &&
+                  _kind != _TransactionKind.review &&
+                  incomes.isLoading)
                 const SliverPadding(
                   padding: EdgeInsets.all(16),
                   sliver: SliverToBoxAdapter(child: SkeletonListRows(count: 3)),
                 )
-              else if (_kind != _TransactionKind.expense && _kind != _TransactionKind.review && incomes.hasError)
+              else if (_kind != _TransactionKind.expense &&
+                  _kind != _TransactionKind.review &&
+                  incomes.hasError)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: AppErrorState(
@@ -384,7 +392,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                         hasScrollBody: false,
                         child: _InvoiceEmptyState(
                           incomeOnly: _kind == _TransactionKind.income,
-                          reviewOnly: _status == InvoiceStatus.needsReview || _kind == _TransactionKind.review,
+                          reviewOnly:
+                              _status == InvoiceStatus.needsReview ||
+                              _kind == _TransactionKind.review,
                           filtered:
                               filter.hasActiveFilters ||
                               _kind != _TransactionKind.all,
@@ -410,7 +420,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                                       _selectVisible(selectableIds),
                                   child: Text(
                                     _selectedInvoiceIds.containsAll(
-                                               selectableIds,
+                                              selectableIds,
                                             ) &&
                                             _selectedInvoiceIds.isNotEmpty
                                         ? tr.deselectVisibleItems
@@ -506,7 +516,8 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
               ),
             )
           : null,
-      floatingActionButton: _selectionMode || ref.watch(hasActiveModalProvider).hasModal
+      floatingActionButton:
+          _selectionMode || ref.watch(hasActiveModalProvider).hasModal
           ? null
           : const FinmiAssistantButton(),
     );
@@ -598,9 +609,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                   tr.isEn
                       ? 'Debt Notifications (${filteredNotifs.length})'
                       : 'Thông báo nợ nhận được (${filteredNotifs.length})',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
               for (final n in filteredNotifs)
@@ -617,9 +628,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                   tr.isEn
                       ? 'My Debt Records (${filteredDebts.length})'
                       : 'Khoản nợ của tôi (${filteredDebts.length})',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
               for (final d in filteredDebts)
@@ -667,7 +678,8 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   }
 
   void _toggleReviewFilter() {
-    if (_status == InvoiceStatus.needsReview || _kind == _TransactionKind.review) {
+    if (_status == InvoiceStatus.needsReview ||
+        _kind == _TransactionKind.review) {
       _clearFilters();
     } else {
       _showReviewOnly();
@@ -894,7 +906,8 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
       InvoiceSourceType? sourceType,
       String? categoryId,
       DateTime? month,
-    })? result;
+    })?
+    result;
 
     try {
       result =
@@ -974,8 +987,14 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                             children: [
                               for (final (type, label) in [
                                 (null, tr.tabAll),
-                                (InvoiceSourceType.manual, isEn ? 'Manual' : 'Thủ công'),
-                                (InvoiceSourceType.imageOcr, isEn ? 'Image OCR' : 'Ảnh / QR'),
+                                (
+                                  InvoiceSourceType.manual,
+                                  isEn ? 'Manual' : 'Thủ công',
+                                ),
+                                (
+                                  InvoiceSourceType.imageOcr,
+                                  isEn ? 'Image OCR' : 'Ảnh / QR',
+                                ),
                                 (InvoiceSourceType.pdfText, 'PDF'),
                                 (InvoiceSourceType.xml, 'XML'),
                               ])
@@ -1001,10 +1020,14 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                           items: [
                             DropdownMenuItem(
                               value: '',
-                              child: Text(isEn ? 'All categories' : 'Tất cả danh mục'),
+                              child: Text(
+                                isEn ? 'All categories' : 'Tất cả danh mục',
+                              ),
                             ),
                             if (categoryId != null &&
-                                !categories.any((item) => item.id == categoryId))
+                                !categories.any(
+                                  (item) => item.id == categoryId,
+                                ))
                               DropdownMenuItem(
                                 value: categoryId!,
                                 child: Text(categoryId!),
@@ -1040,7 +1063,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                           trailing: month == null
                               ? const Icon(Icons.chevron_right)
                               : IconButton(
-                                  tooltip: isEn ? 'Clear month filter' : 'Bỏ lọc tháng',
+                                  tooltip: isEn
+                                      ? 'Clear month filter'
+                                      : 'Bỏ lọc tháng',
                                   onPressed: () =>
                                       setSheetState(() => month = null),
                                   icon: const Icon(Icons.close),
@@ -1051,7 +1076,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                               firstDate: DateTime(2000),
                               lastDate: DateTime(2100),
                               initialDate: month ?? DateTime.now(),
-                              helpText: isEn ? 'Select month to filter' : 'Chọn tháng cần lọc',
+                              helpText: isEn
+                                  ? 'Select month to filter'
+                                  : 'Chọn tháng cần lọc',
                             );
                             if (picked != null) {
                               setSheetState(
@@ -1366,7 +1393,8 @@ class _DebtNotificationRow extends ConsumerWidget {
     final tr = context.tr;
     final isEn = tr.isEn;
 
-    final senderDisplay = (notification.senderPhone != null &&
+    final senderDisplay =
+        (notification.senderPhone != null &&
             notification.senderPhone!.isNotEmpty &&
             notification.senderName != notification.senderPhone)
         ? '${notification.senderName} (${notification.senderPhone})'
@@ -1384,18 +1412,18 @@ class _DebtNotificationRow extends ConsumerWidget {
             dense: true,
           )
         : notification.isRead
-            ? StatusPill(
-                icon: Icons.hourglass_top_rounded,
-                label: isEn ? 'Pending' : 'Chờ xác nhận',
-                tone: StatusTone.neutral,
-                dense: true,
-              )
-            : StatusPill(
-                icon: Icons.mark_email_unread_outlined,
-                label: isEn ? 'New' : 'Mới',
-                tone: StatusTone.warn,
-                dense: true,
-              );
+        ? StatusPill(
+            icon: Icons.hourglass_top_rounded,
+            label: isEn ? 'Pending' : 'Chờ xác nhận',
+            tone: StatusTone.neutral,
+            dense: true,
+          )
+        : StatusPill(
+            icon: Icons.mark_email_unread_outlined,
+            label: isEn ? 'New' : 'Mới',
+            tone: StatusTone.warn,
+            dense: true,
+          );
 
     return EntityListRow(
       leading: CircleAvatar(
@@ -1486,7 +1514,9 @@ Future<void> _showConfirmSaveDebtSheet(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isEn ? 'Confirm Debt Notice' : 'Xác nhận thông báo nợ',
+                          isEn
+                              ? 'Confirm Debt Notice'
+                              : 'Xác nhận thông báo nợ',
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
@@ -1509,10 +1539,14 @@ Future<void> _showConfirmSaveDebtSheet(
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.45,
+                  ),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.5,
+                    ),
                   ),
                 ),
                 child: Column(
@@ -1555,14 +1589,18 @@ Future<void> _showConfirmSaveDebtSheet(
                       _buildDebtInfoRow(
                         context,
                         label: isEn ? 'Due date' : 'Hạn trả',
-                        value: DateFormat('dd/MM/yyyy').format(notification.dueDate!),
+                        value: DateFormat(
+                          'dd/MM/yyyy',
+                        ).format(notification.dueDate!),
                       ),
                     ],
                     const Divider(height: 16),
                     _buildDebtInfoRow(
                       context,
                       label: isEn ? 'Sent at' : 'Thời gian gửi',
-                      value: DateFormat('dd/MM/yyyy HH:mm').format(notification.createdAt),
+                      value: DateFormat(
+                        'dd/MM/yyyy HH:mm',
+                      ).format(notification.createdAt),
                       isDimmed: true,
                     ),
                   ],
@@ -1570,21 +1608,31 @@ Future<void> _showConfirmSaveDebtSheet(
               ),
               const SizedBox(height: 14),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, size: 16, color: theme.colorScheme.primary),
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         isEn
                             ? 'Will be saved under "To Pay" (You owe ${notification.senderName}). The sender will see that you have saved it.'
                             : 'Khoản nợ sẽ được lưu vào mục "Cần trả" (Bạn nợ ${notification.senderName}). Bên người gửi sẽ thấy trạng thái bạn đã lưu nợ.',
-                        style: TextStyle(fontSize: 11.5, color: theme.colorScheme.primary),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: theme.colorScheme.primary,
+                        ),
                       ),
                     ),
                   ],
@@ -1604,7 +1652,9 @@ Future<void> _showConfirmSaveDebtSheet(
                     flex: 2,
                     child: FilledButton.icon(
                       icon: const Icon(Icons.bookmark_add_outlined, size: 18),
-                      label: Text(isEn ? 'Save to My Debts' : 'Lưu vào khoản nợ của tôi'),
+                      label: Text(
+                        isEn ? 'Save to My Debts' : 'Lưu vào khoản nợ của tôi',
+                      ),
                       onPressed: () async {
                         final newDebt = DebtRecord(
                           id: 'debt-${DateTime.now().millisecondsSinceEpoch}',
@@ -1618,7 +1668,9 @@ Future<void> _showConfirmSaveDebtSheet(
                           createdAt: DateTime.now(),
                         );
 
-                        await ref.read(debtsListProvider.notifier).addOrUpdate(newDebt);
+                        await ref
+                            .read(debtsListProvider.notifier)
+                            .addOrUpdate(newDebt);
                         await DebtNotificationStore.confirmAndSaveNotification(
                           notifId: notification.id,
                           savedDebtId: newDebt.id,
@@ -1687,7 +1739,8 @@ Widget _buildDebtInfoRow(
           style: TextStyle(
             fontSize: fontSize ?? 13,
             fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
-            color: valueColor ??
+            color:
+                valueColor ??
                 (isDimmed
                     ? theme.colorScheme.onSurfaceVariant
                     : theme.colorScheme.onSurface),
@@ -1799,23 +1852,23 @@ class _InvoiceEmptyState extends StatelessWidget {
           Text(
             incomeOnly
                 ? (isEn
-                    ? 'Select Add +/- in Utilities to record income.'
-                    : 'Chọn Thêm thu/chi trong Tiện ích để ghi khoản thu.')
+                      ? 'Select Add +/- in Utilities to record income.'
+                      : 'Chọn Thêm thu/chi trong Tiện ích để ghi khoản thu.')
                 : reviewOnly
                 ? (isEn
-                    ? 'New expenses needing confirmation will appear here.'
-                    : 'Các khoản chi mới cần xác nhận sẽ xuất hiện tại đây.')
+                      ? 'New expenses needing confirmation will appear here.'
+                      : 'Các khoản chi mới cần xác nhận sẽ xuất hiện tại đây.')
                 : filtered
                 ? (query.trim().isEmpty
                       ? (isEn
-                          ? 'Try adjusting filters to see more results.'
-                          : 'Thử bỏ bớt bộ lọc để xem thêm kết quả.')
+                            ? 'Try adjusting filters to see more results.'
+                            : 'Thử bỏ bớt bộ lọc để xem thêm kết quả.')
                       : (isEn
-                          ? 'No results for “${query.trim()}”. Try another keyword.'
-                          : 'Không có kết quả cho “${query.trim()}”. Hãy thử từ khóa khác.'))
+                            ? 'No results for “${query.trim()}”. Try another keyword.'
+                            : 'Không có kết quả cho “${query.trim()}”. Hãy thử từ khóa khác.'))
                 : (isEn
-                    ? 'Select Add +/- or Scan on the Overview page to get started.'
-                    : 'Chọn Thêm thu/chi hoặc Quét ở trang Tổng quan để bắt đầu.'),
+                      ? 'Select Add +/- or Scan on the Overview page to get started.'
+                      : 'Chọn Thêm thu/chi hoặc Quét ở trang Tổng quan để bắt đầu.'),
             textAlign: TextAlign.center,
           ),
           if (filtered && onClear != null) ...[
@@ -1839,9 +1892,10 @@ IconData _sourceIcon(InvoiceSourceType source) => switch (source) {
   InvoiceSourceType.manual => Icons.edit_note,
 };
 
-String _sourceLabel(InvoiceSourceType source, {bool isEn = false}) => switch (source) {
-  InvoiceSourceType.xml => 'XML',
-  InvoiceSourceType.pdfText => 'PDF',
-  InvoiceSourceType.imageOcr => isEn ? 'Image OCR' : 'Ảnh OCR',
-  InvoiceSourceType.manual => isEn ? 'Manual' : 'Thủ công',
-};
+String _sourceLabel(InvoiceSourceType source, {bool isEn = false}) =>
+    switch (source) {
+      InvoiceSourceType.xml => 'XML',
+      InvoiceSourceType.pdfText => 'PDF',
+      InvoiceSourceType.imageOcr => isEn ? 'Image OCR' : 'Ảnh OCR',
+      InvoiceSourceType.manual => isEn ? 'Manual' : 'Thủ công',
+    };

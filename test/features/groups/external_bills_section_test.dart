@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,6 +53,10 @@ Future<_FakeExpenseGroupService> _pump(
     ProviderScope(
       overrides: [expenseGroupServiceProvider.overrideWithValue(service)],
       child: const MaterialApp(
+        locale: Locale('vi'),
+        supportedLocales: [Locale('vi'), Locale('en')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
         home: Scaffold(
           body: SingleChildScrollView(child: ExternalBillsSection()),
         ),

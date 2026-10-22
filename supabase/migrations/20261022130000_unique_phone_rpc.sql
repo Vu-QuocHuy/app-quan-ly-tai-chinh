@@ -100,23 +100,19 @@ grant execute on function public.save_personal_profile(text, text)
   to authenticated;
 
 -- 4. Clean up any existing duplicate phone records by keeping the newest, and add a unique partial index
-with duplicates as (
+with duplicates as materialized (
   select user_id, row_number() over (partition by phone order by updated_at desc nulls last) as rn
   from public.profiles
   where phone is not null and phone <> ''
-)
-update public.profiles
-set phone = null
-where user_id in (select user_id from duplicates where rn > 1);
-
-with duplicates as (
-  select user_id, row_number() over (partition by phone order by updated_at desc nulls last) as rn
-  from public.profiles
-  where phone is not null and phone <> ''
+), cleared_profiles as (
+  update public.profiles
+  set phone = null
+  where user_id in (select user_id from duplicates where rn > 1)
+  returning user_id
 )
 update public.expense_group_members
 set phone = null
-where user_id in (select user_id from duplicates where rn > 1);
+where user_id in (select user_id from cleared_profiles);
 
 create unique index if not exists profiles_phone_unique_idx
   on public.profiles (phone)

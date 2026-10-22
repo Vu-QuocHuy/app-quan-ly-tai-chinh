@@ -197,16 +197,32 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                         ? Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              tab(true, tr.isEn ? 'Add income' : 'Thêm khoản thu'),
+                              tab(
+                                true,
+                                tr.isEn ? 'Add income' : 'Thêm khoản thu',
+                              ),
                               const SizedBox(height: 8),
-                              tab(false, tr.isEn ? 'Add expense' : 'Thêm khoản chi'),
+                              tab(
+                                false,
+                                tr.isEn ? 'Add expense' : 'Thêm khoản chi',
+                              ),
                             ],
                           )
                         : Row(
                             children: [
-                              Expanded(child: tab(true, tr.isEn ? 'Add income' : 'Thêm khoản thu')),
+                              Expanded(
+                                child: tab(
+                                  true,
+                                  tr.isEn ? 'Add income' : 'Thêm khoản thu',
+                                ),
+                              ),
                               const SizedBox(width: 8),
-                              Expanded(child: tab(false, tr.isEn ? 'Add expense' : 'Thêm khoản chi')),
+                              Expanded(
+                                child: tab(
+                                  false,
+                                  tr.isEn ? 'Add expense' : 'Thêm khoản chi',
+                                ),
+                              ),
                             ],
                           );
                   },
@@ -227,8 +243,8 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                             value <= 0 ||
                             value > 9007199254740991
                         ? (tr.isEn
-                            ? 'Enter an amount greater than 0.'
-                            : 'Nhập số tiền nguyên lớn hơn 0.')
+                              ? 'Enter an amount greater than 0.'
+                              : 'Nhập số tiền nguyên lớn hơn 0.')
                         : null;
                   },
                 ),
@@ -245,12 +261,17 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                   elevation: 4,
                   borderRadius: BorderRadius.circular(16),
                   menuMaxHeight: 280,
-                  dropdownColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                  dropdownColor: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHigh,
                   decoration: InputDecoration(
                     labelText: tr.isEn ? 'Category' : 'Danh mục',
                     floatingLabelBehavior: FloatingLabelBehavior.always,
                     prefixIcon: const Icon(Icons.category_outlined),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                   ),
                   hint: Text(
                     tr.isEn ? 'Select category' : 'Chọn danh mục',
@@ -308,15 +329,20 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                   onChanged: _saving
                       ? null
                       : (value) => setState(() => draft.categoryId = value),
-                  validator: (value) =>
-                      value == null ? (tr.isEn ? 'Select transaction category.' : 'Chọn danh mục giao dịch.') : null,
+                  validator: (value) => value == null
+                      ? (tr.isEn
+                            ? 'Select transaction category.'
+                            : 'Chọn danh mục giao dịch.')
+                      : null,
                 ),
                 if (categories.hasError)
                   TextButton(
                     onPressed: () => ref.invalidate(
                       _income ? incomeCategoriesProvider : categoriesProvider,
                     ),
-                    child: Text(tr.isEn ? 'Reload categories' : 'Tải lại danh mục'),
+                    child: Text(
+                      tr.isEn ? 'Reload categories' : 'Tải lại danh mục',
+                    ),
                   ),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -349,7 +375,9 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
                     labelText: tr.isEn ? 'Note' : 'Nội dung',
-                    hintText: tr.isEn ? 'Transaction notes' : 'Ghi chú về giao dịch',
+                    hintText: tr.isEn
+                        ? 'Transaction notes'
+                        : 'Ghi chú về giao dịch',
                   ),
                 ),
                 const SizedBox(height: 16),

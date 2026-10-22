@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 enum DebtType {
   /// Mình nợ người khác (Cần trả / Đi vay)
   iOwe,
@@ -8,10 +6,7 @@ enum DebtType {
   theyOwe,
 }
 
-enum DebtStatus {
-  active,
-  settled,
-}
+enum DebtStatus { active, settled }
 
 class DebtRecord {
   const DebtRecord({
@@ -40,7 +35,8 @@ class DebtRecord {
   final DebtStatus status;
   final DateTime? settledAt;
 
-  int get remainingMinor => (amountMinor - paidAmountMinor).clamp(0, amountMinor);
+  int get remainingMinor =>
+      (amountMinor - paidAmountMinor).clamp(0, amountMinor);
 
   bool get isSettled => status == DebtStatus.settled || remainingMinor <= 0;
 

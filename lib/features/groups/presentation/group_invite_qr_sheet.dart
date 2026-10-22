@@ -43,9 +43,9 @@ Future<void> showGroupInviteQrSheet(
               Center(
                 child: SelectableText(
                   inviteCode,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
               const SizedBox(height: 4),

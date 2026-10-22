@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/app/theme/app_theme.dart';
@@ -79,6 +80,10 @@ Future<void> _pumpMeter(
 }) async {
   await tester.pumpWidget(
     MaterialApp(
+      locale: const Locale('vi'),
+      supportedLocales: const [Locale('vi'), Locale('en')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
       theme: AppTheme.light(),
       home: Scaffold(
         body: Center(

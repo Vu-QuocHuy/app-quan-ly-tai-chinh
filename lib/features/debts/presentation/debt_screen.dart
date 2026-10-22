@@ -9,14 +9,12 @@ import '../../../app/theme/finance_colors.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
-import '../../../shared/dialogs/confirm_dialog.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_empty_state.dart';
 import '../../../shared/widgets/finmi_page_header.dart';
 import '../data/debt_notification_store.dart';
 import '../data/debt_repository.dart';
 import '../domain/debt_models.dart';
-import '../domain/debt_notification.dart';
 import 'debt_entry_sheet.dart';
 import 'debt_settle_dialog.dart';
 
@@ -42,7 +40,9 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
     _tabController = TabController(length: 4, vsync: this);
     _highlightedDebtId = widget.initialDebtId;
     _searchController.addListener(() {
-      setState(() => _searchQuery = _searchController.text.trim().toLowerCase());
+      setState(
+        () => _searchQuery = _searchController.text.trim().toLowerCase(),
+      );
     });
 
     // Nhắc nhở người dùng cập nhật số điện thoại lần đầu để nhận thông báo nợ
@@ -55,7 +55,9 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
       // Tự động chuyển tab tới khoản nợ được chỉ định qua initialDebtId
       if (widget.initialDebtId != null && mounted) {
         final debts = ref.read(debtsListProvider).valueOrNull ?? [];
-        final target = debts.where((d) => d.id == widget.initialDebtId).firstOrNull;
+        final target = debts
+            .where((d) => d.id == widget.initialDebtId)
+            .firstOrNull;
         if (target != null) {
           if (target.isSettled) {
             _tabController.animateTo(3);
@@ -72,10 +74,13 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
   @override
   void didUpdateWidget(DebtScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialDebtId != oldWidget.initialDebtId && widget.initialDebtId != null) {
+    if (widget.initialDebtId != oldWidget.initialDebtId &&
+        widget.initialDebtId != null) {
       setState(() => _highlightedDebtId = widget.initialDebtId);
       final debts = ref.read(debtsListProvider).valueOrNull ?? [];
-      final target = debts.where((d) => d.id == widget.initialDebtId).firstOrNull;
+      final target = debts
+          .where((d) => d.id == widget.initialDebtId)
+          .firstOrNull;
       if (target != null) {
         if (target.isSettled) {
           _tabController.animateTo(3);
@@ -104,10 +109,14 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
         filtered = filtered.where((d) => !d.isSettled).toList();
         break;
       case 1: // Cần thu (Người khác nợ tôi)
-        filtered = filtered.where((d) => !d.isSettled && d.type == DebtType.theyOwe).toList();
+        filtered = filtered
+            .where((d) => !d.isSettled && d.type == DebtType.theyOwe)
+            .toList();
         break;
       case 2: // Cần trả (Tôi nợ người khác)
-        filtered = filtered.where((d) => !d.isSettled && d.type == DebtType.iOwe).toList();
+        filtered = filtered
+            .where((d) => !d.isSettled && d.type == DebtType.iOwe)
+            .toList();
         break;
       case 3: // Đã thanh toán xong
         filtered = filtered.where((d) => d.isSettled).toList();
@@ -184,7 +193,10 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
         builder: (ctx, setDialogState) => AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.person_pin_circle_outlined, color: Theme.of(ctx).colorScheme.primary),
+              Icon(
+                Icons.person_pin_circle_outlined,
+                color: Theme.of(ctx).colorScheme.primary,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -227,7 +239,9 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
                   LengthLimitingTextInputFormatter(10),
                 ],
                 decoration: InputDecoration(
-                  labelText: tr.isEn ? 'Your Phone Number *' : 'Số điện thoại của bạn *',
+                  labelText: tr.isEn
+                      ? 'Your Phone Number *'
+                      : 'Số điện thoại của bạn *',
                   hintText: 'Ví dụ: 0987654321',
                   prefixIcon: const Icon(Icons.phone_android_rounded),
                   border: const OutlineInputBorder(),
@@ -250,14 +264,25 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
                 final name = nameCtrl.text.trim();
                 final phone = phoneCtrl.text.trim();
                 if (name.isEmpty) {
-                  setDialogState(() => errorText = tr.isEn ? 'Please enter your name' : 'Vui lòng nhập tên');
+                  setDialogState(
+                    () => errorText = tr.isEn
+                        ? 'Please enter your name'
+                        : 'Vui lòng nhập tên',
+                  );
                   return;
                 }
                 if (phone.length != 10 || !phone.startsWith('0')) {
-                  setDialogState(() => errorText = tr.isEn ? 'Invalid 10-digit phone number' : 'Số điện thoại phải gồm 10 chữ số (bắt đầu bằng 0)');
+                  setDialogState(
+                    () => errorText = tr.isEn
+                        ? 'Invalid 10-digit phone number'
+                        : 'Số điện thoại phải gồm 10 chữ số (bắt đầu bằng 0)',
+                  );
                   return;
                 }
-                await DebtNotificationStore.setCurrentUserPhone(phone, ref: ref);
+                await DebtNotificationStore.setCurrentUserPhone(
+                  phone,
+                  ref: ref,
+                );
                 if (ctx.mounted) {
                   Navigator.pop(dialogCtx, {'name': name, 'phone': phone});
                 }
@@ -279,8 +304,13 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
     var fullName = (user?.userMetadata?['full_name'] as String?)?.trim();
     var myPhone = await DebtNotificationStore.getCurrentUserPhone(ref);
 
+    if (!context.mounted) return;
+
     // Nếu người gửi chưa có SĐT hoặc chưa có Tên, mở dialog yêu cầu nhập
-    if (myPhone == null || myPhone.isEmpty || fullName == null || fullName.isEmpty) {
+    if (myPhone == null ||
+        myPhone.isEmpty ||
+        fullName == null ||
+        fullName.isEmpty) {
       final info = await _showSenderProfileDialog(
         context,
         currentName: fullName,
@@ -293,10 +323,12 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
 
     final senderName = (fullName != null && fullName.isNotEmpty)
         ? fullName
-        : (myPhone != null && myPhone.isNotEmpty ? myPhone! : 'Chủ nợ');
+        : (myPhone != null && myPhone.isNotEmpty ? myPhone : 'Chủ nợ');
 
     // Kiểm tra xem đã từng gửi thông báo chưa (để hiển thị thông báo gửi lại)
-    final existingNotif = await DebtNotificationStore.getNotificationForDebt(debt.id);
+    final existingNotif = await DebtNotificationStore.getNotificationForDebt(
+      debt.id,
+    );
     final isResend = existingNotif != null;
 
     final sent = await DebtNotificationStore.sendDebtNotification(
@@ -325,15 +357,15 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
           content: Text(
             sent
                 ? (isResend
-                    ? (tr.isEn
-                        ? 'Resent debt reminder in app to $phone'
-                        : 'Đã gửi lại thông báo nhắc nợ trong app tới $phone')
-                    : (tr.isEn
-                        ? 'Debt reminder sent in app to $phone'
-                        : 'Đã gửi thông báo nhắc nợ trong app tới $phone'))
+                      ? (tr.isEn
+                            ? 'Resent debt reminder in app to $phone'
+                            : 'Đã gửi lại thông báo nhắc nợ trong app tới $phone')
+                      : (tr.isEn
+                            ? 'Debt reminder sent in app to $phone'
+                            : 'Đã gửi thông báo nhắc nợ trong app tới $phone'))
                 : (tr.isEn
-                    ? 'Phone number $phone does not have a Finmi account'
-                    : 'Số điện thoại $phone chưa có tài khoản Finmi'),
+                      ? 'Phone number $phone does not have a Finmi account'
+                      : 'Số điện thoại $phone chưa có tài khoản Finmi'),
           ),
           action: sent
               ? null
@@ -342,7 +374,9 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
                   onPressed: () async {
                     final msg =
                         'Chào ${debt.personName}, $senderName nhắc bạn khoản nợ ${MoneyFormatter.format(debt.remainingMinor)}${debt.notes != null ? ' (${debt.notes})' : ''}. Cảm ơn bạn!';
-                    final uri = Uri.parse('sms:$phone?body=${Uri.encodeComponent(msg)}');
+                    final uri = Uri.parse(
+                      'sms:$phone?body=${Uri.encodeComponent(msg)}',
+                    );
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(uri);
                     }
@@ -354,8 +388,12 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
   }
 
   /// Hộp thoại xem và cập nhật số điện thoại cá nhân
-  Future<void> _showMyPhoneDialog(BuildContext context, {bool isFirstTime = false}) async {
-    final currentPhone = await DebtNotificationStore.getCurrentUserPhone(ref) ?? '';
+  Future<void> _showMyPhoneDialog(
+    BuildContext context, {
+    bool isFirstTime = false,
+  }) async {
+    final currentPhone =
+        await DebtNotificationStore.getCurrentUserPhone(ref) ?? '';
     if (!mounted || !context.mounted) return;
     final controller = TextEditingController(text: currentPhone);
 
@@ -364,7 +402,11 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
       builder: (dialogCtx) {
         String? errorText;
         return AlertDialog(
-          title: Text(isFirstTime ? 'Chào mừng bạn đến Quản lý nợ' : 'Số điện thoại cá nhân'),
+          title: Text(
+            isFirstTime
+                ? 'Chào mừng bạn đến Quản lý nợ'
+                : 'Số điện thoại cá nhân',
+          ),
           content: StatefulBuilder(
             builder: (ctx, setDialogState) => Column(
               mainAxisSize: MainAxisSize.min,
@@ -375,8 +417,8 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
                       ? 'Vui lòng nhập số điện thoại của bạn để nhận thông báo tự động khi bạn bè ghi nhận khoản nợ.'
                       : 'Mỗi người dùng có một số điện thoại duy nhất để nhận thông báo nợ trong app.',
                   style: Theme.of(dialogCtx).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(dialogCtx).colorScheme.onSurfaceVariant,
-                      ),
+                    color: Theme.of(dialogCtx).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -410,7 +452,9 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
             ),
             FilledButton(
               onPressed: () async {
-                final text = controller.text.replaceAll(RegExp(r'\s+'), '').trim();
+                final text = controller.text
+                    .replaceAll(RegExp(r'\s+'), '')
+                    .trim();
                 final messenger = ScaffoldMessenger.of(context);
                 if (text.isEmpty) {
                   messenger.clearSnackBars();
@@ -427,7 +471,9 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
                   messenger.clearSnackBars();
                   messenger.showSnackBar(
                     const SnackBar(
-                      content: Text('Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.'),
+                      content: Text(
+                        'Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.',
+                      ),
                       backgroundColor: Colors.red,
                       duration: Duration(seconds: 3),
                       behavior: SnackBarBehavior.floating,
@@ -437,15 +483,18 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
                 }
 
                 // Kiểm tra xem số điện thoại đã được dùng bởi tài khoản khác chưa
-                final isTaken = await DebtNotificationStore.isPhoneTakenByAnotherUser(
-                  text,
-                  ref: ref,
-                );
+                final isTaken =
+                    await DebtNotificationStore.isPhoneTakenByAnotherUser(
+                      text,
+                      ref: ref,
+                    );
                 if (isTaken) {
                   messenger.clearSnackBars();
                   messenger.showSnackBar(
                     const SnackBar(
-                      content: Text('Số điện thoại này đã được sử dụng bởi tài khoản khác.'),
+                      content: Text(
+                        'Số điện thoại này đã được sử dụng bởi tài khoản khác.',
+                      ),
                       backgroundColor: Colors.red,
                       duration: Duration(seconds: 3),
                       behavior: SnackBarBehavior.floating,
@@ -477,128 +526,6 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
     );
   }
 
-  /// BottomSheet danh sách thông báo nợ nhận được qua số điện thoại
-  void _showNotificationsSheet(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      showDragHandle: true,
-      useSafeArea: true,
-      builder: (ctx) => Consumer(
-        builder: (ctx, ref, _) {
-          final notifsAsync = ref.watch(debtNotificationsProvider);
-          final myPhoneAsync = ref.watch(userPhoneProvider);
-
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Thông báo nợ',
-                      style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    Text(
-                      myPhoneAsync.valueOrNull != null
-                          ? 'SĐT: ${myPhoneAsync.valueOrNull}'
-                          : '',
-                      style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                notifsAsync.when(
-                  loading: () => const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
-                  error: (e, _) => Center(child: Text('Lỗi: $e')),
-                  data: (notifs) {
-                    if (notifs.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Center(
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.notifications_off_outlined,
-                                size: 48,
-                                color: Theme.of(ctx).colorScheme.outlineVariant,
-                              ),
-                              const SizedBox(height: 12),
-                              const Text('Chưa có thông báo nợ nào gửi đến bạn.'),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-
-                    return ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(ctx).size.height * 0.5,
-                      ),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: notifs.length,
-                        separatorBuilder: (_, _) => const Divider(height: 1),
-                        itemBuilder: (ctx, idx) {
-                          final item = notifs[idx];
-                          return ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: Theme.of(ctx)
-                                  .colorScheme
-                                  .primaryContainer,
-                              child: Icon(
-                                Icons.arrow_upward_rounded,
-                                color: Theme.of(ctx).colorScheme.primary,
-                              ),
-                            ),
-                            title: Text(
-                              '${item.senderName} ghi bạn nợ ${MoneyFormatter.format(item.amountMinor)}',
-                              style: TextStyle(
-                                fontWeight: item.isRead ? FontWeight.normal : FontWeight.bold,
-                              ),
-                            ),
-                            subtitle: Text(
-                              '${item.notes != null && item.notes!.isNotEmpty ? 'Lý do: ${item.notes}\n' : ''}'
-                              'Hạn: ${item.dueDate != null ? DateFormat('dd/MM/yyyy').format(item.dueDate!) : 'Không có'} • '
-                              '${DateFormat('dd/MM/yyyy HH:mm').format(item.createdAt)}',
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            trailing: !item.isRead
-                                ? TextButton(
-                                    onPressed: () async {
-                                      await DebtNotificationStore.markAsRead(item.id);
-                                      ref.invalidate(debtNotificationsProvider);
-                                    },
-                                    child: const Text('Đã hiểu'),
-                                  )
-                                : const Icon(Icons.check, size: 16, color: Colors.grey),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -606,7 +533,8 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
     final debtsAsync = ref.watch(debtsListProvider);
     final notifsAsync = ref.watch(debtNotificationsProvider);
 
-    final unreadCount = notifsAsync.valueOrNull?.where((n) => !n.isRead).length ?? 0;
+    final unreadCount =
+        notifsAsync.valueOrNull?.where((n) => !n.isRead).length ?? 0;
 
     final tr = context.tr;
     return Scaffold(
@@ -684,8 +612,13 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
                   indicatorColor: theme.colorScheme.primary,
                   tabs: [
                     Tab(text: tr.debtAll),
-                    Tab(text: '${tr.debtToCollect} (${summary.activeReceivableCount})'),
-                    Tab(text: '${tr.debtToPay} (${summary.activePayableCount})'),
+                    Tab(
+                      text:
+                          '${tr.debtToCollect} (${summary.activeReceivableCount})',
+                    ),
+                    Tab(
+                      text: '${tr.debtToPay} (${summary.activePayableCount})',
+                    ),
                     Tab(text: tr.debtSettled),
                   ],
                 ),
@@ -809,22 +742,34 @@ class _DebtScreenState extends ConsumerState<DebtScreen>
     );
   }
 
-  Widget _buildDebtList(BuildContext context, List<DebtRecord> debts, int tabIndex) {
+  Widget _buildDebtList(
+    BuildContext context,
+    List<DebtRecord> debts,
+    int tabIndex,
+  ) {
     final tr = context.tr;
     if (debts.isEmpty) {
       final messages = [
-        tr.isEn ? 'No active debts to settle.' : 'Không có khoản nợ nào cần thanh toán.',
-        tr.isEn ? 'Nobody owes you money right now.' : 'Hiện không ai nợ tiền bạn.',
-        tr.isEn ? 'You do not owe anyone right now.' : 'Bạn không nợ ai khoản nào.',
-        tr.isEn ? 'No debts settled yet.' : 'Chưa có khoản nợ nào được thanh toán.',
+        tr.isEn
+            ? 'No active debts to settle.'
+            : 'Không có khoản nợ nào cần thanh toán.',
+        tr.isEn
+            ? 'Nobody owes you money right now.'
+            : 'Hiện không ai nợ tiền bạn.',
+        tr.isEn
+            ? 'You do not owe anyone right now.'
+            : 'Bạn không nợ ai khoản nào.',
+        tr.isEn
+            ? 'No debts settled yet.'
+            : 'Chưa có khoản nợ nào được thanh toán.',
       ];
       return AppEmptyState(
         icon: Icons.check_circle_outline_rounded,
         title: tr.isEn ? 'All Clear' : 'Trống trải',
         message: _searchQuery.isNotEmpty
             ? (tr.isEn
-                ? 'No debts matching "$_searchQuery".'
-                : 'Không tìm thấy khoản nợ khớp với từ khóa "$_searchQuery".')
+                  ? 'No debts matching "$_searchQuery".'
+                  : 'Không tìm thấy khoản nợ khớp với từ khóa "$_searchQuery".')
             : messages[tabIndex],
       );
     }
@@ -893,7 +838,11 @@ class _DebtCard extends ConsumerWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.visibility_outlined, size: 12, color: theme.colorScheme.primary),
+                  Icon(
+                    Icons.visibility_outlined,
+                    size: 12,
+                    color: theme.colorScheme.primary,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     tr.isEn ? 'Viewing Debt' : 'Khoản nợ đang xem',
@@ -917,7 +866,9 @@ class _DebtCard extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  isTheyOwe ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                  isTheyOwe
+                      ? Icons.arrow_downward_rounded
+                      : Icons.arrow_upward_rounded,
                   color: color,
                   size: 22,
                 ),
@@ -948,7 +899,10 @@ class _DebtCard extends ConsumerWidget {
               ),
               if (debt.isSettled)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: finance.income.color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
@@ -965,7 +919,10 @@ class _DebtCard extends ConsumerWidget {
               else if (isTheyOwe && notifStatus != null) ...[
                 if (notifStatus.isSaved)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: finance.income.color.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(6),
@@ -973,7 +930,11 @@ class _DebtCard extends ConsumerWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.check_circle_rounded, size: 12, color: finance.income.color),
+                        Icon(
+                          Icons.check_circle_rounded,
+                          size: 12,
+                          color: finance.income.color,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           tr.isEn ? 'Saved to debts' : 'Đối phương đã lưu nợ',
@@ -988,7 +949,10 @@ class _DebtCard extends ConsumerWidget {
                   )
                 else
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.amber.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
@@ -996,7 +960,11 @@ class _DebtCard extends ConsumerWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.hourglass_top_rounded, size: 12, color: Colors.amber.shade900),
+                        Icon(
+                          Icons.hourglass_top_rounded,
+                          size: 12,
+                          color: Colors.amber.shade900,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           tr.isEn ? 'Pending save' : 'Chờ đối phương lưu nợ',
@@ -1011,7 +979,10 @@ class _DebtCard extends ConsumerWidget {
                   ),
               ] else if (debt.isOverdue)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: finance.expense.color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
@@ -1032,10 +1003,16 @@ class _DebtCard extends ConsumerWidget {
                   if (val == 'delete') onDelete();
                 },
                 itemBuilder: (context) => [
-                  PopupMenuItem(value: 'edit', child: Text(tr.isEn ? 'Edit' : 'Chỉnh sửa')),
+                  PopupMenuItem(
+                    value: 'edit',
+                    child: Text(tr.isEn ? 'Edit' : 'Chỉnh sửa'),
+                  ),
                   PopupMenuItem(
                     value: 'delete',
-                    child: Text(tr.isEn ? 'Delete' : 'Xóa', style: const TextStyle(color: Colors.red)),
+                    child: Text(
+                      tr.isEn ? 'Delete' : 'Xóa',
+                      style: const TextStyle(color: Colors.red),
+                    ),
                   ),
                 ],
               ),
@@ -1057,7 +1034,9 @@ class _DebtCard extends ConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    MoneyFormatter.format(debt.isSettled ? debt.amountMinor : debt.remainingMinor),
+                    MoneyFormatter.format(
+                      debt.isSettled ? debt.amountMinor : debt.remainingMinor,
+                    ),
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: debt.isSettled
@@ -1071,11 +1050,17 @@ class _DebtCard extends ConsumerWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (isTheyOwe && debt.phoneNumber != null && debt.phoneNumber!.isNotEmpty) ...[
+                    if (isTheyOwe &&
+                        debt.phoneNumber != null &&
+                        debt.phoneNumber!.isNotEmpty) ...[
                       IconButton.outlined(
                         tooltip: notifStatus != null && !notifStatus.isSaved
-                            ? (tr.isEn ? 'Resend debt reminder' : 'Gửi lại thông báo nhắc nợ')
-                            : (tr.isEn ? 'Remind via App / SMS' : 'Nhắc nợ qua App / SMS'),
+                            ? (tr.isEn
+                                  ? 'Resend debt reminder'
+                                  : 'Gửi lại thông báo nhắc nợ')
+                            : (tr.isEn
+                                  ? 'Remind via App / SMS'
+                                  : 'Nhắc nợ qua App / SMS'),
                         icon: Icon(
                           notifStatus != null && !notifStatus.isSaved
                               ? Icons.replay_rounded
@@ -1096,8 +1081,14 @@ class _DebtCard extends ConsumerWidget {
                     FilledButton.icon(
                       onPressed: onSettle,
                       style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       icon: const Icon(Icons.check_circle_outline, size: 16),
                       label: Text(
@@ -1110,7 +1101,10 @@ class _DebtCard extends ConsumerWidget {
                 )
               else
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: finance.income.color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
@@ -1163,12 +1157,15 @@ class _DebtCard extends ConsumerWidget {
               ],
             ),
           ],
-          if (debt.dueDate != null || (debt.notes != null && debt.notes!.isNotEmpty)) ...[
+          if (debt.dueDate != null ||
+              (debt.notes != null && debt.notes!.isNotEmpty)) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.45,
+                ),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -1194,7 +1191,12 @@ class _DebtCard extends ConsumerWidget {
                     ),
                     if (debt.notes != null && debt.notes!.isNotEmpty) ...[
                       const SizedBox(width: 8),
-                      Text('•', style: TextStyle(color: theme.colorScheme.outlineVariant)),
+                      Text(
+                        '•',
+                        style: TextStyle(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
+                      ),
                       const SizedBox(width: 8),
                     ],
                   ],
@@ -1257,10 +1259,7 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    return ColoredBox(
-      color: _backgroundColor,
-      child: _tabBar,
-    );
+    return ColoredBox(color: _backgroundColor, child: _tabBar);
   }
 
   @override

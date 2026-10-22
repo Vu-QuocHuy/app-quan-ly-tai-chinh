@@ -6,15 +6,11 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/localization/app_strings.dart';
 import '../../../app/theme/finance_colors.dart';
-import '../../../core/utils/money_formatter.dart';
 import '../data/debt_notification_store.dart';
 import '../data/debt_repository.dart';
 import '../domain/debt_models.dart';
 
-Future<void> showDebtEntrySheet(
-  BuildContext context, {
-  DebtRecord? existing,
-}) {
+Future<void> showDebtEntrySheet(BuildContext context, {DebtRecord? existing}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -90,7 +86,8 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
     final record = DebtRecord(
       id: existing?.id ?? const Uuid().v4(),
       personName: _nameController.text.trim(),
-      phoneNumber: (_type == DebtType.theyOwe && _phoneController.text.trim().isNotEmpty)
+      phoneNumber:
+          (_type == DebtType.theyOwe && _phoneController.text.trim().isNotEmpty)
           ? _phoneController.text.trim()
           : null,
       type: _type,
@@ -98,7 +95,9 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
       paidAmountMinor: existing?.paidAmountMinor ?? 0,
       dueDate: _dueDate,
       createdAt: existing?.createdAt ?? DateTime.now(),
-      notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+      notes: _notesController.text.trim().isEmpty
+          ? null
+          : _notesController.text.trim(),
       status: existing?.status ?? DebtStatus.active,
       settledAt: existing?.settledAt,
     );
@@ -172,12 +171,16 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
                       tr.isEn ? 'They owe me' : 'Người khác nợ tôi',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: _type == DebtType.theyOwe ? null : context.finance.income.color,
+                        color: _type == DebtType.theyOwe
+                            ? null
+                            : context.finance.income.color,
                       ),
                     ),
                     icon: Icon(
                       Icons.arrow_downward_rounded,
-                      color: _type == DebtType.theyOwe ? null : context.finance.income.color,
+                      color: _type == DebtType.theyOwe
+                          ? null
+                          : context.finance.income.color,
                     ),
                   ),
                   ButtonSegment<DebtType>(
@@ -186,12 +189,16 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
                       tr.isEn ? 'I owe them' : 'Tôi nợ người khác',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: _type == DebtType.iOwe ? null : context.finance.expense.color,
+                        color: _type == DebtType.iOwe
+                            ? null
+                            : context.finance.expense.color,
                       ),
                     ),
                     icon: Icon(
                       Icons.arrow_upward_rounded,
-                      color: _type == DebtType.iOwe ? null : context.finance.expense.color,
+                      color: _type == DebtType.iOwe
+                          ? null
+                          : context.finance.expense.color,
                     ),
                   ),
                 ],
@@ -208,15 +215,16 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
                   labelText: _type == DebtType.theyOwe
                       ? (tr.isEn ? 'Debtor name *' : 'Tên người nợ *')
                       : (tr.isEn ? 'Creditor name *' : 'Tên chủ nợ *'),
-                  hintText: tr.isEn ? 'e.g. Alex, Sam...' : 'Ví dụ: Anh Nam, Bạn Linh...',
+                  hintText: tr.isEn
+                      ? 'e.g. Alex, Sam...'
+                      : 'Ví dụ: Anh Nam, Bạn Linh...',
                   prefixIcon: const Icon(Icons.person_outline),
                   border: const OutlineInputBorder(),
                   isDense: true,
                 ),
-                validator: (val) =>
-                    val == null || val.trim().isEmpty
-                        ? (tr.isEn ? 'Please enter a name' : 'Vui lòng nhập tên')
-                        : null,
+                validator: (val) => val == null || val.trim().isEmpty
+                    ? (tr.isEn ? 'Please enter a name' : 'Vui lòng nhập tên')
+                    : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -233,7 +241,9 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
                 validator: (val) {
                   final parsed = int.tryParse(val?.trim() ?? '');
                   if (parsed == null || parsed <= 0) {
-                    return tr.isEn ? 'Please enter a valid amount' : 'Vui lòng nhập số tiền hợp lệ';
+                    return tr.isEn
+                        ? 'Please enter a valid amount'
+                        : 'Vui lòng nhập số tiền hợp lệ';
                   }
                   return null;
                 },
@@ -248,7 +258,9 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
                     LengthLimitingTextInputFormatter(10),
                   ],
                   decoration: InputDecoration(
-                    labelText: tr.isEn ? 'Phone number (optional)' : 'Số điện thoại (tùy chọn)',
+                    labelText: tr.isEn
+                        ? 'Phone number (optional)'
+                        : 'Số điện thoại (tùy chọn)',
                     hintText: '0912345678',
                     prefixIcon: const Icon(Icons.phone_outlined),
                     border: const OutlineInputBorder(),
@@ -260,8 +272,8 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
                     return RegExp(r'^0[0-9]{9}$').hasMatch(phone)
                         ? null
                         : (tr.isEn
-                            ? 'Phone number must be 10 digits starting with 0.'
-                            : 'Số điện thoại gồm đúng 10 số và bắt đầu bằng 0.');
+                              ? 'Phone number must be 10 digits starting with 0.'
+                              : 'Số điện thoại gồm đúng 10 số và bắt đầu bằng 0.');
                   },
                 ),
               ],
@@ -270,8 +282,12 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
                 controller: _notesController,
                 maxLines: 2,
                 decoration: InputDecoration(
-                  labelText: tr.isEn ? 'Debt note / reason' : 'Ghi chú lý do vay/nợ',
-                  hintText: tr.isEn ? 'e.g. Dinner, shopping advance...' : 'Ví dụ: Tiền ăn tối, ứng tiền mua đồ...',
+                  labelText: tr.isEn
+                      ? 'Debt note / reason'
+                      : 'Ghi chú lý do vay/nợ',
+                  hintText: tr.isEn
+                      ? 'e.g. Dinner, shopping advance...'
+                      : 'Ví dụ: Tiền ăn tối, ứng tiền mua đồ...',
                   prefixIcon: const Icon(Icons.notes_outlined),
                   border: const OutlineInputBorder(),
                   isDense: true,
@@ -284,7 +300,10 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
                     child: OutlinedButton.icon(
                       onPressed: _pickDueDate,
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -292,7 +311,9 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
                       icon: const Icon(Icons.calendar_today_outlined, size: 18),
                       label: Text(
                         _dueDate == null
-                            ? (tr.isEn ? 'Select due date' : 'Chọn ngày hẹn trả')
+                            ? (tr.isEn
+                                  ? 'Select due date'
+                                  : 'Chọn ngày hẹn trả')
                             : '${tr.isEn ? 'Due' : 'Hạn'}: ${DateFormat('dd/MM/yyyy').format(_dueDate!)}',
                       ),
                     ),

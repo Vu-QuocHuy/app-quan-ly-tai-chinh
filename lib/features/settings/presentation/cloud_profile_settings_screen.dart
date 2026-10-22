@@ -47,7 +47,10 @@ class _CloudProfileSettingsScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEn ? 'Restore Customizations' : 'Khôi phục tùy chỉnh', maxLines: 3),
+        title: Text(
+          isEn ? 'Restore Customizations' : 'Khôi phục tùy chỉnh',
+          maxLines: 3,
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
@@ -111,13 +114,16 @@ class _CloudProfileSettingsScreenState
                     )) {
                       ThemeMode.light => isEn ? 'Light' : 'Sáng',
                       ThemeMode.dark => isEn ? 'Dark' : 'Tối',
-                      ThemeMode.system => isEn ? 'System default' : 'Theo hệ thống',
+                      ThemeMode.system =>
+                        isEn ? 'System default' : 'Theo hệ thống',
                     }),
                   ),
                   ListTile(
                     leading: const Icon(Icons.notifications_active_outlined),
                     title: Text(
-                      isEn ? 'Saved Budget Alerts' : 'Cảnh báo ngân sách đã lưu',
+                      isEn
+                          ? 'Saved Budget Alerts'
+                          : 'Cảnh báo ngân sách đã lưu',
                       maxLines: 3,
                     ),
                     subtitle: Text(

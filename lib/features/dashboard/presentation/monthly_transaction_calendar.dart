@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/localization/app_strings.dart';
 import '../../../app/theme/finance_colors.dart';
-import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../income/data/income_repository.dart';
@@ -89,13 +88,9 @@ class MonthlyTransactionCalendar extends StatelessWidget {
               return _CalendarDay(
                 date: date,
                 selected: DateUtils.isSameDay(selectedDay, date),
-                net:
-                    (incomeByDay[day] ?? 0) -
-                    (snapshot.dailyTotals[day] ?? 0),
+                net: (incomeByDay[day] ?? 0) - (snapshot.dailyTotals[day] ?? 0),
                 positiveColor: finance.income.color,
-                negativeColor: Theme.of(
-                  context,
-                ).colorScheme.error,
+                negativeColor: Theme.of(context).colorScheme.error,
                 onTap: () => onSelectDay(date),
               );
             },
@@ -141,15 +136,19 @@ class _CalendarDay extends StatelessWidget {
             color: selected
                 ? theme.colorScheme.primaryContainer
                 : (isToday
-                    ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
-                    : theme.colorScheme.surfaceContainerLow),
+                      ? theme.colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.5,
+                        )
+                      : theme.colorScheme.surfaceContainerLow),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: selected
                   ? theme.colorScheme.primary
                   : (isToday
-                      ? theme.colorScheme.outline
-                      : theme.colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                        ? theme.colorScheme.outline
+                        : theme.colorScheme.outlineVariant.withValues(
+                            alpha: 0.4,
+                          )),
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -160,7 +159,9 @@ class _CalendarDay extends StatelessWidget {
               Text(
                 '${date.day}',
                 style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: selected || isToday ? FontWeight.w800 : FontWeight.w500,
+                  fontWeight: selected || isToday
+                      ? FontWeight.w800
+                      : FontWeight.w500,
                   color: selected
                       ? theme.colorScheme.onPrimaryContainer
                       : theme.colorScheme.onSurface,

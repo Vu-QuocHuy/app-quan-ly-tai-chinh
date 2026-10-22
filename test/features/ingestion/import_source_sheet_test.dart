@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/features/ingestion/presentation/import_source_sheet.dart';
@@ -7,7 +8,12 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: ImportSourceSheet())),
+      const MaterialApp(
+        locale: Locale('vi'),
+        supportedLocales: [Locale('vi'), Locale('en')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        home: Scaffold(body: ImportSourceSheet()),
+      ),
     );
 
     expect(find.text('Thêm khoản thu'), findsOneWidget);

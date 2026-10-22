@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -38,6 +39,10 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
           home: Scaffold(
             body: Builder(
               builder: (context) => FilledButton(
@@ -100,6 +105,10 @@ void main() {
             ),
           ],
           child: MaterialApp(
+            locale: const Locale('vi'),
+            supportedLocales: const [Locale('vi'), Locale('en')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
             home: Scaffold(
               body: Builder(
                 builder: (context) => FilledButton(

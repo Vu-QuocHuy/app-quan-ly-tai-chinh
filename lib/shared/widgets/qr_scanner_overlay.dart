@@ -97,10 +97,7 @@ class _QrScannerOverlayPainter extends CustomPainter {
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
     final cutoutPath = Path()
       ..addRRect(
-        RRect.fromRectAndRadius(
-          scanWindow,
-          Radius.circular(borderRadius),
-        ),
+        RRect.fromRectAndRadius(scanWindow, Radius.circular(borderRadius)),
       );
 
     final overlayPath = Path.combine(
@@ -121,10 +118,7 @@ class _QrScannerOverlayPainter extends CustomPainter {
       ..strokeWidth = borderWidth;
 
     canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        scanWindow,
-        Radius.circular(borderRadius),
-      ),
+      RRect.fromRectAndRadius(scanWindow, Radius.circular(borderRadius)),
       borderPaint,
     );
   }

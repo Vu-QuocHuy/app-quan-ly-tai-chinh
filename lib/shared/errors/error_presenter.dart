@@ -24,9 +24,10 @@ String friendlyMessage(Object error, {bool isEn = false}) {
     // AppException đã mang sẵn văn bản sạch.
     final AppException e => e.message,
 
-    final SocketException _ => isEn
-        ? 'No network connection. Data is still saved on your device.'
-        : 'Không có kết nối mạng. Dữ liệu vẫn được lưu trên máy của bạn.',
+    final SocketException _ =>
+      isEn
+          ? 'No network connection. Data is still saved on your device.'
+          : 'Không có kết nối mạng. Dữ liệu vẫn được lưu trên máy của bạn.',
 
     final AuthException e => () {
       final msg = e.message.toLowerCase();
@@ -38,54 +39,67 @@ String friendlyMessage(Object error, {bool isEn = false}) {
             : 'Đăng nhập Google chưa được kích hoạt trên hệ thống máy chủ (Supabase). Vui lòng bật Google Provider trong Supabase Dashboard.';
       }
       return switch (e.statusCode) {
-        '400' => isEn
-            ? 'Invalid email or password.'
-            : 'Email hoặc mật khẩu chưa đúng.',
-        '422' => isEn
-            ? 'Invalid account information. Please check and try again.'
-            : 'Thông tin tài khoản chưa hợp lệ. Hãy kiểm tra và thử lại.',
-        '429' => isEn
-            ? 'Too many attempts. Please wait a minute and try again.'
-            : 'Bạn thử quá nhiều lần. Hãy chờ một phút rồi thử lại.',
-        _ => isEn
-            ? 'Authentication could not be completed. Please check your info and try again.'
-            : 'Không thể hoàn tất xác thực. Hãy kiểm tra thông tin và thử lại.',
+        '400' =>
+          isEn
+              ? 'Invalid email or password.'
+              : 'Email hoặc mật khẩu chưa đúng.',
+        '422' =>
+          isEn
+              ? 'Invalid account information. Please check and try again.'
+              : 'Thông tin tài khoản chưa hợp lệ. Hãy kiểm tra và thử lại.',
+        '429' =>
+          isEn
+              ? 'Too many attempts. Please wait a minute and try again.'
+              : 'Bạn thử quá nhiều lần. Hãy chờ một phút rồi thử lại.',
+        _ =>
+          isEn
+              ? 'Authentication could not be completed. Please check your info and try again.'
+              : 'Không thể hoàn tất xác thực. Hãy kiểm tra thông tin và thử lại.',
       };
     }(),
 
     final PostgrestException e => switch (e.code) {
-      'PGRST301' => isEn
-          ? 'Login session expired. Please sign in again.'
-          : 'Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.',
+      'PGRST301' =>
+        isEn
+            ? 'Login session expired. Please sign in again.'
+            : 'Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.',
       // UF001: RPC chủ động gửi câu tiếng Việt/thông điệp cho người dùng.
       'UF001' => e.message,
-      '23505' => isEn
-          ? 'This data already exists on the server.'
-          : 'Dữ liệu này đã tồn tại trên máy chủ.',
-      _ => isEn
-          ? 'Server rejected the request. Local data is not affected.'
-          : 'Máy chủ từ chối yêu cầu. Dữ liệu trên máy không bị ảnh hưởng.',
+      '23505' =>
+        isEn
+            ? 'This data already exists on the server.'
+            : 'Dữ liệu này đã tồn tại trên máy chủ.',
+      _ =>
+        isEn
+            ? 'Server rejected the request. Local data is not affected.'
+            : 'Máy chủ từ chối yêu cầu. Dữ liệu trên máy không bị ảnh hưởng.',
     },
 
-    final StorageException _ => isEn
-        ? 'Could not download backup file. Please check connection and try again.'
-        : 'Không tải được tệp sao lưu. Hãy kiểm tra kết nối rồi thử lại.',
+    final StorageException _ =>
+      isEn
+          ? 'Could not download backup file. Please check connection and try again.'
+          : 'Không tải được tệp sao lưu. Hãy kiểm tra kết nối rồi thử lại.',
 
-    final MissingPluginException _ => isEn
-        ? 'This feature is not supported on the current platform.'
-        : 'Tính năng này chưa hỗ trợ trên nền tảng hiện tại.',
+    final MissingPluginException _ =>
+      isEn
+          ? 'This feature is not supported on the current platform.'
+          : 'Tính năng này chưa hỗ trợ trên nền tảng hiện tại.',
 
     final PlatformException e =>
-      e.message ?? (isEn ? 'Device denied this operation.' : 'Thiết bị từ chối thao tác này.'),
+      e.message ??
+          (isEn
+              ? 'Device denied this operation.'
+              : 'Thiết bị từ chối thao tác này.'),
 
     // FormatException và StateError trong repo này đã mang câu tiếng Việt —
     // chỉ cần bóc cái tiền tố kiểu ra.
     final FormatException e => e.message.toString(),
     final StateError e => e.message,
 
-    _ => isEn
-        ? 'An error occurred. Please try again.'
-        : 'Đã có lỗi xảy ra. Hãy thử lại.',
+    _ =>
+      isEn
+          ? 'An error occurred. Please try again.'
+          : 'Đã có lỗi xảy ra. Hãy thử lại.',
   };
 }
 

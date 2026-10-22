@@ -155,7 +155,9 @@ class _AppShellState extends ConsumerState<AppShell>
       if (mounted) {
         setState(() => _initialSyncComplete = true);
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) unawaited(showCompleteProfileDialogIfNeeded(context, ref));
+          if (mounted) {
+            unawaited(showCompleteProfileDialogIfNeeded(context, ref));
+          }
         });
       }
       return;
@@ -176,7 +178,9 @@ class _AppShellState extends ConsumerState<AppShell>
           unawaited(_processDueRecurringIncomes());
           if (!kIsWeb) unawaited(_resumePendingImports());
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) unawaited(showCompleteProfileDialogIfNeeded(context, ref));
+            if (mounted) {
+              unawaited(showCompleteProfileDialogIfNeeded(context, ref));
+            }
           });
           return;
         }
@@ -317,7 +321,8 @@ class _AppShellState extends ConsumerState<AppShell>
     final width = MediaQuery.sizeOf(context).width;
     final pendingQrPayment = ref.watch(pendingQrPaymentDraftProvider);
     final hasActiveModal = ref.watch(hasActiveModalProvider).hasModal;
-    final hideAssistant = ref.watch(hideFloatingAssistantProvider) || hasActiveModal;
+    final hideAssistant =
+        ref.watch(hideFloatingAssistantProvider) || hasActiveModal;
     final useRail = AppBreakpoints.useRail(width);
     final largeText = MediaQuery.textScalerOf(context).scale(12) / 12 >= 1.3;
     final wrapNavigation = largeText || width < 360;

@@ -234,9 +234,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           MaterialPageRoute(
             builder: (_) => QrScanScreen(
               title: tr.scanInviteQr,
-              validate: (raw) => InviteLink.parse(raw) == null
-                  ? tr.invalidQrInvite
-                  : null,
+              validate: (raw) =>
+                  InviteLink.parse(raw) == null ? tr.invalidQrInvite : null,
             ),
           ),
         );
@@ -413,14 +412,21 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: context.tr.isEn ? 'Back to groups' : 'Quay lại danh sách nhóm',
+          tooltip: context.tr.isEn
+              ? 'Back to groups'
+              : 'Quay lại danh sách nhóm',
           onPressed: _goBack,
           icon: const Icon(Icons.arrow_back),
         ),
-        title: Text(details.asData?.value.group.name ?? (context.tr.isEn ? 'Group details' : 'Chi tiết nhóm')),
+        title: Text(
+          details.asData?.value.group.name ??
+              (context.tr.isEn ? 'Group details' : 'Chi tiết nhóm'),
+        ),
         actions: [
           IconButton(
-            tooltip: context.tr.isEn ? 'Refresh group' : 'Làm mới chi tiết nhóm',
+            tooltip: context.tr.isEn
+                ? 'Refresh group'
+                : 'Làm mới chi tiết nhóm',
             onPressed: _refresh,
             icon: const Icon(Icons.refresh),
           ),
@@ -933,8 +939,7 @@ class _GroupDetails extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        if (details.expenses.isEmpty)
-          Text(context.tr.noSharedBills),
+        if (details.expenses.isEmpty) Text(context.tr.noSharedBills),
         for (final expense in details.expenses.take(
           showAllExpenses ? details.expenses.length : 3,
         ))
@@ -1369,9 +1374,15 @@ class _SettlementSuggestions extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Text(
                   context.tr.transferText(
-                    names[transfer.fromUserId] ?? (context.tr.isEn ? 'Deleted account' : 'Tài khoản đã xóa'),
+                    names[transfer.fromUserId] ??
+                        (context.tr.isEn
+                            ? 'Deleted account'
+                            : 'Tài khoản đã xóa'),
                     MoneyFormatter.format(transfer.amountMinor),
-                    names[transfer.toUserId] ?? (context.tr.isEn ? 'Deleted account' : 'Tài khoản đã xóa'),
+                    names[transfer.toUserId] ??
+                        (context.tr.isEn
+                            ? 'Deleted account'
+                            : 'Tài khoản đã xóa'),
                   ),
                 ),
               ),
@@ -1409,11 +1420,15 @@ class _MemberTile extends StatelessWidget {
       minVerticalPadding: 10,
       leading: const Icon(Icons.person_outline),
       title: Text(
-        member.userId == currentUserId ? '$displayName (${context.tr.youTag})' : displayName,
+        member.userId == currentUserId
+            ? '$displayName (${context.tr.youTag})'
+            : displayName,
       ),
       subtitle: Text(
         [
-          member.role == 'owner' ? context.tr.groupRoleOwner : context.tr.groupRoleMember,
+          member.role == 'owner'
+              ? context.tr.groupRoleOwner
+              : context.tr.groupRoleMember,
           if (member.phone?.isNotEmpty == true) member.phone!,
         ].join(' · '),
       ),
@@ -1520,7 +1535,9 @@ class _ExpenseCard extends StatelessWidget {
                 ),
                 if (canManage && !hasSettlement)
                   PopupMenuButton<String>(
-                    tooltip: context.tr.isEn ? 'Manage bill' : 'Quản lý khoản chi',
+                    tooltip: context.tr.isEn
+                        ? 'Manage bill'
+                        : 'Quản lý khoản chi',
                     onSelected: (value) {
                       if (value == 'invite') {
                         onShowBillQr();
@@ -1535,21 +1552,36 @@ class _ExpenseCard extends StatelessWidget {
                         value: 'invite',
                         child: ListTile(
                           leading: const Icon(Icons.qr_code_2),
-                          title: Text(context.tr.isEn ? 'Bill invite QR' : 'QR mời vào bill', maxLines: 3),
+                          title: Text(
+                            context.tr.isEn
+                                ? 'Bill invite QR'
+                                : 'QR mời vào bill',
+                            maxLines: 3,
+                          ),
                         ),
                       ),
                       PopupMenuItem(
                         value: 'edit',
                         child: ListTile(
                           leading: const Icon(Icons.edit_outlined),
-                          title: Text(context.tr.isEn ? 'Edit shared bill' : 'Sửa khoản chi', maxLines: 3),
+                          title: Text(
+                            context.tr.isEn
+                                ? 'Edit shared bill'
+                                : 'Sửa khoản chi',
+                            maxLines: 3,
+                          ),
                         ),
                       ),
                       PopupMenuItem(
                         value: 'delete',
                         child: ListTile(
                           leading: const Icon(Icons.delete_outline),
-                          title: Text(context.tr.isEn ? 'Delete shared bill' : 'Xóa khoản chi', maxLines: 3),
+                          title: Text(
+                            context.tr.isEn
+                                ? 'Delete shared bill'
+                                : 'Xóa khoản chi',
+                            maxLines: 3,
+                          ),
                         ),
                       ),
                     ],
@@ -1557,7 +1589,12 @@ class _ExpenseCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Text(context.tr.payerLabel(names[expense.payerId] ?? (context.tr.isEn ? 'Deleted account' : 'Tài khoản đã xóa'))),
+            Text(
+              context.tr.payerLabel(
+                names[expense.payerId] ??
+                    (context.tr.isEn ? 'Deleted account' : 'Tài khoản đã xóa'),
+              ),
+            ),
             if (expense.isSharedInvoice)
               Padding(
                 padding: const EdgeInsets.only(top: 6),

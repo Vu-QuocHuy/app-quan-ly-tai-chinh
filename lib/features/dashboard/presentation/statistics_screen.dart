@@ -72,10 +72,16 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     final label = _yearMode
         ? (_month == null
               ? (tr.isEn ? 'Year ${month.year}' : 'Năm ${month.year}')
-              : (tr.isEn ? 'Month $_month, ${month.year}' : 'Tháng $_month/${month.year}'))
+              : (tr.isEn
+                    ? 'Month $_month, ${month.year}'
+                    : 'Tháng $_month/${month.year}'))
         : (_day == null
-              ? (tr.isEn ? 'Month ${month.month}, ${month.year}' : 'Tháng ${month.month}/${month.year}')
-              : (tr.isEn ? 'Day ${DateFormat('MM/dd/yyyy').format(_day!)}' : 'Ngày ${DateFormat('dd/MM/yyyy').format(_day!)}'));
+              ? (tr.isEn
+                    ? 'Month ${month.month}, ${month.year}'
+                    : 'Tháng ${month.month}/${month.year}')
+              : (tr.isEn
+                    ? 'Day ${DateFormat('MM/dd/yyyy').format(_day!)}'
+                    : 'Ngày ${DateFormat('dd/MM/yyyy').format(_day!)}'));
     final data = PeriodTransactions(
       period: period,
       incomes: incomes.valueOrNull ?? [],
@@ -156,7 +162,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                             child: Row(
                               children: [
                                 IconButton(
-                                  tooltip: tr.isEn ? 'Previous year' : 'Năm trước',
+                                  tooltip: tr.isEn
+                                      ? 'Previous year'
+                                      : 'Năm trước',
                                   onPressed: () => _setYear(month.year - 1),
                                   icon: const Icon(Icons.chevron_left),
                                 ),
@@ -164,7 +172,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                                   child: TextButton(
                                     onPressed: () => _pickYear(month.year),
                                     child: Text(
-                                      tr.isEn ? 'Year ${month.year}' : 'Năm ${month.year}',
+                                      tr.isEn
+                                          ? 'Year ${month.year}'
+                                          : 'Năm ${month.year}',
                                       textAlign: TextAlign.center,
                                     ),
                                   ),
@@ -210,8 +220,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                               icon: const Icon(Icons.date_range_outlined),
                               label: Text(
                                 tr.isEn
-                                    ? (_yearMode ? 'View full year' : 'View full month')
-                                    : (_yearMode ? 'Xem toàn năm' : 'Xem toàn tháng'),
+                                    ? (_yearMode
+                                          ? 'View full year'
+                                          : 'View full month')
+                                    : (_yearMode
+                                          ? 'Xem toàn năm'
+                                          : 'Xem toàn tháng'),
                               ),
                             ),
                             if (_yearMode && _month != null)
@@ -232,7 +246,11 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                                   });
                                 },
                                 icon: const Icon(Icons.calendar_month_outlined),
-                                label: Text(tr.isEn ? 'View days in month' : 'Xem các ngày trong tháng'),
+                                label: Text(
+                                  tr.isEn
+                                      ? 'View days in month'
+                                      : 'Xem các ngày trong tháng',
+                                ),
                               ),
                           ],
                         ),
@@ -256,7 +274,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                         ),
                         const SizedBox(height: 20),
                         Text(
-                          tr.isEn ? 'Transactions · $label' : 'Giao dịch · $label',
+                          tr.isEn
+                              ? 'Transactions · $label'
+                              : 'Giao dịch · $label',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 12),
@@ -423,8 +443,16 @@ class _PeriodSummary extends StatelessWidget {
         MoneyText(amount, emphasis: MoneyEmphasis.body, tone: tone),
       ],
     );
-    final income = value(context.tr.isEn ? '↓ Total Income' : '↓ Tổng thu', data.income, context.finance.income);
-    final expense = value(context.tr.isEn ? '↑ Total Expense' : '↑ Tổng chi', data.expense, context.finance.expense);
+    final income = value(
+      context.tr.isEn ? '↓ Total Income' : '↓ Tổng thu',
+      data.income,
+      context.finance.income,
+    );
+    final expense = value(
+      context.tr.isEn ? '↑ Total Expense' : '↑ Tổng chi',
+      data.expense,
+      context.finance.expense,
+    );
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -448,7 +476,9 @@ class _PeriodSummary extends StatelessWidget {
             ),
           const Divider(height: 28),
           Text(
-            context.tr.isEn ? 'Net Balance (Income − Expense)' : 'Chênh lệch thu − chi',
+            context.tr.isEn
+                ? 'Net Balance (Income − Expense)'
+                : 'Chênh lệch thu − chi',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 6),
@@ -579,12 +609,17 @@ class _PeriodFlowChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(context.tr.isEn ? 'Cash Flow' : 'Dòng tiền', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            context.tr.isEn ? 'Cash Flow' : 'Dòng tiền',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 16),
           if (maximum == 0)
             AppEmptyState(
               icon: Icons.bar_chart_outlined,
-              title: context.tr.isEn ? 'No transaction data' : 'Chưa có dữ liệu thu chi',
+              title: context.tr.isEn
+                  ? 'No transaction data'
+                  : 'Chưa có dữ liệu thu chi',
               message: context.tr.isEn
                   ? 'Chart will update when transactions exist in this period.'
                   : 'Biểu đồ sẽ cập nhật khi có giao dịch trong mốc đã chọn.',

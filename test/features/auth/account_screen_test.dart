@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hoadon_insight/app/theme/app_theme.dart';
 import 'package:hoadon_insight/shared/widgets/finmi_brand.dart';
 import 'package:flutter/material.dart';
@@ -48,7 +49,7 @@ void main() {
       tester.getSize(find.widgetWithText(TextButton, 'Quên mật khẩu?')).height,
       greaterThanOrEqualTo(48),
     );
-    expect(find.text('Tiếp tục với Google'), findsNothing);
+    expect(find.text('Đăng nhập với Google'), findsOneWidget);
     expect(find.byIcon(Icons.login), findsNothing);
     expect(find.text('Liên kết Google'), findsNothing);
     expect(find.textContaining('đồng bộ'), findsNothing);
@@ -110,7 +111,7 @@ void main() {
 
     expect(find.text('Nhập lại mật khẩu'), findsOneWidget);
     expect(find.text('Tạo tài khoản'), findsWidgets);
-    expect(find.text('Tiếp tục với Google'), findsNothing);
+    expect(find.text('Đăng nhập với Google'), findsOneWidget);
     expect(find.byIcon(Icons.login), findsNothing);
     expect(find.text('Liên kết Google'), findsNothing);
     expect(find.textContaining('đồng bộ'), findsNothing);
@@ -141,7 +142,7 @@ void main() {
     expect(find.text('Hãy nhập mật khẩu.'), findsNothing);
     expect(
       tester
-          .widget<TextFormField>(find.byType(TextFormField).first)
+          .widget<TextFormField>(find.widgetWithText(TextFormField, 'Email'))
           .controller!
           .text,
       'test@example.com',
@@ -165,6 +166,10 @@ Widget _app(
       authUserProvider.overrideWith((ref) => Stream.value(null)),
     ],
     child: MaterialApp(
+      locale: const Locale('vi'),
+      supportedLocales: const [Locale('vi'), Locale('en')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: themeMode,
@@ -185,6 +190,11 @@ Widget _unconfiguredApp() {
       supabaseClientProvider.overrideWithValue(null),
       authUserProvider.overrideWith((ref) => Stream.value(null)),
     ],
-    child: const MaterialApp(home: AccountScreen()),
+    child: const MaterialApp(
+      locale: Locale('vi'),
+      supportedLocales: [Locale('vi'), Locale('en')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      home: AccountScreen(),
+    ),
   );
 }

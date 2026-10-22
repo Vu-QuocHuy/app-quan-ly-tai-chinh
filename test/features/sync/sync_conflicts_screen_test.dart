@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,7 +32,12 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [invoiceRepositoryProvider.overrideWithValue(repository)],
-        child: MaterialApp(home: const SyncConflictsScreen()),
+        child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: const SyncConflictsScreen(),
+        ),
       ),
     );
     await tester.pump();
@@ -72,6 +78,10 @@ void main() {
       ProviderScope(
         overrides: [invoiceRepositoryProvider.overrideWithValue(repository)],
         child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
           home: MediaQuery(
             data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
             child: const SyncConflictsScreen(),

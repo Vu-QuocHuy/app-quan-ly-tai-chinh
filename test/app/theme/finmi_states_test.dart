@@ -1,6 +1,8 @@
 @Tags(['visual'])
 library;
 
+import 'package:flutter_localizations/flutter_localizations.dart';
+
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -83,6 +85,10 @@ void main() {
             budgetAlertsEnabledProvider.overrideWith((ref) async => false),
           ],
           child: MaterialApp(
+            locale: const Locale('vi'),
+            supportedLocales: const [Locale('vi'), Locale('en')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
             theme: AppTheme.light(),
             home: RepaintBoundary(key: key, child: const DashboardScreen()),
           ),

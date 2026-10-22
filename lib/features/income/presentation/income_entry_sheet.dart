@@ -198,13 +198,18 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
                 elevation: 4,
                 borderRadius: BorderRadius.circular(16),
                 menuMaxHeight: 280,
-                dropdownColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                dropdownColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHigh,
                 decoration: InputDecoration(
                   labelText: 'Danh mục thu',
                   floatingLabelBehavior: FloatingLabelBehavior.always,
                   errorText: _categoryError,
                   prefixIcon: const Icon(Icons.category_outlined),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
                 hint: Text(
                   'Chọn danh mục',

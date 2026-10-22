@@ -17,13 +17,11 @@ import '../../../shared/widgets/app_refresh.dart';
 import '../../../shared/widgets/app_skeleton.dart';
 import '../../../shared/widgets/finmi_brand.dart';
 import '../../../shared/widgets/finmi_page_header.dart';
-import '../../../shared/widgets/finmi_assistant_button.dart';
 import '../../../shared/widgets/month_picker_sheet.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../debts/data/debt_repository.dart';
 import '../../debts/data/debt_notification_store.dart';
 import '../../debts/domain/debt_models.dart';
-import '../../debts/domain/debt_notification.dart';
 import '../../export/presentation/report_export_sheet.dart';
 import '../../income/presentation/transaction_entry_sheet.dart';
 import '../../ingestion/presentation/import_source_sheet.dart';
@@ -91,7 +89,11 @@ class DashboardScreen extends ConsumerWidget {
 
     final utilities = <(IconData, String, VoidCallback?)>[
       (CupertinoIcons.money_dollar_circle, tr.utilAdd, quickAdd),
-      (CupertinoIcons.chart_bar, tr.utilStats, () => context.push('/statistics')),
+      (
+        CupertinoIcons.chart_bar,
+        tr.utilStats,
+        () => context.push('/statistics'),
+      ),
       (
         CupertinoIcons.arrow_2_circlepath,
         tr.utilPlans,
@@ -104,7 +106,11 @@ class DashboardScreen extends ConsumerWidget {
         tr.utilDebts,
         () => context.push('/debts'),
       ),
-      (CupertinoIcons.tag, tr.utilCategories, () => context.push('/categories')),
+      (
+        CupertinoIcons.tag,
+        tr.utilCategories,
+        () => context.push('/categories'),
+      ),
       (
         CupertinoIcons.doc_text,
         tr.utilReports,
@@ -125,19 +131,31 @@ class DashboardScreen extends ConsumerWidget {
                     const FinmiBrand(width: 112),
                     const Spacer(),
                     InkWell(
-                      onTap: () => ref.read(appLocaleProvider.notifier).toggle(),
+                      onTap: () =>
+                          ref.read(appLocaleProvider.notifier).toggle(),
                       borderRadius: BorderRadius.circular(16),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
-                          border: Border.all(color: context.finmi.border, width: 1.25),
+                          border: Border.all(
+                            color: context.finmi.border,
+                            width: 1.25,
+                          ),
                           borderRadius: BorderRadius.circular(16),
-                          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.5),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.language, size: 14, color: theme.colorScheme.primary),
+                            Icon(
+                              Icons.language,
+                              size: 14,
+                              color: theme.colorScheme.primary,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               isEn ? 'EN' : 'VI',
@@ -154,7 +172,9 @@ class DashboardScreen extends ConsumerWidget {
                     FinmiHeaderAction(
                       icon: CupertinoIcons.bell,
                       tooltip: tr.notifications,
-                      badge: (pending.valueOrNull?.isNotEmpty ?? false) || hasUnreadDebts,
+                      badge:
+                          (pending.valueOrNull?.isNotEmpty ?? false) ||
+                          hasUnreadDebts,
                       onPressed: () => context.push('/invoices?tab=debts'),
                     ),
                     const SizedBox(width: 4),
@@ -447,7 +467,9 @@ class _BalanceCardState extends State<_BalanceCard> {
               hidden
                   ? '••••••'
                   : value == null
-                  ? (widget.incomeError ? (tr.isEn ? 'Failed' : 'Không tải được') : tr.loading)
+                  ? (widget.incomeError
+                        ? (tr.isEn ? 'Failed' : 'Không tải được')
+                        : tr.loading)
                   : '${isIncome ? '+' : '-'} ${MoneyFormatter.format(value)}',
               style: statStyle?.copyWith(
                 color: isIncome ? incomeColor : t.heroText,
@@ -475,10 +497,13 @@ class _BalanceCardState extends State<_BalanceCard> {
               hidden
                   ? '••••••'
                   : (receivable == 0 && payable == 0)
-                      ? tr.noActiveDebts
-                      : '${receivable > 0 ? '+${MoneyFormatter.format(receivable)} ' : ''}${payable > 0 ? '-${MoneyFormatter.format(payable)}' : ''}'.trim(),
+                  ? tr.noActiveDebts
+                  : '${receivable > 0 ? '+${MoneyFormatter.format(receivable)} ' : ''}${payable > 0 ? '-${MoneyFormatter.format(payable)}' : ''}'
+                        .trim(),
               style: statStyle?.copyWith(
-                color: receivable >= payable ? incomeColor : const Color(0xFFF87171),
+                color: receivable >= payable
+                    ? incomeColor
+                    : const Color(0xFFF87171),
               ),
             ),
           ],
@@ -530,7 +555,9 @@ class _BalanceCardState extends State<_BalanceCard> {
           if (widget.income == null)
             Text(
               widget.incomeError
-                  ? (tr.isEn ? 'Failed to load income' : 'Không tải được khoản thu')
+                  ? (tr.isEn
+                        ? 'Failed to load income'
+                        : 'Không tải được khoản thu')
                   : (tr.isEn ? 'Loading balance…' : 'Đang tải số dư…'),
               style: theme.textTheme.titleMedium?.copyWith(color: t.heroText),
             )
@@ -661,7 +688,9 @@ class _TodayStrip extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          tr.todaySpent(MoneyFormatter.format(snapshot.dailyTotals[today.day] ?? 0)),
+          tr.todaySpent(
+            MoneyFormatter.format(snapshot.dailyTotals[today.day] ?? 0),
+          ),
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w500,
@@ -916,226 +945,5 @@ class _RecentTransaction extends StatelessWidget {
               ],
             ),
     );
-  }
-}
-
-Future<void> _showHomeNotificationsSheet(
-  BuildContext context,
-  WidgetRef ref,
-  List<InvoiceEntity>? pendingInvoices,
-  List<DebtInAppNotification> debtNotifs,
-) async {
-  final tr = context.tr;
-  final theme = Theme.of(context);
-  final unreadDebts = debtNotifs.where((n) => !n.isRead).toList();
-
-  ref.read(hideFloatingAssistantProvider.notifier).state = true;
-  try {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      useSafeArea: true,
-      useRootNavigator: true,
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      tr.notifications,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        context.push('/invoices');
-                      },
-                      icon: const Icon(Icons.history_rounded, size: 16),
-                      label: Text(tr.viewHistoryPage),
-                    ),
-                  ],
-                ),
-                if (unreadDebts.isNotEmpty)
-                  TextButton(
-                    onPressed: () async {
-                      for (final n in unreadDebts) {
-                        await DebtNotificationStore.markAsRead(n.id);
-                      }
-                      ref.invalidate(debtNotificationsProvider);
-                      if (ctx.mounted) Navigator.pop(ctx);
-                    },
-                    child: Text(tr.markAllRead),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if ((pendingInvoices == null || pendingInvoices.isEmpty) &&
-                debtNotifs.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(28),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.notifications_off_outlined,
-                        size: 48,
-                        color: theme.colorScheme.outlineVariant,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        tr.noNotifications,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton.tonalIcon(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          context.push('/invoices');
-                        },
-                        icon: const Icon(Icons.receipt_long_outlined, size: 18),
-                        label: Text(tr.openHistoryTransactions),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(ctx).size.height * 0.6,
-                ),
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    if (pendingInvoices != null && pendingInvoices.isNotEmpty) ...[
-                      ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: Color(0xFFFEF3C7),
-                          child: Icon(
-                            Icons.receipt_long,
-                            color: Color(0xFFD97706),
-                          ),
-                        ),
-                        title: Text(
-                          tr.receiptsNeedReview(pendingInvoices.length),
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: Text(tr.tapToVerifyAndApprove),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          context.push('/invoices?review=1');
-                        },
-                      ),
-                      const Divider(height: 1),
-                    ],
-                    if (debtNotifs.isNotEmpty) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12, bottom: 6),
-                        child: Text(
-                          tr.debtNotificationsTitle,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      for (final notif in debtNotifs)
-                        ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: notif.isRead
-                                ? theme.colorScheme.surfaceContainerHighest
-                                : const Color(0xFFDCFCE7),
-                            child: Icon(
-                              Icons.handshake_outlined,
-                              color: notif.isRead
-                                  ? theme.colorScheme.onSurfaceVariant
-                                  : const Color(0xFF16A34A),
-                            ),
-                          ),
-                          title: Text(
-                            '${notif.senderName}: ${MoneyFormatter.format(notif.amountMinor)}',
-                            style: TextStyle(
-                              fontWeight: notif.isRead
-                                  ? FontWeight.normal
-                                  : FontWeight.w700,
-                            ),
-                          ),
-                          subtitle: Text(
-                            [
-                              if (notif.notes != null && notif.notes!.isNotEmpty)
-                                notif.notes!,
-                              if (notif.dueDate != null)
-                                '${tr.duePrefix}${notif.dueDate!.day}/${notif.dueDate!.month}/${notif.dueDate!.year}',
-                            ].join(' · '),
-                          ),
-                          trailing: notif.isRead
-                              ? const Icon(Icons.chevron_right)
-                              : Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                          onTap: () async {
-                            if (!notif.isRead) {
-                              await DebtNotificationStore.markAsRead(notif.id);
-                              ref.invalidate(debtNotificationsProvider);
-                            }
-                            if (ctx.mounted) Navigator.pop(ctx);
-                            context.push('/invoices?tab=debts');
-                          },
-                        ),
-                    ],
-                    const Divider(height: 16),
-                    ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: theme.colorScheme.primaryContainer,
-                        child: Icon(
-                          Icons.history_rounded,
-                          color: theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                      title: Text(
-                        tr.openHistoryTransactions,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        context.push('/invoices');
-                      },
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  } finally {
-    ref.read(hideFloatingAssistantProvider.notifier).state = false;
   }
 }

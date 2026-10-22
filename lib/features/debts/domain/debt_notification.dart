@@ -42,20 +42,23 @@ class DebtInAppNotification {
     'isSaved': isSaved,
   };
 
-  factory DebtInAppNotification.fromJson(Map<String, dynamic> json) => DebtInAppNotification(
-    id: json['id'] as String,
-    targetPhone: json['targetPhone'] as String,
-    senderName: json['senderName'] as String,
-    senderPhone: json['senderPhone'] as String?,
-    debtId: json['debtId'] as String?,
-    savedDebtId: json['savedDebtId'] as String?,
-    amountMinor: json['amountMinor'] as int,
-    notes: json['notes'] as String?,
-    dueDate: json['dueDate'] != null ? DateTime.tryParse(json['dueDate'] as String) : null,
-    createdAt: DateTime.parse(json['createdAt'] as String),
-    isRead: json['isRead'] as bool? ?? false,
-    isSaved: json['isSaved'] as bool? ?? false,
-  );
+  factory DebtInAppNotification.fromJson(Map<String, dynamic> json) =>
+      DebtInAppNotification(
+        id: json['id'] as String,
+        targetPhone: json['targetPhone'] as String,
+        senderName: json['senderName'] as String,
+        senderPhone: json['senderPhone'] as String?,
+        debtId: json['debtId'] as String?,
+        savedDebtId: json['savedDebtId'] as String?,
+        amountMinor: json['amountMinor'] as int,
+        notes: json['notes'] as String?,
+        dueDate: json['dueDate'] != null
+            ? DateTime.tryParse(json['dueDate'] as String)
+            : null,
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        isRead: json['isRead'] as bool? ?? false,
+        isSaved: json['isSaved'] as bool? ?? false,
+      );
 
   DebtInAppNotification copyWith({
     bool? isRead,

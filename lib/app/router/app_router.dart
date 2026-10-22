@@ -258,9 +258,8 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/debts',
       parentNavigatorKey: _rootKey,
-      builder: (context, state) => DebtScreen(
-        initialDebtId: state.uri.queryParameters['debtId'],
-      ),
+      builder: (context, state) =>
+          DebtScreen(initialDebtId: state.uri.queryParameters['debtId']),
     ),
     GoRoute(
       path: '/review',

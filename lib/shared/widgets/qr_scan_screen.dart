@@ -72,9 +72,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
               ),
             ),
           ),
-          const QrScannerOverlay(
-            hintText: 'Đặt mã QR vào trong khung để quét',
-          ),
+          const QrScannerOverlay(hintText: 'Đặt mã QR vào trong khung để quét'),
           if (_error != null)
             Positioned(
               left: 16,

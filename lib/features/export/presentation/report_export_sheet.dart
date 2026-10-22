@@ -79,11 +79,11 @@ class _ReportExportSheetState extends ConsumerState<_ReportExportSheet> {
                     subtitle: Text(
                       format == 'PDF'
                           ? (isEn
-                              ? 'Overview and list of expenses'
-                              : 'Tổng quan và danh sách khoản chi')
+                                ? 'Overview and list of expenses'
+                                : 'Tổng quan và danh sách khoản chi')
                           : (isEn
-                              ? 'Expense data for spreadsheets'
-                              : 'Dữ liệu khoản chi để mở bằng bảng tính'),
+                                ? 'Expense data for spreadsheets'
+                                : 'Dữ liệu khoản chi để mở bằng bảng tính'),
                     ),
                     trailing: const Icon(Icons.download_outlined),
                   ),

@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,6 +39,10 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
           theme: AppTheme.light(),
           home: const InvoiceListScreen(),
         ),
@@ -125,6 +130,10 @@ void main() {
           categoriesProvider.overrideWith((ref) => Stream.value(const [])),
         ],
         child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
           theme: AppTheme.light(),
           home: const InvoiceListScreen(),
         ),
@@ -170,6 +179,10 @@ void main() {
           syncCoordinatorProvider.overrideWithValue(coordinator),
         ],
         child: MaterialApp(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+
           theme: AppTheme.light(),
           home: const InvoiceListScreen(),
         ),

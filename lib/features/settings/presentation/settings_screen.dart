@@ -65,12 +65,21 @@ class SettingsScreen extends ConsumerWidget {
                       title: Text(tr.accountTitle),
                       subtitle: Text(
                         !supabaseConfigured
-                            ? (tr.isEn ? 'Account not configured.' : 'Tài khoản chưa được cấu hình.')
+                            ? (tr.isEn
+                                  ? 'Account not configured.'
+                                  : 'Tài khoản chưa được cấu hình.')
                             : authUser.when(
-                                data: (user) => user?.email ?? (tr.isEn ? 'Not logged in' : 'Chưa đăng nhập'),
-                                loading: () => tr.isEn ? 'Loading account…' : 'Đang tải tài khoản…',
-                                error: (_, _) =>
-                                    tr.isEn ? 'Failed to load account info.' : 'Không tải được thông tin tài khoản.',
+                                data: (user) =>
+                                    user?.email ??
+                                    (tr.isEn
+                                        ? 'Not logged in'
+                                        : 'Chưa đăng nhập'),
+                                loading: () => tr.isEn
+                                    ? 'Loading account…'
+                                    : 'Đang tải tài khoản…',
+                                error: (_, _) => tr.isEn
+                                    ? 'Failed to load account info.'
+                                    : 'Không tải được thông tin tài khoản.',
                               ),
                       ),
                       trailing: const Icon(Icons.chevron_right),
@@ -83,17 +92,30 @@ class SettingsScreen extends ConsumerWidget {
                               ? Icons.cloud_done_outlined
                               : Icons.cloud_off_outlined,
                         ),
-                        title: Text(tr.isEn ? 'Data synchronization' : 'Đồng bộ dữ liệu', maxLines: 3),
+                        title: Text(
+                          tr.isEn ? 'Data synchronization' : 'Đồng bộ dữ liệu',
+                          maxLines: 3,
+                        ),
                         subtitle: Text(
                           !featureFlags.cloudSync
-                              ? (tr.isEn ? 'Sync is currently paused.' : 'Đồng bộ hiện đang tạm tắt.')
+                              ? (tr.isEn
+                                    ? 'Sync is currently paused.'
+                                    : 'Đồng bộ hiện đang tạm tắt.')
                               : !health.cloudConfigured
-                              ? (tr.isEn ? 'Log in to sync data to the cloud.' : 'Đăng nhập để đồng bộ dữ liệu lên cloud.')
+                              ? (tr.isEn
+                                    ? 'Log in to sync data to the cloud.'
+                                    : 'Đăng nhập để đồng bộ dữ liệu lên cloud.')
                               : health.failedCount > 0
-                              ? (tr.isEn ? '${health.failedCount} changes need retry.' : '${health.failedCount} thay đổi cần thử lại.')
+                              ? (tr.isEn
+                                    ? '${health.failedCount} changes need retry.'
+                                    : '${health.failedCount} thay đổi cần thử lại.')
                               : health.pendingCount > 0
-                              ? (tr.isEn ? '${health.pendingCount} changes waiting to upload.' : '${health.pendingCount} thay đổi đang chờ gửi.')
-                              : (tr.isEn ? 'Data is up to date.' : 'Dữ liệu đã được cập nhật.'),
+                              ? (tr.isEn
+                                    ? '${health.pendingCount} changes waiting to upload.'
+                                    : '${health.pendingCount} thay đổi đang chờ gửi.')
+                              : (tr.isEn
+                                    ? 'Data is up to date.'
+                                    : 'Dữ liệu đã được cập nhật.'),
                         ),
                         trailing:
                             featureFlags.cloudSync && health.cloudConfigured
@@ -106,13 +128,20 @@ class SettingsScreen extends ConsumerWidget {
                       loading: () => const _LoadingTile(),
                       error: (error, _) => _ErrorTile(
                         error: error,
-                        label: tr.isEn ? 'Cannot load sync status' : 'Không đọc được trạng thái đồng bộ',
+                        label: tr.isEn
+                            ? 'Cannot load sync status'
+                            : 'Không đọc được trạng thái đồng bộ',
                         onRetry: () => ref.invalidate(syncHealthProvider),
                       ),
                     ),
                     ListTile(
                       leading: const Icon(Icons.cloud_download_outlined),
-                      title: Text(tr.isEn ? 'Restore customizations' : 'Khôi phục tùy chỉnh', maxLines: 3),
+                      title: Text(
+                        tr.isEn
+                            ? 'Restore customizations'
+                            : 'Khôi phục tùy chỉnh',
+                        maxLines: 3,
+                      ),
                       subtitle: Text(
                         tr.isEn
                             ? 'Fetch theme and alerts from cloud when switching devices.'
@@ -170,7 +199,9 @@ class SettingsScreen extends ConsumerWidget {
                       loading: () => const _LoadingTile(),
                       error: (error, _) => _ErrorTile(
                         error: error,
-                        label: tr.isEn ? 'Cannot load alert settings' : 'Không đọc được cài đặt thông báo',
+                        label: tr.isEn
+                            ? 'Cannot load alert settings'
+                            : 'Không đọc được cài đặt thông báo',
                         onRetry: () =>
                             ref.invalidate(budgetAlertsEnabledProvider),
                       ),
@@ -187,7 +218,10 @@ class SettingsScreen extends ConsumerWidget {
                           Icons.warning_amber_outlined,
                           color: Theme.of(context).colorScheme.error,
                         ),
-                        title: Text(tr.isEn ? 'Data conflicts' : 'Xung đột dữ liệu', maxLines: 3),
+                        title: Text(
+                          tr.isEn ? 'Data conflicts' : 'Xung đột dữ liệu',
+                          maxLines: 3,
+                        ),
                         subtitle: Text(
                           tr.isEn
                               ? '$conflictCount receipts need your choice on which version to keep.'
@@ -205,7 +239,10 @@ class SettingsScreen extends ConsumerWidget {
                   children: [
                     ExpansionTile(
                       leading: const Icon(Icons.backup_outlined),
-                      title: Text(tr.isEn ? 'Data restore' : 'Khôi phục dữ liệu', maxLines: 3),
+                      title: Text(
+                        tr.isEn ? 'Data restore' : 'Khôi phục dữ liệu',
+                        maxLines: 3,
+                      ),
                       subtitle: Text(
                         tr.isEn
                             ? 'Restore from file or cloud backup.'
@@ -234,11 +271,15 @@ class SettingsScreen extends ConsumerWidget {
                             color: Theme.of(context).colorScheme.error,
                           ),
                           title: Text(
-                            tr.isEn ? 'Erase local data' : 'Xóa dữ liệu trên thiết bị',
+                            tr.isEn
+                                ? 'Erase local data'
+                                : 'Xóa dữ liệu trên thiết bị',
                             maxLines: 3,
                           ),
                           subtitle: Text(
-                            tr.isEn ? 'This action cannot be undone.' : 'Thao tác này không thể hoàn tác.',
+                            tr.isEn
+                                ? 'This action cannot be undone.'
+                                : 'Thao tác này không thể hoàn tác.',
                           ),
                           onTap: () => _confirmDelete(context, ref),
                         ),
@@ -773,7 +814,10 @@ Future<_CloudBackupSelection?> _showCloudBackupDialog(
     context: context,
     builder: (dialogContext) => AlertDialog(
       icon: const Icon(Icons.cloud_queue_outlined),
-      title: Text(isEn ? 'Cloud Backups' : 'Bản sao lưu trực tuyến', maxLines: 3),
+      title: Text(
+        isEn ? 'Cloud Backups' : 'Bản sao lưu trực tuyến',
+        maxLines: 3,
+      ),
       content: SizedBox(
         width: 520,
         child: entries.isEmpty
@@ -826,7 +870,9 @@ Future<_CloudBackupSelection?> _showCloudBackupDialog(
                             icon: const Icon(Icons.restore),
                           ),
                           IconButton(
-                            tooltip: isEn ? 'Delete from cloud' : 'Xóa khỏi cloud',
+                            tooltip: isEn
+                                ? 'Delete from cloud'
+                                : 'Xóa khỏi cloud',
                             onPressed: () => Navigator.pop(
                               dialogContext,
                               _CloudBackupSelection(
@@ -862,7 +908,10 @@ Future<bool?> _confirmCloudBackupDelete(
     context: context,
     builder: (dialogContext) => AlertDialog(
       icon: const Icon(Icons.delete_outline),
-      title: Text(isEn ? 'Delete cloud backup?' : 'Xóa backup cloud?', maxLines: 3),
+      title: Text(
+        isEn ? 'Delete cloud backup?' : 'Xóa backup cloud?',
+        maxLines: 3,
+      ),
       content: Text(
         isEn
             ? '“${entry.fileName}” will be deleted from your account and cannot be recovered.'
@@ -897,7 +946,10 @@ Future<bool?> _showRestorePreview(
     context: context,
     builder: (dialogContext) => AlertDialog(
       icon: const Icon(Icons.restore_page_outlined),
-      title: Text(isEn ? 'Restore Preview' : 'Xem trước bản khôi phục', maxLines: 3),
+      title: Text(
+        isEn ? 'Restore Preview' : 'Xem trước bản khôi phục',
+        maxLines: 3,
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480, maxHeight: 420),
         child: SingleChildScrollView(
@@ -956,7 +1008,9 @@ Future<bool?> _showRestorePreview(
               : null,
           icon: const Icon(Icons.restore),
           label: Text(
-            isEn ? 'Restore ${preview.readyCount}' : 'Khôi phục ${preview.readyCount}',
+            isEn
+                ? 'Restore ${preview.readyCount}'
+                : 'Khôi phục ${preview.readyCount}',
           ),
         ),
       ],
@@ -973,7 +1027,10 @@ Future<String?> _showBackupPasswordDialog(BuildContext context) async {
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.lock_outline),
-        title: Text(isEn ? 'Unlock Encrypted Backup' : 'Mở backup mã hóa', maxLines: 3),
+        title: Text(
+          isEn ? 'Unlock Encrypted Backup' : 'Mở backup mã hóa',
+          maxLines: 3,
+        ),
         content: Form(
           key: formKey,
           child: Column(
@@ -1071,15 +1128,18 @@ class _BackupManagement extends StatelessWidget {
       children: [
         ListTile(
           leading: const Icon(Icons.cloud_queue_outlined),
-          title: Text(isEn ? 'Manage Backups' : 'Quản lý bản sao lưu', maxLines: 3),
+          title: Text(
+            isEn ? 'Manage Backups' : 'Quản lý bản sao lưu',
+            maxLines: 3,
+          ),
           subtitle: Text(
             onManageCloud == null
                 ? (isEn
-                    ? 'Sign in to view and restore cloud backups.'
-                    : 'Đăng nhập để xem và khôi phục backup cloud.')
+                      ? 'Sign in to view and restore cloud backups.'
+                      : 'Đăng nhập để xem và khôi phục backup cloud.')
                 : (isEn
-                    ? 'View, restore or delete encrypted account backups.'
-                    : 'Xem, khôi phục hoặc xóa các backup mã hóa của tài khoản.'),
+                      ? 'View, restore or delete encrypted account backups.'
+                      : 'Xem, khôi phục hoặc xóa các backup mã hóa của tài khoản.'),
           ),
           trailing: const Icon(Icons.chevron_right),
           onTap: onManageCloud,

@@ -38,8 +38,7 @@ class SupabaseAuthService {
       data: {
         if (displayName != null && displayName.trim().isNotEmpty)
           'display_name': displayName.trim(),
-        if (phone != null && phone.trim().isNotEmpty)
-          'phone': phone.trim(),
+        if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
       },
     );
   }
@@ -51,16 +50,18 @@ class SupabaseAuthService {
       final origin = Uri.parse(_client.rest.url).origin;
       final checkUri = Uri.parse('$origin/auth/v1/authorize?provider=google');
       final client = http.Client();
-      final response = await client.get(
-        checkUri,
-        headers: {
-          if (_client.headers['apikey'] != null)
-            'apikey': _client.headers['apikey']!,
-        },
-      ).timeout(const Duration(seconds: 4));
+      final response = await client
+          .get(
+            checkUri,
+            headers: {
+              if (_client.headers['apikey'] != null)
+                'apikey': _client.headers['apikey']!,
+            },
+          )
+          .timeout(const Duration(seconds: 4));
       if (response.statusCode == 400 &&
           (response.body.contains('provider is not enabled') ||
-           response.body.contains('Unsupported provider'))) {
+              response.body.contains('Unsupported provider'))) {
         throw const AuthException(
           'Unsupported provider: provider is not enabled',
           statusCode: '400',

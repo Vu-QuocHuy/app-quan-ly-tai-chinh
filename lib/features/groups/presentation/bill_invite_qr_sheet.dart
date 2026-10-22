@@ -51,9 +51,9 @@ Future<void> showBillInviteQrSheet(
               Center(
                 child: SelectableText(
                   joinCode,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
               const SizedBox(height: 4),
