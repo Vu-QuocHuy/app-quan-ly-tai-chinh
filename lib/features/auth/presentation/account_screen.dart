@@ -456,6 +456,51 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                    ),
+                    child: Text(
+                      'hoặc',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  foregroundColor: scheme.onSurface,
+                  backgroundColor: scheme.cardSurface,
+                  side: BorderSide(color: scheme.outlineVariant),
+                ),
+                onPressed: _busy ? null : _signInWithGoogle,
+                icon: const Text(
+                  'G',
+                  style: TextStyle(
+                    color: Color(0xFF4285F4),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                label: const Text('Tiếp tục với Google'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Lần đầu xác nhận Google sẽ tạo tài khoản; lần sau dùng để đăng nhập.',
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+              ),
             ],
           ),
         ),
@@ -698,6 +743,35 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         _messageIsError = false;
         _message = 'Đã mở Google. Hoàn tất liên kết để quay lại ứng dụng.';
       });
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = true;
+        _message = friendlyMessage(error);
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _messageIsError = true;
+        _message = friendlyMessage(error);
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    final auth = ref.read(supabaseAuthServiceProvider);
+    if (auth == null) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      final launched = await auth.signInWithGoogle();
+      if (!launched) {
+        throw const AuthException('Không thể mở trang đăng nhập Google.');
+      }
     } on AuthException catch (error) {
       if (!mounted) return;
       setState(() {

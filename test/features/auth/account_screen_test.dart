@@ -48,7 +48,7 @@ void main() {
       tester.getSize(find.widgetWithText(TextButton, 'Quên mật khẩu?')).height,
       greaterThanOrEqualTo(48),
     );
-    expect(find.text('Tiếp tục với Google'), findsNothing);
+    expect(find.text('Tiếp tục với Google'), findsOneWidget);
     expect(find.byIcon(Icons.login), findsNothing);
     expect(find.text('Liên kết Google'), findsNothing);
     expect(find.textContaining('đồng bộ'), findsNothing);
@@ -110,7 +110,7 @@ void main() {
 
     expect(find.text('Nhập lại mật khẩu'), findsOneWidget);
     expect(find.text('Tạo tài khoản'), findsWidgets);
-    expect(find.text('Tiếp tục với Google'), findsNothing);
+    expect(find.text('Tiếp tục với Google'), findsOneWidget);
     expect(find.byIcon(Icons.login), findsNothing);
     expect(find.text('Liên kết Google'), findsNothing);
     expect(find.textContaining('đồng bộ'), findsNothing);

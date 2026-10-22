@@ -25,6 +25,11 @@ class SupabaseAuthService {
     );
   }
 
+  Future<bool> signInWithGoogle() => _client.auth.signInWithOAuth(
+    OAuthProvider.google,
+    redirectTo: SupabaseBootstrap.oauthRedirectUri,
+  );
+
   Future<AuthResponse> signUp({
     required String email,
     required String password,
