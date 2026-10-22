@@ -69,7 +69,12 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('transaction-filter-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Xóa lọc'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('Xóa bộ lọc'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('1'), findsNothing);
     expect(tester.takeException(), isNull);

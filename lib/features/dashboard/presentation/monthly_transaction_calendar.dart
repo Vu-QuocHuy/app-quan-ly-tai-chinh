@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../app/theme/finance_colors.dart';
 import '../../../core/utils/month_utils.dart';
+import '../../../core/utils/money_formatter.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../income/data/income_repository.dart';
 import '../../invoices/domain/invoice_models.dart';
@@ -73,9 +74,14 @@ class MonthlyTransactionCalendar extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             padding: EdgeInsets.zero,
             itemCount: leadingDays + daysInMonth,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 7,
-              mainAxisExtent: 46,
+              mainAxisExtent:
+                  46 *
+                  (MediaQuery.textScalerOf(context).scale(12) / 12).clamp(
+                    1.0,
+                    3.0,
+                  ),
               crossAxisSpacing: 4,
               mainAxisSpacing: 4,
             ),
@@ -128,6 +134,9 @@ class _CalendarDay extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
+      label: context.tr.isEn
+          ? 'Day ${date.day}, ${net >= 0 ? 'surplus' : 'deficit'} ${MoneyFormatter.format(net.abs())}'
+          : 'Ngày ${date.day}, ${net >= 0 ? 'dư' : 'thiếu'} ${MoneyFormatter.format(net.abs())}',
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: onTap,
@@ -156,22 +165,25 @@ class _CalendarDay extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              Text(
-                '${date.day}',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: selected || isToday
-                      ? FontWeight.w800
-                      : FontWeight.w500,
-                  color: selected
-                      ? theme.colorScheme.onPrimaryContainer
-                      : theme.colorScheme.onSurface,
-                  fontSize: 12,
-                  height: 1.1,
+              FittedBox(
+                child: Text(
+                  '${date.day}',
+                  maxLines: 1,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: selected || isToday
+                        ? FontWeight.w800
+                        : FontWeight.w500,
+                    color: selected
+                        ? theme.colorScheme.onPrimaryContainer
+                        : theme.colorScheme.onSurface,
+                    fontSize: 12,
+                    height: 1.1,
+                  ),
                 ),
               ),
               const SizedBox(height: 2),
               SizedBox(
-                height: 13,
+                height: MediaQuery.textScalerOf(context).scale(13),
                 child: hasTransaction
                     ? Text(
                         compactNet(net),

@@ -128,8 +128,13 @@ class DashboardScreen extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(20, 10, 16, 4),
                 child: Row(
                   children: [
-                    const FinmiBrand(width: 112),
-                    const Spacer(),
+                    const Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: FinmiBrand(width: 112),
+                      ),
+                    ),
                     InkWell(
                       onTap: () =>
                           ref.read(appLocaleProvider.notifier).toggle(),

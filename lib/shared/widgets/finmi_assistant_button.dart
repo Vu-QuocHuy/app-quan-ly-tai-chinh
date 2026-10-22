@@ -9,8 +9,7 @@ final hideFloatingAssistantProvider = StateProvider<bool>((ref) => false);
 /// Quản lý việc phát hiện cửa sổ pop-up / bottom sheet / dialog đang mở
 /// để tự động ẩn nút Trợ lý AI, tránh che khuất nội dung hoặc nút bấm của pop-up.
 class ModalRouteTracker extends ChangeNotifier {
-  static final instance = ModalRouteTracker._();
-  ModalRouteTracker._();
+  ModalRouteTracker();
 
   int _modalCount = 0;
   bool get hasModal => _modalCount > 0;
@@ -42,34 +41,44 @@ class ModalRouteTracker extends ChangeNotifier {
 }
 
 class FinmiModalObserver extends NavigatorObserver {
+  ModalRouteTracker? get _tracker {
+    final context = navigator?.context;
+    return context == null
+        ? null
+        : ProviderScope.containerOf(
+            context,
+            listen: false,
+          ).read(hasActiveModalProvider);
+  }
+
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPush(route, previousRoute);
-    ModalRouteTracker.instance.onRoutePushed(route);
+    _tracker?.onRoutePushed(route);
   }
 
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPop(route, previousRoute);
-    ModalRouteTracker.instance.onRoutePopped(route);
+    _tracker?.onRoutePopped(route);
   }
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didRemove(route, previousRoute);
-    ModalRouteTracker.instance.onRoutePopped(route);
+    _tracker?.onRoutePopped(route);
   }
 
   @override
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
     super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
-    if (oldRoute != null) ModalRouteTracker.instance.onRoutePopped(oldRoute);
-    if (newRoute != null) ModalRouteTracker.instance.onRoutePushed(newRoute);
+    if (oldRoute != null) _tracker?.onRoutePopped(oldRoute);
+    if (newRoute != null) _tracker?.onRoutePushed(newRoute);
   }
 }
 
 final hasActiveModalProvider = ChangeNotifierProvider<ModalRouteTracker>(
-  (ref) => ModalRouteTracker.instance,
+  (ref) => ModalRouteTracker(),
 );
 
 class FinmiAssistantButton extends ConsumerWidget {

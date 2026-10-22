@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -64,7 +65,12 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [expenseGroupServiceProvider.overrideWithValue(service)],
-        child: MaterialApp.router(routerConfig: router),
+        child: MaterialApp.router(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          routerConfig: router,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -145,7 +151,12 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [expenseGroupServiceProvider.overrideWithValue(service)],
-        child: MaterialApp.router(routerConfig: router),
+        child: MaterialApp.router(
+          locale: const Locale('vi'),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          routerConfig: router,
+        ),
       ),
     );
     await tester.pumpAndSettle();
