@@ -697,8 +697,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _sending ||
         _recording ||
         _startingRecording ||
-        _transcribing)
+        _transcribing) {
       return;
+    }
     final effectiveQuestion = _enToViPromptMap[question] ?? question;
     final isBlockedQuestion = ChatPrivacyPolicy.isBlockedQuestion(
       effectiveQuestion,

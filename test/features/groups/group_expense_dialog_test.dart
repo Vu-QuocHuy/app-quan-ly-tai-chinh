@@ -35,6 +35,81 @@ String _fieldText(WidgetTester tester, String label) => tester
     .text;
 
 void main() {
+  testWidgets(
+    'formatted exact shares auto-balance and retain percentage values when switching modes',
+    (tester) async {
+      final key = GlobalKey<GroupExpenseFormState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: GroupExpenseForm(
+              key: key,
+              members: _members,
+              initialDescription: 'Ăn tối',
+              initialTotalMinor: 120000,
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Số tiền'));
+      await tester.pump();
+      final shares = find.byType(TextField);
+      await tester.enterText(shares.at(2), '75000');
+      await tester.pump();
+      expect(tester.widget<TextField>(shares.at(2)).controller!.text, '75.000');
+      expect(tester.widget<TextField>(shares.at(3)).controller!.text, '45.000');
+      expect(key.currentState!.submit()!.splitAmounts, {
+        'u1': 75000,
+        'u2': 45000,
+      });
+      await tester.tap(find.text('%').first);
+      await tester.pump();
+      await tester.enterText(shares.at(2), '33.3');
+      await tester.pump();
+      expect(tester.widget<TextField>(shares.at(3)).controller!.text, '66.7');
+      final percentages = key.currentState!.submit()!.splitAmounts;
+      expect(percentages, {'u1': 39960, 'u2': 80040});
+      await tester.tap(find.text('Số tiền'));
+      await tester.pump();
+      expect(tester.widget<TextField>(shares.at(2)).controller!.text, '39.960');
+      expect(key.currentState!.submit()!.splitAmounts, percentages);
+    },
+  );
+
+  testWidgets(
+    'formatting an existing exact split does not mark the form dirty',
+    (tester) async {
+      final key = GlobalKey<GroupExpenseFormState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: GroupExpenseForm(
+              key: key,
+              members: _members,
+              initialExpense: GroupExpense(
+                id: 'e1',
+                groupId: 'g1',
+                payerId: 'u1',
+                description: 'Ăn tối',
+                totalMinor: 120000,
+                createdAt: DateTime(2026),
+                splits: const [
+                  GroupExpenseSplit(userId: 'u1', amountMinor: 75000),
+                  GroupExpenseSplit(userId: 'u2', amountMinor: 45000),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(key.currentState!.hasChanges, isFalse);
+      expect(key.currentState!.submit()!.splitAmounts, {
+        'u1': 75000,
+        'u2': 45000,
+      });
+    },
+  );
+
   testWidgets('điền sẵn nội dung và tổng tiền từ hóa đơn', (tester) async {
     await _open(
       tester,
@@ -45,7 +120,7 @@ void main() {
       ),
     );
     expect(_fieldText(tester, 'Nội dung'), 'Hóa đơn Highlands');
-    expect(_fieldText(tester, 'Tổng tiền'), '120000');
+    expect(_fieldText(tester, 'Tổng tiền'), '120.000');
     expect(find.text('Chia tiền'), findsWidgets);
   });
 
@@ -83,7 +158,7 @@ void main() {
       ),
     );
     expect(_fieldText(tester, 'Nội dung'), 'Ăn trưa');
-    expect(_fieldText(tester, 'Tổng tiền'), '50000');
+    expect(_fieldText(tester, 'Tổng tiền'), '50.000');
     expect(find.text('Sửa lần chia tiền'), findsOneWidget);
   });
 

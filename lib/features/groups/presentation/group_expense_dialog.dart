@@ -1,3 +1,4 @@
+import '../../../core/utils/money_input_formatter.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/finance_colors.dart';
@@ -74,11 +75,12 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
       text: initial?.description ?? widget.initialDescription,
     );
     _amountController = TextEditingController(
-      text:
-          initial?.totalMinor.toString() ??
-          (prefillTotal != null && prefillTotal > 0
-              ? prefillTotal.toString()
-              : null),
+      text: MoneyInputFormatter.format(
+        initial?.totalMinor.toString() ??
+            (prefillTotal != null && prefillTotal > 0
+                ? prefillTotal.toString()
+                : null),
+      ),
     );
     _startDescription = _descriptionController.text;
     _startAmount = _amountController.text;
@@ -94,7 +96,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
         final userId = split.userId;
         if (userId != null) {
           _splitControllers[userId] = TextEditingController(
-            text: split.amountMinor.toString(),
+            text: MoneyInputFormatter.format(split.amountMinor.toString()),
           );
         }
       }
@@ -132,6 +134,8 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
         const SizedBox(height: 12),
         TextField(
           controller: _amountController,
+          inputFormatters: [const MoneyInputFormatter()],
+          onChanged: (_) => setState(() => _error = null),
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
             labelText: 'Tổng tiền',
@@ -147,7 +151,40 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
           ],
           selected: {_customMode},
           onSelectionChanged: (value) => setState(() {
-            _customMode = value.first;
+            final nextMode = value.first;
+            if (nextMode != _customMode &&
+                nextMode == GroupSplitMode.percentage) {
+              final total = _totalMinor;
+              for (final id in _selectedIds) {
+                final controller = _splitControllers[id]!;
+                final amount = MoneyFormatter.tryParse(controller.text);
+                controller.text = total > 0 && amount != null
+                    ? (amount * 100 / total).toStringAsFixed(6)
+                    : '';
+              }
+            } else if (nextMode == GroupSplitMode.exact &&
+                _customMode == GroupSplitMode.percentage) {
+              final values = {
+                for (final id in _selectedIds)
+                  id:
+                      double.tryParse(
+                        _splitControllers[id]!.text.replaceAll(',', '.'),
+                      ) ??
+                      -1,
+              };
+              final amounts = GroupSplitCalculator.calculate(
+                totalMinor: _totalMinor,
+                memberIds: _selectedIds,
+                values: values,
+                mode: GroupSplitMode.percentage,
+              );
+              for (final id in _selectedIds) {
+                _splitControllers[id]!.text = MoneyInputFormatter.format(
+                  amounts?[id]?.toString(),
+                );
+              }
+            }
+            _customMode = nextMode;
             _error = null;
             if (_customMode == GroupSplitMode.exact) {
               _syncExactAmounts();
@@ -231,9 +268,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
     );
   }
 
-  int get _totalMinor =>
-      int.tryParse(_amountController.text.replaceAll(RegExp(r'[^0-9]'), '')) ??
-      0;
+  int get _totalMinor => MoneyFormatter.tryParse(_amountController.text) ?? 0;
 
   int get _currentExactSum {
     var sum = 0;
@@ -264,7 +299,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
           TextEditingController.new,
         );
         final share = total ~/ n + (i++ < total % n ? 1 : 0);
-        ctrl.text = share.toString();
+        ctrl.text = MoneyInputFormatter.format(share.toString());
       }
     } else if (_selectedIds.length == 1) {
       final singleId = _selectedIds.first;
@@ -272,7 +307,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
         singleId,
         TextEditingController.new,
       );
-      ctrl.text = total.toString();
+      ctrl.text = MoneyInputFormatter.format(total.toString());
     }
   }
 
@@ -284,13 +319,14 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
     });
     if (allEmpty) {
       final n = _selectedIds.length;
-      final base = (100 / n).toStringAsFixed(1);
+      var index = 0;
       for (final id in _selectedIds) {
         final ctrl = _splitControllers.putIfAbsent(
           id,
           TextEditingController.new,
         );
-        ctrl.text = base;
+        ctrl.text = ((10000 ~/ n + (index++ < 10000 % n ? 1 : 0)) / 100)
+            .toStringAsFixed(2);
       }
     }
   }
@@ -309,7 +345,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
               otherId,
               TextEditingController.new,
             );
-            otherCtrl.text = remaining.toString();
+            otherCtrl.text = MoneyInputFormatter.format(remaining.toString());
             otherCtrl.selection = TextSelection.collapsed(
               offset: otherCtrl.text.length,
             );
@@ -345,7 +381,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
                 remainderId,
                 TextEditingController.new,
               );
-              remCtrl.text = remaining.toString();
+              remCtrl.text = MoneyInputFormatter.format(remaining.toString());
               remCtrl.selection = TextSelection.collapsed(
                 offset: remCtrl.text.length,
               );
@@ -391,7 +427,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
             singleId,
             TextEditingController.new,
           );
-          ctrl.text = total.toString();
+          ctrl.text = MoneyInputFormatter.format(total.toString());
         } else if (_selectedIds.length == 2 && total > 0) {
           final ids = _selectedIds.toList();
           final id0Val =
@@ -404,7 +440,9 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
               ) ??
               0;
           if (id0Val > 0 && id0Val <= total) {
-            _splitControllers[ids[1]]?.text = (total - id0Val).toString();
+            _splitControllers[ids[1]]?.text = MoneyInputFormatter.format(
+              (total - id0Val).toString(),
+            );
           } else {
             _syncExactAmounts();
           }
@@ -436,7 +474,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
     };
     return _splitControllers.entries.any(
       (entry) =>
-          entry.value.text !=
+          entry.value.text.replaceAll('.', '') !=
           (initialSplitAmounts[entry.key]?.toString() ?? ''),
     );
   }
@@ -525,6 +563,10 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
               child: TextField(
                 controller: controller,
                 enabled: isSelected,
+                inputFormatters: [
+                  if (_customMode == GroupSplitMode.exact)
+                    const MoneyInputFormatter(),
+                ],
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
@@ -552,9 +594,11 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
   Map<String, int>? _parseSplits(int total) {
     final values = <String, double>{};
     for (final id in _selectedIds) {
-      final value = double.tryParse(
-        _splitControllers[id]!.text.trim().replaceAll(',', '.'),
-      );
+      final value = _customMode == GroupSplitMode.exact
+          ? MoneyFormatter.tryParse(_splitControllers[id]!.text)?.toDouble()
+          : double.tryParse(
+              _splitControllers[id]!.text.trim().replaceAll(',', '.'),
+            );
       if (value == null || value < 0) {
         setState(() => _error = 'Hãy nhập phần chia hợp lệ cho mọi người.');
         return null;

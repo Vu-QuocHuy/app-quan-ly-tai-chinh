@@ -24,10 +24,6 @@ void main() {
   test(
     'records due months once and clamps short months to the anchor day',
     () async {
-      await database.customStatement('''
-        INSERT INTO categories (id, name, icon_name, color_value, kind)
-        VALUES ('income_salary', 'Lương', 'payments', 4280640491, 'income')
-      ''');
       await plans.save(
         RecurringIncome(
           id: 'monthly-salary',

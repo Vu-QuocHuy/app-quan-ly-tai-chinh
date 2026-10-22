@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/money_input_formatter.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../app/theme/finance_colors.dart';
@@ -97,6 +98,7 @@ class _GroupFundScreenState extends ConsumerState<GroupFundScreen> {
               TextField(
                 controller: amountController,
                 autofocus: true,
+                inputFormatters: [const MoneyInputFormatter()],
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Số tiền',
@@ -454,7 +456,7 @@ class _FundGoalDialog extends StatefulWidget {
 
 class _FundGoalDialogState extends State<_FundGoalDialog> {
   late final TextEditingController _amountController = TextEditingController(
-    text: widget.initialGoalMinor?.toString(),
+    text: MoneyInputFormatter.format(widget.initialGoalMinor?.toString()),
   );
   late DateTime? _deadline = widget.initialDeadline;
   String? _error;
@@ -499,6 +501,7 @@ class _FundGoalDialogState extends State<_FundGoalDialog> {
           TextField(
             controller: _amountController,
             autofocus: true,
+            inputFormatters: [const MoneyInputFormatter()],
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(
               labelText: 'Số tiền mục tiêu',

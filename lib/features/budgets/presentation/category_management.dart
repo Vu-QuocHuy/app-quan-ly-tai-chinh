@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/localization/app_strings.dart';
+import '../../../core/utils/money_input_formatter.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
@@ -464,6 +465,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                 FinmiTextField(
                   key: const ValueKey('category-budget-field'),
                   controller: _budgetController,
+                  inputFormatters: [const MoneyInputFormatter()],
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     labelText: tr.categoryLimitLabel(widget.monthLabel),

@@ -1,5 +1,5 @@
+import '../../../core/utils/money_input_formatter.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:uuid/uuid.dart';
@@ -37,9 +37,7 @@ Future<void> showDebtSettleDialog(
   final isEn = tr.isEn;
 
   final controller = TextEditingController(
-    text: MoneyFormatter.format(
-      remaining,
-    ).replaceAll(' ₫', '').replaceAll('.', ''),
+    text: MoneyInputFormatter.format(remaining.toString()),
   );
   bool isFull = true;
   bool recordTransaction = false;
@@ -161,7 +159,11 @@ Future<void> showDebtSettleDialog(
                     if (value == null) return;
                     setState(() {
                       isFull = value;
-                      if (value) controller.text = remaining.toString();
+                      if (value) {
+                        controller.text = MoneyInputFormatter.format(
+                          remaining.toString(),
+                        );
+                      }
                     });
                   },
                   child: Column(
@@ -192,7 +194,7 @@ Future<void> showDebtSettleDialog(
                   TextField(
                     controller: controller,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: [const MoneyInputFormatter()],
                     decoration: InputDecoration(
                       labelText: isEn
                           ? 'Payment amount this time (₫)'
@@ -234,7 +236,7 @@ Future<void> showDebtSettleDialog(
             FilledButton(
               onPressed: () {
                 final inputAmount =
-                    int.tryParse(controller.text.trim()) ??
+                    MoneyFormatter.tryParse(controller.text) ??
                     (isFull ? remaining : 0);
                 if (inputAmount <= 0) return;
                 Navigator.pop(

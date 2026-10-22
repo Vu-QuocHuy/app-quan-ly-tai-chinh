@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/money_input_formatter.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../shared/widgets/category_avatar.dart';
@@ -29,9 +30,9 @@ class IncomeEntrySheet extends ConsumerStatefulWidget {
 
 class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
   late final TextEditingController _amount = TextEditingController(
-    text:
-        (widget.entry?.amountMinor ?? widget.initialAmountMinor)?.toString() ??
-        '',
+    text: MoneyInputFormatter.format(
+      (widget.entry?.amountMinor ?? widget.initialAmountMinor)?.toString(),
+    ),
   );
   String? _categoryId;
   late final _note = TextEditingController(text: widget.entry?.note ?? '');
@@ -176,6 +177,7 @@ class _IncomeEntrySheetState extends ConsumerState<IncomeEntrySheet> {
                 controller: _amount,
                 autofocus: true,
                 enabled: !_saving,
+                inputFormatters: [const MoneyInputFormatter()],
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: false,
                 ),

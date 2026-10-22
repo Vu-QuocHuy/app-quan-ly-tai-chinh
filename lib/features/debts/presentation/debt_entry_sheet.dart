@@ -1,3 +1,5 @@
+import '../../../core/utils/money_input_formatter.dart';
+import '../../../core/utils/money_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,7 +51,7 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
     _nameController = TextEditingController(text: item?.personName ?? '');
     _phoneController = TextEditingController(text: item?.phoneNumber ?? '');
     _amountController = TextEditingController(
-      text: item == null ? '' : item.amountMinor.toString(),
+      text: MoneyInputFormatter.format(item?.amountMinor.toString()),
     );
     _notesController = TextEditingController(text: item?.notes ?? '');
     _dueDate = item?.dueDate;
@@ -79,7 +81,7 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    final amount = int.tryParse(_amountController.text.trim()) ?? 0;
+    final amount = MoneyFormatter.tryParse(_amountController.text) ?? 0;
     if (amount <= 0) return;
 
     final existing = widget.existing;
@@ -230,7 +232,7 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
               TextFormField(
                 controller: _amountController,
                 keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: [const MoneyInputFormatter()],
                 decoration: InputDecoration(
                   labelText: tr.isEn ? 'Debt amount (₫) *' : 'Số tiền nợ (₫) *',
                   hintText: '200000',
@@ -239,7 +241,7 @@ class _DebtEntrySheetState extends ConsumerState<DebtEntrySheet> {
                   isDense: true,
                 ),
                 validator: (val) {
-                  final parsed = int.tryParse(val?.trim() ?? '');
+                  final parsed = MoneyFormatter.tryParse(val ?? '');
                   if (parsed == null || parsed <= 0) {
                     return tr.isEn
                         ? 'Please enter a valid amount'
