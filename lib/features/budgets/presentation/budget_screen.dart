@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/utils/money_input_formatter.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../core/utils/month_utils.dart';
@@ -133,7 +134,9 @@ class BudgetScreen extends ConsumerWidget {
     BudgetEntity? current,
     String monthKey,
   ) async {
-    final initialValue = current?.limitMinor.toString() ?? '';
+    final initialValue = MoneyInputFormatter.format(
+      current?.limitMinor.toString(),
+    );
     var inputValue = initialValue;
     final result = await showDialog<_BudgetDialogResult>(
       context: context,
@@ -143,6 +146,7 @@ class BudgetScreen extends ConsumerWidget {
           initialValue: initialValue,
           onChanged: (text) => inputValue = text,
           autofocus: true,
+          inputFormatters: [const MoneyInputFormatter()],
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
             labelText: 'Hạn mức tháng',

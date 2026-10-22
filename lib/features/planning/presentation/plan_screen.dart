@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/utils/money_input_formatter.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../app/theme/app_tokens.dart';
@@ -241,7 +242,9 @@ class PlanScreen extends ConsumerWidget {
   ]) async {
     if (categories.isEmpty) return;
     final title = TextEditingController(text: income?.title);
-    final amount = TextEditingController(text: income?.amountMinor.toString());
+    final amount = TextEditingController(
+      text: MoneyInputFormatter.format(income?.amountMinor.toString()),
+    );
     final fallbackId = categories
         .where((category) => category.id == unclassifiedIncomeCategoryId)
         .map((category) => category.id)
@@ -274,6 +277,7 @@ class PlanScreen extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.sm),
                 TextField(
                   controller: amount,
+                  inputFormatters: [const MoneyInputFormatter()],
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Số tiền mỗi tháng',
@@ -375,7 +379,9 @@ class PlanScreen extends ConsumerWidget {
     RecurringBill? bill,
   ]) async {
     final title = TextEditingController(text: bill?.title);
-    final amount = TextEditingController(text: bill?.amountMinor.toString());
+    final amount = TextEditingController(
+      text: MoneyInputFormatter.format(bill?.amountMinor.toString()),
+    );
     var frequency = bill?.frequency ?? BillFrequency.monthly;
     var categoryId = bill?.categoryId;
     var due = bill?.nextDueDate ?? DateTime.now();
@@ -399,6 +405,7 @@ class PlanScreen extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.sm),
                 TextField(
                   controller: amount,
+                  inputFormatters: [const MoneyInputFormatter()],
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Số tiền',
@@ -521,7 +528,9 @@ class PlanScreen extends ConsumerWidget {
     SavingsGoal? goal,
   ]) async {
     final name = TextEditingController(text: goal?.name);
-    final target = TextEditingController(text: goal?.targetMinor.toString());
+    final target = TextEditingController(
+      text: MoneyInputFormatter.format(goal?.targetMinor.toString()),
+    );
     var date =
         goal?.targetDate ??
         DateTime(
@@ -547,6 +556,7 @@ class PlanScreen extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.sm),
                 TextField(
                   controller: target,
+                  inputFormatters: [const MoneyInputFormatter()],
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Số tiền mục tiêu',
@@ -791,7 +801,9 @@ class PlanScreen extends ConsumerWidget {
     if (action == 'edit') return _editGoal(context, ref, goal);
     if (action == 'delete') return _delete(context, ref, goal);
     if (action != 'add') return;
-    final controller = TextEditingController(text: goal.savedMinor.toString());
+    final controller = TextEditingController(
+      text: MoneyInputFormatter.format(goal.savedMinor.toString()),
+    );
     String? error;
     final amount = await showDialog<int>(
       context: context,
@@ -804,6 +816,7 @@ class PlanScreen extends ConsumerWidget {
               TextField(
                 controller: controller,
                 autofocus: true,
+                inputFormatters: [const MoneyInputFormatter()],
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Tổng đã dành',

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/utils/money_input_formatter.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
@@ -212,6 +213,7 @@ class _TransactionEntrySheetState extends ConsumerState<TransactionEntrySheet> {
                   key: ValueKey('amount-$_income'),
                   controller: draft.amount,
                   enabled: !_saving,
+                  inputFormatters: [const MoneyInputFormatter()],
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Số tiền (₫)'),
                   onChanged: (_) => setState(() {}),

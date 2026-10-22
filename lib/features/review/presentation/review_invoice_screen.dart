@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/utils/money_input_formatter.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../budgets/presentation/category_management.dart';
@@ -64,14 +65,16 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
     final invoice = widget.invoice;
     _sellerController = TextEditingController(text: invoice.sellerName);
     _subtotalController = TextEditingController(
-      text: invoice.subtotalMinor.toString(),
+      text: MoneyInputFormatter.format(invoice.subtotalMinor.toString()),
     );
-    _taxController = TextEditingController(text: invoice.taxMinor.toString());
+    _taxController = TextEditingController(
+      text: MoneyInputFormatter.format(invoice.taxMinor.toString()),
+    );
     _discountController = TextEditingController(
-      text: invoice.discountMinor.toString(),
+      text: MoneyInputFormatter.format(invoice.discountMinor.toString()),
     );
     _totalController = TextEditingController(
-      text: invoice.totalMinor.toString(),
+      text: MoneyInputFormatter.format(invoice.totalMinor.toString()),
     );
     _notesController = TextEditingController(text: invoice.notes);
     _tagsController = TextEditingController(text: invoice.tags.join(', '));
@@ -499,14 +502,22 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
     String norm(String? value) => value ?? '';
 
     if (_sellerController.text != norm(invoice.sellerName)) return true;
-    if (_subtotalController.text != invoice.subtotalMinor.toString()) {
+    if (_subtotalController.text.replaceAll('.', '') !=
+        invoice.subtotalMinor.toString()) {
       return true;
     }
-    if (_taxController.text != invoice.taxMinor.toString()) return true;
-    if (_discountController.text != invoice.discountMinor.toString()) {
+    if (_taxController.text.replaceAll('.', '') !=
+        invoice.taxMinor.toString()) {
       return true;
     }
-    if (_totalController.text != invoice.totalMinor.toString()) return true;
+    if (_discountController.text.replaceAll('.', '') !=
+        invoice.discountMinor.toString()) {
+      return true;
+    }
+    if (_totalController.text.replaceAll('.', '') !=
+        invoice.totalMinor.toString()) {
+      return true;
+    }
     if (_notesController.text != norm(invoice.notes)) return true;
     if (_tagsController.text != invoice.tags.join(', ')) return true;
     if (_issuedAt != invoice.issuedAt) return true;
@@ -521,11 +532,14 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
       if (draft.quantityController.text != (line.quantity?.toString() ?? '')) {
         return true;
       }
-      if (draft.unitPriceController.text !=
+      if (draft.unitPriceController.text.replaceAll('.', '') !=
           (line.unitPriceMinor?.toString() ?? '')) {
         return true;
       }
-      if (draft.totalController.text != line.totalMinor.toString()) return true;
+      if (draft.totalController.text.replaceAll('.', '') !=
+          line.totalMinor.toString()) {
+        return true;
+      }
       if (draft.categoryId != line.categoryId) return true;
     }
     return false;
@@ -837,6 +851,7 @@ class _ReviewInvoiceScreenState extends ConsumerState<ReviewInvoiceScreen> {
                 Expanded(
                   child: FinmiTextField(
                     controller: draft.unitPriceController,
+                    inputFormatters: [const MoneyInputFormatter()],
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: false,
                     ),
@@ -1008,8 +1023,12 @@ class _InvoiceLineDraft {
     String? categoryId,
   }) : descriptionController = TextEditingController(text: description),
        quantityController = TextEditingController(text: quantity),
-       unitPriceController = TextEditingController(text: unitPrice),
-       totalController = TextEditingController(text: total),
+       unitPriceController = TextEditingController(
+         text: MoneyInputFormatter.format(unitPrice),
+       ),
+       totalController = TextEditingController(
+         text: MoneyInputFormatter.format(total),
+       ),
        categoryId = categoryId;
 
   factory _InvoiceLineDraft.empty() =>
@@ -1057,6 +1076,7 @@ class _MoneyField extends StatelessWidget {
   Widget build(BuildContext context) {
     return FinmiTextField(
       controller: controller,
+      inputFormatters: [const MoneyInputFormatter()],
       keyboardType: const TextInputType.numberWithOptions(decimal: false),
       textInputAction: TextInputAction.next,
       decoration: InputDecoration(

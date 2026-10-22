@@ -12,6 +12,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:uuid/uuid.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/utils/money_input_formatter.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
@@ -201,7 +202,9 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   }
 
   void _applyDraftToFields(QrPaymentDraft draft) {
-    _amountController.text = draft.amountVnd?.toString() ?? '';
+    _amountController.text = MoneyInputFormatter.format(
+      draft.amountVnd?.toString(),
+    );
     _accountController.text = draft.accountNumber;
     _recipientController.text = draft.recipientName;
     _memoController.text = draft.memo;
@@ -301,7 +304,9 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
       accountNumber: _accountController.text.trim(),
       recipientName: _recipientController.text.trim(),
       memo: _memoController.text.trim(),
-      amountVnd: int.tryParse(_amountController.text.trim()),
+      amountVnd: int.tryParse(
+        _amountController.text.replaceAll('.', '').trim(),
+      ),
       categoryId: _selectedCategoryId,
       bankAppId: bankAppId ?? current.bankAppId,
     );
@@ -1086,10 +1091,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
           FinmiTextField(
             controller: _amountController,
             keyboardType: const TextInputType.numberWithOptions(decimal: false),
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(12),
-            ],
+            inputFormatters: [const MoneyInputFormatter(maxDigits: 12)],
             decoration: InputDecoration(
               labelText: 'Số tiền (VND)',
               hintText: 'Nhập số tiền cần thanh toán',
@@ -1102,7 +1104,9 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
               ),
             ),
             validator: (value) {
-              final amount = int.tryParse(value?.trim() ?? '');
+              final amount = int.tryParse(
+                value?.replaceAll('.', '').trim() ?? '',
+              );
               return amount != null && amount > 0
                   ? null
                   : 'Nhập số tiền lớn hơn 0';

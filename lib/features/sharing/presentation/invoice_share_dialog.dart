@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/money_input_formatter.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../../shared/errors/error_presenter.dart';
@@ -35,7 +36,9 @@ class _InvoiceShareDialogState extends ConsumerState<InvoiceShareDialog> {
   final _emailController = TextEditingController();
   late final TextEditingController _recipientAmountController =
       TextEditingController(
-        text: ((widget.invoice.totalMinor + 1) ~/ 2).toString(),
+        text: MoneyInputFormatter.format(
+          ((widget.invoice.totalMinor + 1) ~/ 2).toString(),
+        ),
       );
   _ShareTarget _target = _ShareTarget.group;
   String? _groupId;
@@ -57,7 +60,7 @@ class _InvoiceShareDialogState extends ConsumerState<InvoiceShareDialog> {
         (controller) => controller.text.trim().isNotEmpty,
       ) ||
       _emailController.text.isNotEmpty ||
-      _recipientAmountController.text !=
+      _recipientAmountController.text.replaceAll('.', '') !=
           ((widget.invoice.totalMinor + 1) ~/ 2).toString();
 
   @override
@@ -222,7 +225,19 @@ class _InvoiceShareDialogState extends ConsumerState<InvoiceShareDialog> {
           selected: {_groupSplitMode},
           onSelectionChanged: _busy
               ? null
-              : (value) => setState(() => _groupSplitMode = value.first),
+              : (value) => setState(() {
+                  for (final controller in _groupSplitControllers.values) {
+                    final raw = _groupSplitMode == GroupSplitMode.exact
+                        ? controller.text.replaceAll('.', '')
+                        : controller.text;
+                    controller.text = value.first == GroupSplitMode.exact
+                        ? (RegExp(r'^-?[0-9]*$').hasMatch(raw)
+                              ? MoneyInputFormatter.format(raw)
+                              : '')
+                        : raw;
+                  }
+                  _groupSplitMode = value.first;
+                }),
         ),
         const SizedBox(height: 8),
         for (final member in members) _memberSplitField(member),
@@ -260,7 +275,10 @@ class _InvoiceShareDialogState extends ConsumerState<InvoiceShareDialog> {
                 decimal: true,
               ),
               inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                if (_groupSplitMode == GroupSplitMode.exact)
+                  const MoneyInputFormatter()
+                else
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
               ],
               decoration: InputDecoration(
                 isDense: true,
@@ -292,7 +310,7 @@ class _InvoiceShareDialogState extends ConsumerState<InvoiceShareDialog> {
         TextField(
           controller: _recipientAmountController,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          inputFormatters: [const MoneyInputFormatter()],
           decoration: InputDecoration(
             labelText: 'Phần tiền người nhận',
             suffixText: '₫',
@@ -349,7 +367,7 @@ class _InvoiceShareDialogState extends ConsumerState<InvoiceShareDialog> {
           splitAmounts: _groupSplitAmounts(),
         );
       } else {
-        final amount = int.tryParse(_recipientAmountController.text.trim());
+        final amount = MoneyFormatter.tryParse(_recipientAmountController.text);
         await service.shareInvoiceToUser(
           invoice: widget.invoice,
           recipientEmail: _emailController.text,
@@ -373,7 +391,13 @@ class _InvoiceShareDialogState extends ConsumerState<InvoiceShareDialog> {
     final values = <String, double>{
       for (final id in _selectedMemberIds)
         id:
-            double.tryParse(_groupSplitControllers[id]?.text.trim() ?? '') ??
+            (_groupSplitMode == GroupSplitMode.exact
+                ? MoneyFormatter.tryParse(
+                    _groupSplitControllers[id]?.text ?? '',
+                  )?.toDouble()
+                : double.tryParse(
+                    _groupSplitControllers[id]?.text.trim() ?? '',
+                  )) ??
             -1,
     };
     final result = GroupSplitCalculator.calculate(
@@ -394,7 +418,7 @@ class _InvoiceShareDialogState extends ConsumerState<InvoiceShareDialog> {
 
   bool _validateDirectFields() {
     final email = _emailController.text.trim();
-    final amount = int.tryParse(_recipientAmountController.text.trim());
+    final amount = MoneyFormatter.tryParse(_recipientAmountController.text);
     final emailValid = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
     final amountValid =
         amount != null && amount >= 0 && amount <= widget.invoice.totalMinor;

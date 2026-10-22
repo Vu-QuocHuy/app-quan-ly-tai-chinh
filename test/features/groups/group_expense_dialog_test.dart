@@ -40,7 +40,7 @@ void main() {
       ),
     );
     expect(_fieldText(tester, 'Nội dung'), 'Hóa đơn Highlands');
-    expect(_fieldText(tester, 'Tổng tiền'), '120000');
+    expect(_fieldText(tester, 'Tổng tiền'), '120.000');
     expect(find.text('Chia tiền'), findsWidgets);
   });
 
@@ -78,7 +78,7 @@ void main() {
       ),
     );
     expect(_fieldText(tester, 'Nội dung'), 'Ăn trưa');
-    expect(_fieldText(tester, 'Tổng tiền'), '50000');
+    expect(_fieldText(tester, 'Tổng tiền'), '50.000');
     expect(find.text('Sửa lần chia tiền'), findsOneWidget);
   });
 

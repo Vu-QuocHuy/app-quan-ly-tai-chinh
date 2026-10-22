@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/utils/money_input_formatter.dart';
+import '../../../core/utils/money_formatter.dart';
 import '../../../shared/dialogs/confirm_dialog.dart';
 import '../domain/group_models.dart';
 import '../domain/group_split_calculator.dart';
@@ -72,11 +74,12 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
       text: initial?.description ?? widget.initialDescription,
     );
     _amountController = TextEditingController(
-      text:
-          initial?.totalMinor.toString() ??
-          (prefillTotal != null && prefillTotal > 0
-              ? prefillTotal.toString()
-              : null),
+      text: MoneyInputFormatter.format(
+        initial?.totalMinor.toString() ??
+            (prefillTotal != null && prefillTotal > 0
+                ? prefillTotal.toString()
+                : null),
+      ),
     );
     _startDescription = _descriptionController.text;
     _startAmount = _amountController.text;
@@ -92,7 +95,9 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
         final userId = split.userId;
         if (userId != null) {
           _splitControllers[userId] = TextEditingController(
-            text: split.amountMinor.toString(),
+            text: _customMode == GroupSplitMode.exact
+                ? MoneyInputFormatter.format(split.amountMinor.toString())
+                : split.amountMinor.toString(),
           );
         }
       }
@@ -130,6 +135,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
         const SizedBox(height: 12),
         TextField(
           controller: _amountController,
+          inputFormatters: [const MoneyInputFormatter()],
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
             labelText: 'Tổng tiền',
@@ -145,6 +151,16 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
           ],
           selected: {_customMode},
           onSelectionChanged: (value) => setState(() {
+            for (final controller in _splitControllers.values) {
+              final raw = _customMode == GroupSplitMode.exact
+                  ? controller.text.replaceAll('.', '')
+                  : controller.text;
+              controller.text = value.first == GroupSplitMode.exact
+                  ? (RegExp(r'^-?[0-9]*$').hasMatch(raw)
+                        ? MoneyInputFormatter.format(raw)
+                        : '')
+                  : raw;
+            }
             _customMode = value.first;
             _error = null;
           }),
@@ -187,7 +203,7 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
     };
     return _splitControllers.entries.any(
       (entry) =>
-          entry.value.text !=
+          entry.value.text.replaceAll('.', '') !=
           (initialSplitAmounts[entry.key]?.toString() ?? ''),
     );
   }
@@ -259,6 +275,10 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
             child: TextField(
               controller: controller,
               enabled: _selectedIds.contains(member.userId),
+              inputFormatters: [
+                if (_customMode == GroupSplitMode.exact)
+                  const MoneyInputFormatter(),
+              ],
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
@@ -276,9 +296,11 @@ class GroupExpenseFormState extends State<GroupExpenseForm> {
   Map<String, int>? _parseSplits(int total) {
     final values = <String, double>{};
     for (final id in _selectedIds) {
-      final value = double.tryParse(
-        _splitControllers[id]!.text.trim().replaceAll(',', '.'),
-      );
+      final value = _customMode == GroupSplitMode.exact
+          ? MoneyFormatter.tryParse(_splitControllers[id]!.text)?.toDouble()
+          : double.tryParse(
+              _splitControllers[id]!.text.trim().replaceAll(',', '.'),
+            );
       if (value == null || value < 0) {
         setState(() => _error = 'Hãy nhập phần chia hợp lệ cho mọi người.');
         return null;
