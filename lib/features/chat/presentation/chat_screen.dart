@@ -24,7 +24,6 @@ import '../data/assistant_command_client.dart';
 import '../application/assistant_actions.dart';
 import '../application/assistant_read_tools.dart';
 import '../data/voice_file_cleanup.dart';
-import '../data/voice_speech_service.dart';
 import 'voice_waveform.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../shared/errors/error_presenter.dart';
@@ -122,16 +121,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   bool _startingRecording = false;
   int _voiceSession = 0;
   bool _transcribing = false;
+  // Blocks input while a recording is being discarded; unlike _transcribing
+  // it shows no transcription progress.
+  bool _cancellingVoice = false;
   Timer? _recordingTimer;
   StreamSubscription<Amplitude>? _amplitudeSubscription;
   VoiceActivity _voiceActivity = VoiceActivity();
   final _voiceLevel = VoiceLevelSamples();
-  bool _voiceAutoSend = false;
   String _voiceLocale = 'vi-VN';
   String? _connectionNote;
   TransactionDraftResult? _draftConversation;
-  bool _usingWebSpeech = false;
-  String _webSpeechBaseText = '';
   final Map<String, _TransactionDraft> _draftCards = {};
   String? _savingDraftMessageId;
   AssistantCommand? _pendingCommand;
@@ -155,7 +154,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _voiceSession++;
-    if (_usingWebSpeech) stopWebSpeech(cancel: true);
     _recordingTimer?.cancel();
     unawaited(_amplitudeSubscription?.cancel());
     _inputController.dispose();
@@ -182,18 +180,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _voiceSession++;
     _recordingTimer?.cancel();
     _recordingTimer = null;
-    _voiceAutoSend = false;
     final stoppingAmplitude = _amplitudeSubscription?.cancel();
     _amplitudeSubscription = null;
-    if (_usingWebSpeech) {
-      _usingWebSpeech = false;
-      stopWebSpeech(cancel: true);
-      _inputController.text = _webSpeechBaseText;
-    }
     final wasRecording = _recording || _startingRecording;
     setState(() {
       _recording = false;
-      _transcribing = wasRecording;
+      _cancellingVoice = wasRecording;
     });
     try {
       await stoppingAmplitude;
@@ -201,7 +193,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     } on Object catch (error) {
       if (mounted) setState(() => _connectionNote = friendlyMessage(error));
     } finally {
-      if (mounted) setState(() => _transcribing = false);
+      if (mounted) {
+        setState(() {
+          _cancellingVoice = false;
+          _transcribing = false;
+        });
+      }
     }
   }
 
@@ -351,7 +348,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   Widget _buildComposer(BuildContext context) {
-    final busy = _sending || _transcribing || _startingRecording;
+    final busy =
+        _sending || _transcribing || _cancellingVoice || _startingRecording;
     final canSend =
         !busy && !_recording && _inputController.text.trim().isNotEmpty;
     final canRecord = !busy;
@@ -372,39 +370,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               if (isListening)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _transcribing ? Icons.hourglass_top : Icons.mic,
-                        size: 16,
-                        color: scheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _transcribing
-                            ? Text(
-                                context.tr.isEn
-                                    ? 'Transcribing speech to text…'
-                                    : 'Đang chuyển lời nói thành văn bản…',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: scheme.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              )
-                            : Semantics(
+                  child: _transcribing
+                      ? _buildTranscribingProgress(context)
+                      : Row(
+                          children: [
+                            Icon(Icons.mic, size: 16, color: scheme.primary),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Semantics(
                                 label: context.tr.isEn
                                     ? 'Listening'
                                     : 'Đang nghe',
                                 child: VoiceWaveform(
-                                  // Browser speech recognition exposes no
-                                  // loudness; the waveform animates on its own.
-                                  level: _usingWebSpeech ? null : _voiceLevel,
+                                  level: _voiceLevel,
                                   color: scheme.primary,
                                 ),
                               ),
-                      ),
-                    ],
-                  ),
+                            ),
+                          ],
+                        ),
                 ),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -481,11 +465,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   Semantics(
                     button: true,
                     label: _recording
-                        ? 'Dừng ghi âm'
+                        ? (context.tr.isEn ? 'Stop and send' : 'Dừng và gửi')
                         : 'Nói câu hỏi hoặc mô tả giao dịch, tối đa $_maxVoiceRecordingSeconds giây',
                     child: IconButton.filledTonal(
                       tooltip: _recording
-                          ? 'Dừng ghi âm'
+                          ? (context.tr.isEn ? 'Stop and send' : 'Dừng và gửi')
                           : 'Nói câu hỏi hoặc giao dịch · tối đa $_maxVoiceRecordingSeconds giây',
                       onPressed: canRecord ? _toggleVoiceInput : null,
                       style: IconButton.styleFrom(
@@ -549,78 +533,64 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
+  /// Step 1 of a voice question: the recording is being transcribed. Step 2
+  /// (the assistant answering) uses the regular thinking indicator.
+  Widget _buildTranscribingProgress(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final label = context.tr.isEn
+        ? 'Converting speech to text…'
+        : 'Đang chuyển giọng nói thành văn bản…';
+    return Semantics(
+      liveRegion: true,
+      label: label,
+      child: ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.graphic_eq, size: 16, color: scheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                minHeight: 3,
+                color: scheme.primary,
+                backgroundColor: scheme.primary.withValues(alpha: 0.12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _toggleVoiceInput() async {
     if (_recording) {
       await _finishVoiceInput();
       return;
     }
-    if (_sending || _transcribing || _startingRecording) return;
+    if (_sending || _transcribing || _cancellingVoice || _startingRecording) {
+      return;
+    }
     final session = ++_voiceSession;
 
     final tr = context.tr;
     _voiceLocale = tr.isEn ? 'en-US' : 'vi-VN';
     _voiceActivity = VoiceActivity();
-    _voiceAutoSend = false;
-    if (kIsWeb && isWebSpeechSupported()) {
-      _usingWebSpeech = true;
-      _webSpeechBaseText = _inputController.text.trim();
-      setState(() {
-        _recording = true;
-        _connectionNote = null;
-      });
-      _recordingTimer?.cancel();
-      _recordingTimer = Timer(
-        const Duration(seconds: _maxVoiceRecordingSeconds),
-        () => unawaited(_finishVoiceInput(autoSend: true)),
-      );
-      startWebSpeech(
-        lang: _voiceLocale,
-        onResult: (text) {
-          if (!mounted || !_usingWebSpeech || session != _voiceSession) return;
-          final combined = _webSpeechBaseText.isEmpty
-              ? text
-              : '$_webSpeechBaseText $text';
-          setState(() => _inputController.text = combined);
-          _inputController.selection = TextSelection.collapsed(
-            offset: combined.length,
-          );
-        },
-        onError: (err) {
-          if (!mounted || !_usingWebSpeech || session != _voiceSession) return;
-          _recordingTimer?.cancel();
-          _usingWebSpeech = false;
-          _voiceAutoSend = false;
-          stopWebSpeech(cancel: true);
-          setState(() {
-            _recording = false;
-            _transcribing = false;
-            _connectionNote = _webSpeechErrorMessage(err, isEn: tr.isEn);
-          });
-        },
-        onEnd: () {
-          if (!mounted || !_usingWebSpeech || session != _voiceSession) return;
-          _recordingTimer?.cancel();
-          _usingWebSpeech = false;
-          setState(() {
-            _recording = false;
-            _transcribing = false;
-          });
-          final shouldSend =
-              _voiceAutoSend &&
-              _inputController.text.trim().isNotEmpty &&
-              _inputController.text.trim() != _webSpeechBaseText;
-          _voiceAutoSend = false;
-          if (shouldSend) unawaited(_send(_inputController.text));
-        },
-        onSilence: () {
-          if (mounted && session == _voiceSession && _usingWebSpeech) {
-            unawaited(_finishVoiceInput(autoSend: true));
-          }
-        },
-      );
-      return;
-    }
-
     setState(() => _startingRecording = true);
     try {
       if (!await _audioRecorder.hasPermission()) {
@@ -662,7 +632,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   session == _voiceSession &&
                   _recording &&
                   _voiceActivity.sample(amplitude.current, DateTime.now())) {
-                unawaited(_finishVoiceInput(autoSend: true));
+                unawaited(_finishVoiceInput());
               }
             },
             onError: (Object _) {
@@ -671,47 +641,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           );
       _recordingTimer = Timer(
         const Duration(seconds: _maxVoiceRecordingSeconds),
-        () => unawaited(_finishVoiceInput(autoSend: _voiceActivity.hasSpeech)),
+        () => unawaited(_finishVoiceInput()),
       );
     } on Object catch (error) {
       if (mounted) setState(() => _connectionNote = friendlyMessage(error));
     } finally {
       if (mounted) setState(() => _startingRecording = false);
-    }
-  }
-
-  /// Turns a browser SpeechRecognition error code into a user-facing note.
-  /// Non-code messages (unsupported browser, permission prompt failures) are
-  /// already readable and pass through unchanged.
-  static String? _webSpeechErrorMessage(String code, {required bool isEn}) {
-    switch (code) {
-      case 'aborted':
-        return null;
-      case 'no-speech':
-        return isEn
-            ? 'No speech was heard. Check that the right microphone is selected and not muted, then tap the mic and speak right away.'
-            : 'Không nghe thấy giọng nói. Hãy kiểm tra micro đang được chọn đúng và không bị tắt tiếng, rồi chạm mic và nói ngay.';
-      case 'audio-capture':
-        return isEn
-            ? 'No microphone was found. Connect a microphone and try again.'
-            : 'Không tìm thấy micro. Hãy kết nối micro rồi thử lại.';
-      case 'not-allowed':
-      case 'service-not-allowed':
-        return isEn
-            ? 'Microphone access is blocked. Click the lock/site-permissions icon in the address bar to allow the microphone.'
-            : 'Chưa được cấp quyền micro. Hãy bấm vào biểu tượng ổ khóa/quyền trang trên thanh địa chỉ để bật micro.';
-      case 'network':
-        return isEn
-            ? 'Speech recognition needs an internet connection and a supported browser (Chrome or Edge).'
-            : 'Nhận diện giọng nói cần kết nối mạng và trình duyệt được hỗ trợ (Chrome hoặc Edge).';
-      case 'language-not-supported':
-        return isEn
-            ? 'This browser cannot recognize the selected language.'
-            : 'Trình duyệt này không nhận diện được ngôn ngữ đã chọn.';
-      case 'unknown':
-        return isEn ? 'Microphone error.' : 'Lỗi micro.';
-      default:
-        return code;
     }
   }
 
@@ -721,22 +656,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     return ((decibels + 50) / 45).clamp(0.0, 1.0);
   }
 
-  Future<void> _finishVoiceInput({bool autoSend = false}) async {
+  /// Stops recording (manual stop, silence or the hard limit), transcribes the
+  /// audio through `ai-api` and sends the result to the assistant. The same
+  /// flow runs on every platform, including web.
+  Future<void> _finishVoiceInput() async {
     if (!_recording) return;
     if (_transcribing) return;
     _recordingTimer?.cancel();
     _recordingTimer = null;
     unawaited(_amplitudeSubscription?.cancel());
     _amplitudeSubscription = null;
-
-    if (_usingWebSpeech) {
-      _voiceAutoSend = autoSend;
-      setState(() => _transcribing = true);
-      // Recognition.stop emits its final result before onEnd. Keep callbacks
-      // alive until then so the last words are included exactly once.
-      stopWebSpeech();
-      return;
-    }
 
     final session = _voiceSession;
     final requestLocale = _voiceLocale;
@@ -805,7 +734,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
       if (mounted && session == _voiceSession) {
         setState(() => _transcribing = false);
-        if (transcribed && autoSend) unawaited(_send(_inputController.text));
+        if (transcribed) unawaited(_send(_inputController.text));
       }
     }
   }
@@ -816,7 +745,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _sending ||
         _recording ||
         _startingRecording ||
-        _transcribing) {
+        _transcribing ||
+        _cancellingVoice) {
       return;
     }
     final effectiveQuestion = _enToViPromptMap[question] ?? question;
