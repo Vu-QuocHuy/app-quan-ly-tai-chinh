@@ -114,10 +114,10 @@ const ninerRouterBaseUrl = (): string => {
   if (!configured) throw new FunctionError(503, "AI_NOT_CONFIGURED", "NINER_ROUTER_BASE_URL chưa được cấu hình.");
   try {
     const url = new URL(configured);
-    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) throw new Error("invalid-url");
+    if (url.protocol !== "http:" || url.hostname !== "103.199.18.103" || url.port !== "20128" || url.pathname.replace(/\/+$/, "") !== "/v1" || url.username || url.password || url.search || url.hash) throw new Error("invalid-url");
     return url.toString().replace(/\/+$/, "");
   } catch {
-    throw new FunctionError(503, "AI_NOT_CONFIGURED", "NINER_ROUTER_BASE_URL phải là HTTPS hợp lệ.");
+    throw new FunctionError(503, "AI_NOT_CONFIGURED", "NINER_ROUTER_BASE_URL không hợp lệ.");
   }
 };
 const ninerRouterModel = Deno.env.get("NINER_ROUTER_MODEL")?.trim() || "cx/gpt-5.6-luna[1m]";

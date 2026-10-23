@@ -308,7 +308,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 label: context.tr.isEn
                     ? 'Assistant is thinking'
                     : 'Trợ lý đang suy nghĩ',
-                child: const CircularProgressIndicator(strokeWidth: 2),
+                child: Text(
+                  context.tr.isEn ? 'Thinking ...' : 'Dang suy nghĩ ...',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
               ),
             ),
           );
