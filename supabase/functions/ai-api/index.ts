@@ -121,7 +121,7 @@ const ninerRouterBaseUrl = (): string => {
   }
 };
 const ninerRouterModel = Deno.env.get("NINER_ROUTER_MODEL")?.trim() || "cx/gpt-5.6-luna[1m]";
-const transcriptionModel = "openai/gpt-4o-transcribe";
+const transcriptionModel = Deno.env.get("GROQ_MODEL")?.trim() || "whisper-large-v3";
 const maxTextLength = 50_000;
 const maxImageBase64Length = 19_000_000;
 const maxBodyBytes = configuredInteger("AI_MAX_BODY_BYTES", 24_000_000, 1_024, 25_000_000);
@@ -547,9 +547,9 @@ async function draftTransaction(request: DraftTransactionRequest) {
 }
 
 async function transcribeAudio(request: TranscriptionRequest) {
-  const apiKey = ninerRouterApiKey();
+  const apiKey = Deno.env.get("GROQ_API_KEY")?.trim();
   if (!apiKey) {
-    throw new FunctionError(503, "TRANSCRIPTION_NOT_CONFIGURED", "NINER_ROUTER_API_KEY chưa được cấu hình trong Supabase Secrets.");
+    throw new FunctionError(503, "TRANSCRIPTION_NOT_CONFIGURED", "GROQ_API_KEY chưa được cấu hình trong Supabase Secrets.");
   }
   const form = new FormData();
   const audioBuffer = new ArrayBuffer(request.audio.byteLength);
@@ -558,7 +558,7 @@ async function transcribeAudio(request: TranscriptionRequest) {
   form.append("model", transcriptionModel);
   form.append("language", request.locale === "en-US" ? "en" : "vi");
   form.append("response_format", "json");
-  const response = await fetch(`${ninerRouterBaseUrl()}/audio/transcriptions`, {
+  const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
     method: "POST",
     headers: {Authorization: `Bearer ${apiKey}`},
     body: form,
