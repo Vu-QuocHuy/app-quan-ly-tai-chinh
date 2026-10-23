@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -22,8 +21,6 @@ class VoiceLevelSamples extends ChangeNotifier
 /// Scrolling loudness bars shown while the assistant is listening.
 ///
 /// Every new [level] sample (normalised 0–1) slides in as a bar on the right.
-/// When [level] is null the input has no loudness stream (browser speech
-/// recognition), so the widget feeds itself gentle synthetic samples.
 class VoiceWaveform extends StatefulWidget {
   const VoiceWaveform({
     required this.level,
@@ -34,7 +31,7 @@ class VoiceWaveform extends StatefulWidget {
     super.key,
   });
 
-  final ValueListenable<double>? level;
+  final ValueListenable<double> level;
   final Color color;
   final double height;
   final int barCount;
@@ -54,13 +51,11 @@ class _VoiceWaveformState extends State<VoiceWaveform>
     value: 1,
   );
   late List<double> _history = List.filled(widget.barCount, 0);
-  final _random = math.Random();
-  Timer? _syntheticTimer;
 
   @override
   void initState() {
     super.initState();
-    _attach(widget.level);
+    widget.level.addListener(_onLevel);
   }
 
   @override
@@ -71,40 +66,22 @@ class _VoiceWaveformState extends State<VoiceWaveform>
     }
     _scroll.duration = widget.sampleInterval;
     if (oldWidget.level != widget.level) {
-      _detach(oldWidget.level);
-      _attach(widget.level);
+      oldWidget.level.removeListener(_onLevel);
+      widget.level.addListener(_onLevel);
     }
   }
 
-  void _attach(ValueListenable<double>? level) {
-    if (level != null) {
-      level.addListener(_onLevel);
-      return;
-    }
-    _syntheticTimer = Timer.periodic(widget.sampleInterval, (_) {
-      _push(0.25 + _random.nextDouble() * 0.45);
-    });
-  }
-
-  void _detach(ValueListenable<double>? level) {
-    level?.removeListener(_onLevel);
-    _syntheticTimer?.cancel();
-    _syntheticTimer = null;
-  }
-
-  void _onLevel() => _push(widget.level!.value);
-
-  void _push(double value) {
+  void _onLevel() {
     if (!mounted) return;
     setState(() {
-      _history = [..._history.skip(1), value.clamp(0.0, 1.0)];
+      _history = [..._history.skip(1), widget.level.value.clamp(0.0, 1.0)];
     });
     _scroll.forward(from: 0);
   }
 
   @override
   void dispose() {
-    _detach(widget.level);
+    widget.level.removeListener(_onLevel);
     _scroll.dispose();
     super.dispose();
   }

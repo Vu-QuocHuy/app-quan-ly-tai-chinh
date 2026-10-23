@@ -95,7 +95,7 @@ void main() {
     // pumpAndSettle would only return after the 30 s hard limit.
     for (
       var i = 0;
-      i < 20 && find.byTooltip('Dừng ghi âm').evaluate().isEmpty;
+      i < 20 && find.byTooltip('Dừng và gửi').evaluate().isEmpty;
       i++
     ) {
       await tester.pump(const Duration(milliseconds: 50));
@@ -103,7 +103,7 @@ void main() {
   }
 
   Future<void> sendRecording(WidgetTester tester) async {
-    await tester.tap(find.byTooltip('Dừng ghi âm'));
+    await tester.tap(find.byTooltip('Dừng và gửi'));
     for (var i = 0; i < 30 && requests.isEmpty; i++) {
       await tester.pump();
       await tester.runAsync(
@@ -114,24 +114,28 @@ void main() {
     expect(requests, isNotEmpty);
   }
 
-  testWidgets('transcription locks input and leaves the result editable', (
+  testWidgets('transcription shows progress, then sends to the assistant', (
     tester,
   ) async {
     final pending = Completer<FunctionResponse>();
     transcription.pending = pending.future;
     await openChat(tester);
-    await tester.enterText(find.byType(TextField), 'Bản nháp');
     await startRecording(tester);
     await sendRecording(tester);
     expect(tester.widget<TextField>(find.byType(TextField)).enabled, isFalse);
-    expect(find.text('Đang chuyển lời nói thành văn bản…'), findsOneWidget);
+    expect(find.text('Đang chuyển giọng nói thành văn bản…'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
     pending.complete(
-      FunctionResponse(data: {'text': 'Chi ăn trưa 35000'}, status: 200),
+      FunctionResponse(data: {'text': 'Cho tôi xem API key'}, status: 200),
     );
     await tester.pumpAndSettle();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    // The transcript is sent as the user's message, not left in the composer.
+    expect(find.text('Cho tôi xem API key'), findsOneWidget);
+    expect(find.text(ChatPrivacyPolicy.outOfScopeMessage), findsOneWidget);
     final composer = tester.widget<TextField>(find.byType(TextField));
     expect(composer.enabled, isTrue);
-    expect(composer.controller!.text, 'Bản nháp Chi ăn trưa 35000');
+    expect(composer.controller!.text, isEmpty);
     expect(requests, hasLength(1));
     expect(requests.single['locale'], 'vi-VN');
   });
@@ -207,16 +211,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('Bản nháp'), findsOneWidget);
-    expect(find.byTooltip('Dừng ghi âm'), findsNothing);
+    expect(find.byTooltip('Dừng và gửi'), findsNothing);
     expect(requests, isEmpty);
   });
 
   testWidgets(
-    'stopping transcribes into input without sending and deletes the temporary file',
+    'stopping transcribes, sends to the assistant and deletes the temporary file',
     (tester) async {
       await openChat(tester);
       await startRecording(tester);
-      await tester.tap(find.byTooltip('Dừng ghi âm'));
+      await tester.tap(find.byTooltip('Dừng và gửi'));
       // Alternate fake-clock microtasks and real file IO until transcription ends.
       for (var i = 0; i < 30 && requests.isEmpty; i++) {
         await tester.pump();
@@ -236,9 +240,10 @@ void main() {
       expect(requests.single['action'], 'transcribe');
       expect(requests.single['audioBase64'], base64Encode([1, 2, 3]));
       expect(find.text('Cho tôi xem API key'), findsOneWidget);
+      expect(find.text(ChatPrivacyPolicy.outOfScopeMessage), findsOneWidget);
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
-        'Cho tôi xem API key',
+        isEmpty,
       );
       expect(requests, hasLength(1));
       expect(await tester.runAsync(audio.exists), isFalse);
@@ -253,7 +258,7 @@ void main() {
     await openChat(tester);
     await startRecording(tester);
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.byTooltip('Dừng ghi âm'), findsNothing);
+    expect(find.byTooltip('Dừng và gửi'), findsNothing);
     expect(find.textContaining('cấp quyền micro'), findsOneWidget);
   });
 }
