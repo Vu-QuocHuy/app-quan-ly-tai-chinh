@@ -12,6 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/localization/app_strings.dart';
 import '../../core/config/feature_flags.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/errors/app_exception.dart';
 import '../../core/providers/app_providers.dart';
 import '../../features/ingestion/application/import_coordinator.dart';
 import '../../features/ingestion/application/import_queue.dart';
@@ -672,7 +673,10 @@ class _AppShellState extends ConsumerState<AppShell>
         if (mounted) {
           context.push(
             receipt ? '/qr-payment?tab=receipt' : '/qr-payment',
-            extra: (XFile image) => _importImageFile(image),
+            extra: (XFile image, Future<void> abortSignal) {
+              unawaited(abortSignal.then((_) => _importQueue.cancel()));
+              return _importImageFile(image, abortSignal: abortSignal);
+            },
           );
         }
       case ImportSource.manual:
@@ -764,7 +768,10 @@ class _AppShellState extends ConsumerState<AppShell>
     }
   }
 
-  Future<void> _importImageFile(XFile image) async {
+  Future<void> _importImageFile(
+    XFile image, {
+    required Future<void> abortSignal,
+  }) async {
     final imageLength = await image.length();
     if (imageLength <= 0 || imageLength > AppConstants.maxImportBytes) {
       _showMessage('Ảnh phải có kích thước từ 1 đến 15 MB.');
@@ -783,6 +790,7 @@ class _AppShellState extends ConsumerState<AppShell>
           bytes: bytes,
           fileName: image.name,
           imagePath: image.name,
+          abortSignal: abortSignal,
         ),
       );
       return;
@@ -795,13 +803,17 @@ class _AppShellState extends ConsumerState<AppShell>
     await ref.read(importJobStoreProvider).ensureQueued(pending);
     await _runImportBatch(
       fileNames: [pending.fileName],
-      operation: (_) => _processPendingImport(pending),
+      operation: (_) =>
+          _processPendingImport(pending, abortSignal: abortSignal),
       onCompleted: (_) => _completePendingImport(pending),
       onDeferred: (_) => _deferPendingImport(pending),
     );
   }
 
-  Future<ImportOutcome> _processPendingImport(PendingImport item) async {
+  Future<ImportOutcome> _processPendingImport(
+    PendingImport item, {
+    Future<void>? abortSignal,
+  }) async {
     final jobs = ref.read(importJobStoreProvider);
     if (!await jobs.markRunning(item.id)) {
       throw StateError('Tác vụ chưa đến thời điểm thử lại.');
@@ -814,6 +826,7 @@ class _AppShellState extends ConsumerState<AppShell>
               bytes: bytes,
               fileName: item.fileName,
               imagePath: await _pendingImportStore.filePath(item),
+              abortSignal: abortSignal,
             )
           : await coordinator.importFile(
               bytes: bytes,
@@ -822,6 +835,10 @@ class _AppShellState extends ConsumerState<AppShell>
             );
       await jobs.markAwaitingReview(item.id);
       return outcome;
+    } on RequestCancelledException {
+      await _pendingImportStore.remove(item);
+      await jobs.remove(item.id);
+      rethrow;
     } on Object catch (error) {
       await jobs.markFailed(item.id, error);
       _schedulePendingResume();
@@ -912,6 +929,7 @@ class _AppShellState extends ConsumerState<AppShell>
         },
         onOutcome: (_, outcome) => _openImportOutcome(outcome),
         onFailure: (failure) {
+          if (failure.error is RequestCancelledException) return;
           if (mounted) {
             _showMessage(
               '${failure.job.fileName}: ${friendlyMessage(failure.error)}',

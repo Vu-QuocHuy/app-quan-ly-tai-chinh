@@ -36,7 +36,8 @@ class QrPaymentScreen extends ConsumerStatefulWidget {
 
   final bool showScanTabs;
   final int initialScanTab;
-  final Future<void> Function(XFile image)? onOcrImageReady;
+  final Future<void> Function(XFile image, Future<void> abortSignal)?
+  onOcrImageReady;
 
   @override
   ConsumerState<QrPaymentScreen> createState() => _QrPaymentScreenState();
@@ -70,6 +71,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   bool _isPickingOcrImage = false;
   bool _isCapturingOcrImage = false;
   bool _isProcessingOcrImage = false;
+  Completer<void>? _ocrAbortCompleter;
   bool _isStartingOcrCamera = false;
   String? _ocrCameraError;
   int _ocrCameraRequest = 0;
@@ -966,12 +968,21 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   Future<void> _processOcrImage(XFile image) async {
     final onReady = widget.onOcrImageReady;
     if (onReady == null || _isProcessingOcrImage) return;
+    final abortCompleter = Completer<void>();
+    _ocrAbortCompleter = abortCompleter;
     setState(() => _isProcessingOcrImage = true);
     try {
-      await onReady(image);
+      await onReady(image, abortCompleter.future);
     } finally {
+      _ocrAbortCompleter = null;
       if (mounted) setState(() => _isProcessingOcrImage = false);
     }
+  }
+
+  void _cancelOcrImage() {
+    final abortCompleter = _ocrAbortCompleter;
+    if (abortCompleter == null || abortCompleter.isCompleted) return;
+    abortCompleter.complete();
   }
 
   Widget _buildOcrPicker(BuildContext context) {
@@ -1136,6 +1147,14 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                                 : 'Đang trích xuất thông tin hóa đơn. Vui lòng chờ.',
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 20),
+                          OutlinedButton.icon(
+                            onPressed: _cancelOcrImage,
+                            icon: const Icon(Icons.close),
+                            label: Text(
+                              context.tr.isEn ? 'Cancel' : 'Hủy xử lý',
+                            ),
                           ),
                         ],
                       ),

@@ -234,8 +234,10 @@ final appRouter = GoRouter(
         final onPickOcrImage = state.extra;
         return QrPaymentScreen(
           initialScanTab: state.uri.queryParameters['tab'] == 'receipt' ? 1 : 0,
-          showScanTabs: onPickOcrImage is Future<void> Function(XFile),
-          onOcrImageReady: onPickOcrImage is Future<void> Function(XFile)
+          showScanTabs:
+              onPickOcrImage is Future<void> Function(XFile, Future<void>),
+          onOcrImageReady:
+              onPickOcrImage is Future<void> Function(XFile, Future<void>)
               ? onPickOcrImage
               : null,
         );

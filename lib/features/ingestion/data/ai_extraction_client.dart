@@ -216,6 +216,7 @@ class AiExtractionClient implements InvoiceExtractor {
     };
     final data = await _supabaseFunctions!.invoke(
       body,
+      abortSignal: input.abortSignal,
       errorMessage:
           'Không thể kết nối dịch vụ phân tích ảnh. Vui lòng thử lại sau.',
     );

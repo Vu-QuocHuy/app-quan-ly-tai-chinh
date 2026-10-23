@@ -134,6 +134,10 @@ class DriftImportJobStore {
         );
   }
 
+  Future<void> remove(String id) async {
+    await (_db.delete(_db.importJobs)..where((row) => row.id.equals(id))).go();
+  }
+
   Future<void> markAwaitingReview(String id) async {
     final now = DateTime.now();
     await (_db.update(_db.importJobs)..where(

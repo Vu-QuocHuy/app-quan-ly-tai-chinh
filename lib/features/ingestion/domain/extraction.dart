@@ -9,6 +9,7 @@ class ExtractionInput {
     required this.sourceType,
     this.localPath,
     this.ocrText,
+    this.abortSignal,
   });
 
   final Uint8List bytes;
@@ -16,6 +17,7 @@ class ExtractionInput {
   final InvoiceSourceType sourceType;
   final String? localPath;
   final String? ocrText;
+  final Future<void>? abortSignal;
 }
 
 class ExtractionResult {

@@ -57,3 +57,7 @@ final class ExtractionException extends AppException {
 final class NetworkException extends AppException {
   const NetworkException(super.message, {super.cause});
 }
+
+final class RequestCancelledException extends AppException {
+  const RequestCancelledException() : super('Đã hủy xử lý hóa đơn.');
+}

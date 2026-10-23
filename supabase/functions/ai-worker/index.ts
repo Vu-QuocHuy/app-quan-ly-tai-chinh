@@ -201,7 +201,7 @@ async function generateInvoice(text?: string, image?: {mimeType: string; data: s
       generationConfig: {
         temperature: 0.1,
         responseMimeType: "application/json",
-        responseSchema: invoiceSchema,
+        responseJsonSchema: invoiceSchema,
       },
     }),
     signal: AbortSignal.timeout(30_000),

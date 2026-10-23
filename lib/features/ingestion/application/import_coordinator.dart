@@ -97,6 +97,7 @@ class ImportCoordinator {
     required Uint8List bytes,
     required String fileName,
     required String imagePath,
+    Future<void>? abortSignal,
   }) async {
     _validateSize(bytes);
     final input = ExtractionInput(
@@ -104,6 +105,7 @@ class ImportCoordinator {
       fileName: fileName,
       sourceType: InvoiceSourceType.imageOcr,
       localPath: imagePath,
+      abortSignal: abortSignal,
     );
     if (!_aiExtractor.isConfigured) {
       throw const NetworkException(

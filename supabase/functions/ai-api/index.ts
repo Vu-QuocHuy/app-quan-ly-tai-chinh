@@ -652,7 +652,7 @@ async function generateGeminiJson(
         generationConfig: {
           temperature,
           responseMimeType: "application/json",
-          responseSchema: schema,
+          responseJsonSchema: schema,
         },
       }),
       signal: AbortSignal.timeout(timeoutMs),
