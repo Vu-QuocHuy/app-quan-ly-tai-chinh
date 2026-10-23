@@ -310,7 +310,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 liveRegion: true,
                 label: context.tr.isEn
                     ? 'Assistant is thinking'
-                    : 'Trợ lý đang suy nghĩ',
+                    : 'Đang suy nghĩ ...',
                 child: Text(
                   context.tr.isEn ? 'Thinking ...' : 'Đang suy nghĩ ...',
                   style: Theme.of(context).textTheme.bodyMedium,
@@ -877,7 +877,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     try {
       if (ref.read(assistantCommandClientProvider).isConfigured) {
-        await _handleAssistantCommand(question);
+        await _handleAssistantCommand(question, draftRequest: draftRequest);
         return;
       }
       if (draftRequest) {
@@ -944,7 +944,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _scrollToEnd();
   }
 
-  Future<void> _handleAssistantCommand(String question) async {
+  Future<void> _handleAssistantCommand(
+    String question, {
+    required bool draftRequest,
+  }) async {
     final en = context.tr.isEn;
     final actions = ref.read(assistantActionsProvider(_chatSessionId));
     final account = ref.read(authUserProvider).valueOrNull?.id;
@@ -954,6 +957,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           r'^(đồng ý|xác nhận|vẫn lưu|ghi thêm|có|yes|confirm|save anyway|record another)[.! ]*$',
           caseSensitive: false,
         ).hasMatch(question.trim());
+    var writeStarted = false;
+    final canUseRuleBasedFallback =
+        !context.tr.isEn &&
+        !draftRequest &&
+        !confirmed &&
+        _pendingCommand == null;
     try {
       final categories = [
         ...await ref.read(incomeCategoriesProvider.future),
@@ -1015,6 +1024,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _appendCommandReply(missing);
         return;
       }
+      writeStarted = true;
       final result = await actions.execute(
         command,
         english: en,
@@ -1033,6 +1043,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
     } on Object {
       if (!mounted) return;
+      if (!writeStarted && canUseRuleBasedFallback) {
+        if (account != ref.read(authUserProvider).valueOrNull?.id) {
+          _pendingCommand = null;
+          _duplicateCommand = null;
+          actions.reset();
+          _appendCommandReply('Tài khoản đã thay đổi. Hãy gửi lại yêu cầu.');
+          return;
+        }
+        final reply = await _answerFallback(question, draftRequest: false);
+        _appendCommandReply(reply.text, citations: reply.citations);
+        return;
+      }
       // A failed write can be an ambiguous network result. Never reroute it to
       // a different writer, automatically retry, or announce success.
       _appendCommandReply(
