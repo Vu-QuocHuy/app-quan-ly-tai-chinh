@@ -122,20 +122,20 @@ class DebtNotificationStore {
     final effectiveUserId =
         currentUserId ?? effectiveClient?.auth.currentUser?.id;
 
-    // 1. Kiểm tra qua RPC check_phone_available trên Supabase
+    // 1. Kiểm tra qua RPC check_phone_available trên Supabase. Khi server trả
+    // lời được thì đó là nguồn đúng duy nhất: bảng local có thể còn dữ liệu cũ
+    // của tài khoản khác từng đăng nhập trên cùng thiết bị.
     if (effectiveClient != null) {
       try {
         final isAvailable = await effectiveClient.rpc(
           'check_phone_available',
           params: {'p_phone': cleanPhone},
         );
-        if (isAvailable is bool && !isAvailable) {
-          return true;
-        }
+        if (isAvailable is bool) return !isAvailable;
       } catch (_) {}
     }
 
-    // 2. Kiểm tra qua local mapping phone -> owner userId
+    // 2. Offline hoặc RPC lỗi: kiểm tra qua local mapping phone -> owner userId
     final prefs = await SharedPreferences.getInstance();
     final rawMap = prefs.getString(_phoneOwnerKey);
     if (rawMap != null) {

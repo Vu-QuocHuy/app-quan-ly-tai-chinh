@@ -7,14 +7,21 @@ import '../../../core/providers/app_providers.dart';
 import '../../debts/data/debt_notification_store.dart';
 import '../data/personal_profile_store.dart';
 
+/// App shell and account screen can both request this sheet right after a
+/// sign-in; only one may be checking or showing it at a time, otherwise a
+/// second identical sheet stays behind the one the user completes.
+bool _profileSheetActive = false;
+
 Future<void> showCompleteProfileDialogIfNeeded(
   BuildContext context,
   WidgetRef ref,
 ) async {
+  if (_profileSheetActive) return;
   final client = ref.read(supabaseClientProvider);
   final user = client?.auth.currentUser;
   if (client == null || user == null) return;
 
+  _profileSheetActive = true;
   try {
     final profile = await PersonalProfileStore(client).load();
     if (profile.phone.trim().isNotEmpty &&
@@ -33,6 +40,13 @@ Future<void> showCompleteProfileDialogIfNeeded(
     );
     final phoneController = TextEditingController(text: profile.phone);
     bool saving = false;
+    // Errors are shown inside the sheet: a SnackBar would render on the page
+    // Scaffold underneath this modal and stay hidden behind it.
+    String? phoneError;
+    String? submitError;
+    final phoneTakenMessage = isEn
+        ? 'This phone number is already registered by another account.'
+        : 'Số điện thoại này đã được sử dụng bởi tài khoản khác.';
 
     await showModalBottomSheet<void>(
       context: context,
@@ -132,11 +146,18 @@ Future<void> showCompleteProfileDialogIfNeeded(
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(10),
                   ],
+                  onChanged: (_) {
+                    if (phoneError != null) {
+                      setState(() => phoneError = null);
+                    }
+                  },
                   decoration: InputDecoration(
                     labelText: isEn ? 'Phone Number *' : 'Số điện thoại *',
                     hintText: '0912345678',
                     prefixIcon: const Icon(Icons.phone_outlined),
                     border: const OutlineInputBorder(),
+                    errorText: phoneError,
+                    errorMaxLines: 2,
                   ),
                   validator: (v) {
                     final text = v?.trim() ?? '';
@@ -153,6 +174,15 @@ Future<void> showCompleteProfileDialogIfNeeded(
                     return null;
                   },
                 ),
+                if (submitError != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    submitError!,
+                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(ctx).colorScheme.error,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 FilledButton(
                   style: FilledButton.styleFrom(
@@ -161,6 +191,10 @@ Future<void> showCompleteProfileDialogIfNeeded(
                   onPressed: saving
                       ? null
                       : () async {
+                          setState(() {
+                            phoneError = null;
+                            submitError = null;
+                          });
                           if (formKey.currentState?.validate() != true) return;
                           setState(() => saving = true);
                           try {
@@ -177,21 +211,10 @@ Future<void> showCompleteProfileDialogIfNeeded(
                                 );
                             if (isTaken) {
                               if (ctx.mounted) {
-                                setState(() => saving = false);
-                                final messenger = ScaffoldMessenger.of(ctx);
-                                messenger.clearSnackBars();
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      isEn
-                                          ? 'This phone number is already registered by another account.'
-                                          : 'Số điện thoại này đã được sử dụng bởi tài khoản khác.',
-                                    ),
-                                    backgroundColor: Colors.red,
-                                    duration: const Duration(seconds: 3),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
+                                setState(() {
+                                  saving = false;
+                                  phoneError = phoneTakenMessage;
+                                });
                               }
                               return;
                             }
@@ -226,25 +249,20 @@ Future<void> showCompleteProfileDialogIfNeeded(
                             }
                           } catch (e) {
                             if (ctx.mounted) {
-                              setState(() => saving = false);
-                              final messenger = ScaffoldMessenger.of(ctx);
-                              messenger.clearSnackBars();
                               final str = e.toString();
-                              final msg =
+                              final taken =
                                   str.contains('23505') ||
-                                      str.contains('đã được sử dụng')
-                                  ? (isEn
-                                        ? 'This phone number is already registered by another account.'
-                                        : 'Số điện thoại này đã được sử dụng bởi tài khoản khác.')
-                                  : 'Error: $e';
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  content: Text(msg),
-                                  backgroundColor: Colors.red,
-                                  duration: const Duration(seconds: 3),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
+                                  str.contains('đã được sử dụng');
+                              setState(() {
+                                saving = false;
+                                if (taken) {
+                                  phoneError = phoneTakenMessage;
+                                } else {
+                                  submitError = isEn
+                                      ? 'Could not save profile: $e'
+                                      : 'Không lưu được thông tin: $e';
+                                }
+                              });
                             }
                           }
                         },
@@ -265,5 +283,8 @@ Future<void> showCompleteProfileDialogIfNeeded(
         ),
       ),
     );
-  } catch (_) {}
+  } catch (_) {
+  } finally {
+    _profileSheetActive = false;
+  }
 }
