@@ -113,11 +113,9 @@
               if (generation !== speechGeneration) return;
               releaseSpeechAudio();
               console.warn("Finmi Speech error:", err);
-              var msg = err.error || "Lỗi micro";
-              if (err.error === 'not-allowed') {
-                msg = "Chưa được cấp quyền micro. Hãy bấm vào biểu tượng ổ khóa/quyền trang trên thanh địa chỉ để bật micro.";
-              }
-              if (onError) onError(msg);
+              // Pass the raw SpeechRecognition error code (no-speech,
+              // not-allowed, network, …); Dart localizes it for the UI.
+              if (onError) onError(err.error || "unknown");
             };
             recognition.onend = function() {
               if (generation !== speechGeneration) return;
