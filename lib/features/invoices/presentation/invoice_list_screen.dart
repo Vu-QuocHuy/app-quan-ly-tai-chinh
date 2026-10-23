@@ -1656,6 +1656,9 @@ Future<void> _showConfirmSaveDebtSheet(
                         isEn ? 'Save to My Debts' : 'Lưu vào khoản nợ của tôi',
                       ),
                       onPressed: () async {
+                        final navigator = Navigator.of(modalCtx);
+                        final messenger = ScaffoldMessenger.of(context);
+                        final router = GoRouter.of(context);
                         final newDebt = DebtRecord(
                           id: 'debt-${DateTime.now().millisecondsSinceEpoch}',
                           personName: notification.senderName,
@@ -1679,24 +1682,19 @@ Future<void> _showConfirmSaveDebtSheet(
                         ref.invalidate(debtNotificationsProvider);
                         ref.invalidate(debtsListProvider);
 
-                        if (modalCtx.mounted) {
-                          Navigator.pop(modalCtx);
-                        }
-
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                isEn
-                                    ? 'Saved to your debts (To Pay)'
-                                    : 'Đã lưu vào danh sách nợ cần trả của bạn!',
-                              ),
-                              behavior: SnackBarBehavior.floating,
-                              duration: const Duration(seconds: 3),
+                        navigator.pop();
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              isEn
+                                  ? 'Saved to your debts (To Pay)'
+                                  : 'Đã lưu vào danh sách nợ cần trả của bạn!',
                             ),
-                          );
-                          context.push('/debts?debtId=${newDebt.id}');
-                        }
+                            behavior: SnackBarBehavior.floating,
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                        router.push('/debts?debtId=${newDebt.id}');
                       },
                     ),
                   ),

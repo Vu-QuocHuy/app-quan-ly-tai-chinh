@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -8,6 +9,10 @@ class SupabaseAuthService {
   const SupabaseAuthService(this._client);
 
   final SupabaseClient _client;
+
+  String? get _oauthRedirectUri => kIsWeb
+      ? SupabaseBootstrap.oauthRedirectUri
+      : 'hoadoninsight://login-callback';
 
   User? get currentUser => _client.auth.currentUser;
 
@@ -75,7 +80,7 @@ class SupabaseAuthService {
 
     return _client.auth.signInWithOAuth(
       OAuthProvider.google,
-      redirectTo: SupabaseBootstrap.oauthRedirectUri,
+      redirectTo: _oauthRedirectUri,
     );
   }
 
@@ -86,7 +91,7 @@ class SupabaseAuthService {
   Future<bool> linkGoogleIdentity() {
     return _client.auth.linkIdentity(
       OAuthProvider.google,
-      redirectTo: SupabaseBootstrap.oauthRedirectUri,
+      redirectTo: _oauthRedirectUri,
     );
   }
 

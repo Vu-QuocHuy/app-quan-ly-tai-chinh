@@ -1053,8 +1053,8 @@ class _GroupDetails extends StatelessWidget {
     );
   }
 
-  String _balanceLabel(BuildContext context, int amount) {
-    if (amount == 0) return context.tr.balanced;
+  String? _balanceLabel(BuildContext context, int amount) {
+    if (amount == 0) return null;
     return amount > 0
         ? context.tr.shouldReceive(MoneyFormatter.format(amount))
         : context.tr.shouldPay(MoneyFormatter.format(-amount));
@@ -1419,7 +1419,7 @@ class _MemberTile extends StatelessWidget {
   final GroupMember member;
   final String currentUserId;
   final bool isGroupOwner;
-  final String balanceLabel;
+  final String? balanceLabel;
   final Future<void> Function(String userId, String role) onSetRole;
   final Future<void> Function(String userId, String displayName) onRemove;
 
@@ -1448,16 +1448,17 @@ class _MemberTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 132),
-            child: Text(
-              balanceLabel,
-              textAlign: TextAlign.end,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
+          if (balanceLabel != null)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 132),
+              child: Text(
+                balanceLabel!,
+                textAlign: TextAlign.end,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
-          ),
           if (canManage)
             PopupMenuButton<String>(
               tooltip: context.tr.manageMemberTooltip,

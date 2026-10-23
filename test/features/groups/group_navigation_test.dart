@@ -33,8 +33,23 @@ void main() {
           role: 'owner',
           phone: '0912345678',
         ),
+        GroupMember(userId: 'user-2', displayName: 'An', role: 'member'),
+        GroupMember(userId: 'user-3', displayName: 'Bình', role: 'member'),
       ],
-      expenses: const [],
+      expenses: [
+        GroupExpense(
+          id: 'expense-1',
+          groupId: group.id,
+          payerId: 'user-1',
+          description: 'Ăn tối',
+          totalMinor: 20000,
+          createdAt: DateTime(2026, 10, 23),
+          splits: const [
+            GroupExpenseSplit(userId: 'user-1', amountMinor: 10000),
+            GroupExpenseSplit(userId: 'user-2', amountMinor: 10000),
+          ],
+        ),
+      ],
       auditEvents: const [],
     );
     final service = _FakeExpenseGroupService(
@@ -85,6 +100,9 @@ void main() {
     expect(find.byIcon(Icons.arrow_back), findsOneWidget);
     expect(find.byTooltip('Mời thành viên bằng QR'), findsOneWidget);
     expect(find.text('Chủ nhóm · 0912345678'), findsOneWidget);
+    expect(find.text('Đã cân bằng'), findsNothing);
+    expect(find.textContaining('được nhận'), findsOneWidget);
+    expect(find.textContaining('cần trả'), findsOneWidget);
     expect(find.text('Nhóm của tôi'), findsNothing);
 
     await tester.tap(find.byIcon(Icons.arrow_back));

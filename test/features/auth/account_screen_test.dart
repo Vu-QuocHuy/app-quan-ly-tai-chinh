@@ -30,6 +30,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('signed-in account shows the editable personal profile form', (
+    tester,
+  ) async {
+    final user = User.fromJson({
+      'id': '00000000-0000-4000-8000-000000000001',
+      'app_metadata': <String, dynamic>{},
+      'user_metadata': <String, dynamic>{},
+      'aud': 'authenticated',
+      'created_at': '2026-10-23T00:00:00Z',
+      'email': 'test@example.com',
+    });
+
+    await tester.pumpWidget(_app(client, user: user));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Đã kết nối tài khoản'), findsOneWidget);
+    expect(find.text('Thông tin cá nhân'), findsOneWidget);
+    expect(
+      find.text(
+        'Họ tên và số điện thoại sẽ hiển thị với thành viên trong các nhóm bạn tham gia.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Họ và tên'), findsOneWidget);
+    expect(find.text('Số điện thoại *'), findsOneWidget);
+    expect(find.text('Lưu thông tin'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('auth form fits a small phone', (tester) async {
     await tester.binding.setSurfaceSize(const Size(375, 812));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -159,11 +188,12 @@ Widget _app(
   SupabaseClient client, {
   double textScale = 1,
   ThemeMode themeMode = ThemeMode.light,
+  User? user,
 }) {
   return ProviderScope(
     overrides: [
       supabaseClientProvider.overrideWithValue(client),
-      authUserProvider.overrideWith((ref) => Stream.value(null)),
+      authUserProvider.overrideWith((ref) => Stream.value(user)),
     ],
     child: MaterialApp(
       locale: const Locale('vi'),
