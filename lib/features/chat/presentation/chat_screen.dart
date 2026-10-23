@@ -25,6 +25,7 @@ import '../application/assistant_actions.dart';
 import '../application/assistant_read_tools.dart';
 import '../data/voice_file_cleanup.dart';
 import '../data/voice_speech_service.dart';
+import 'voice_waveform.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../shared/errors/error_presenter.dart';
 import '../../../shared/widgets/app_callout.dart';
@@ -124,6 +125,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Timer? _recordingTimer;
   StreamSubscription<Amplitude>? _amplitudeSubscription;
   VoiceActivity _voiceActivity = VoiceActivity();
+  final _voiceLevel = VoiceLevelSamples();
   bool _voiceAutoSend = false;
   String _voiceLocale = 'vi-VN';
   String? _connectionNote;
@@ -158,6 +160,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     unawaited(_amplitudeSubscription?.cancel());
     _inputController.dispose();
     _scrollController.dispose();
+    _voiceLevel.dispose();
     unawaited(
       (_recording || _startingRecording || _transcribing
               ? _audioRecorder.cancel()
@@ -309,7 +312,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     ? 'Assistant is thinking'
                     : 'Trợ lý đang suy nghĩ',
                 child: Text(
-                  context.tr.isEn ? 'Thinking ...' : 'Dang suy nghĩ ...',
+                  context.tr.isEn ? 'Thinking ...' : 'Đang suy nghĩ ...',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
@@ -378,19 +381,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          _transcribing
-                              ? (context.tr.isEn
+                        child: _transcribing
+                            ? Text(
+                                context.tr.isEn
                                     ? 'Transcribing speech to text…'
-                                    : 'Đang chuyển lời nói thành văn bản…')
-                              : (context.tr.isEn
-                                    ? 'Listening · sends after 2.5 s of silence · tap mic to review'
-                                    : 'Đang nghe · tự gửi khi ngừng nói 2,5 giây · chạm mic để xem lại'),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                                    : 'Đang chuyển lời nói thành văn bản…',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              )
+                            : Semantics(
+                                label: context.tr.isEn
+                                    ? 'Listening'
+                                    : 'Đang nghe',
+                                child: VoiceWaveform(
+                                  // Browser speech recognition exposes no
+                                  // loudness; the waveform animates on its own.
+                                  level: _usingWebSpeech ? null : _voiceLevel,
+                                  color: scheme.primary,
+                                ),
+                              ),
                       ),
                     ],
                   ),
@@ -583,7 +594,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           setState(() {
             _recording = false;
             _transcribing = false;
-            _connectionNote = err;
+            _connectionNote = _webSpeechErrorMessage(err, isEn: tr.isEn);
           });
         },
         onEnd: () {
@@ -644,6 +655,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           .onAmplitudeChanged(const Duration(milliseconds: 200))
           .listen(
             (amplitude) {
+              if (session == _voiceSession) {
+                _voiceLevel.add(_normalizeDecibels(amplitude.current));
+              }
               if (mounted &&
                   session == _voiceSession &&
                   _recording &&
@@ -664,6 +678,47 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     } finally {
       if (mounted) setState(() => _startingRecording = false);
     }
+  }
+
+  /// Turns a browser SpeechRecognition error code into a user-facing note.
+  /// Non-code messages (unsupported browser, permission prompt failures) are
+  /// already readable and pass through unchanged.
+  static String? _webSpeechErrorMessage(String code, {required bool isEn}) {
+    switch (code) {
+      case 'aborted':
+        return null;
+      case 'no-speech':
+        return isEn
+            ? 'No speech was heard. Check that the right microphone is selected and not muted, then tap the mic and speak right away.'
+            : 'Không nghe thấy giọng nói. Hãy kiểm tra micro đang được chọn đúng và không bị tắt tiếng, rồi chạm mic và nói ngay.';
+      case 'audio-capture':
+        return isEn
+            ? 'No microphone was found. Connect a microphone and try again.'
+            : 'Không tìm thấy micro. Hãy kết nối micro rồi thử lại.';
+      case 'not-allowed':
+      case 'service-not-allowed':
+        return isEn
+            ? 'Microphone access is blocked. Click the lock/site-permissions icon in the address bar to allow the microphone.'
+            : 'Chưa được cấp quyền micro. Hãy bấm vào biểu tượng ổ khóa/quyền trang trên thanh địa chỉ để bật micro.';
+      case 'network':
+        return isEn
+            ? 'Speech recognition needs an internet connection and a supported browser (Chrome or Edge).'
+            : 'Nhận diện giọng nói cần kết nối mạng và trình duyệt được hỗ trợ (Chrome hoặc Edge).';
+      case 'language-not-supported':
+        return isEn
+            ? 'This browser cannot recognize the selected language.'
+            : 'Trình duyệt này không nhận diện được ngôn ngữ đã chọn.';
+      case 'unknown':
+        return isEn ? 'Microphone error.' : 'Lỗi micro.';
+      default:
+        return code;
+    }
+  }
+
+  /// Maps recorder loudness (dBFS, roughly -60 silent to 0 loud) to 0–1.
+  static double _normalizeDecibels(double decibels) {
+    if (!decibels.isFinite) return 0;
+    return ((decibels + 50) / 45).clamp(0.0, 1.0);
   }
 
   Future<void> _finishVoiceInput({bool autoSend = false}) async {

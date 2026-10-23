@@ -91,7 +91,15 @@ void main() {
 
   Future<void> startRecording(WidgetTester tester) async {
     await tester.tap(find.byIcon(Icons.mic_none));
-    await tester.pumpAndSettle();
+    // The live waveform animates for as long as recording runs, so
+    // pumpAndSettle would only return after the 30 s hard limit.
+    for (
+      var i = 0;
+      i < 20 && find.byTooltip('Dừng ghi âm').evaluate().isEmpty;
+      i++
+    ) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
   }
 
   Future<void> sendRecording(WidgetTester tester) async {
