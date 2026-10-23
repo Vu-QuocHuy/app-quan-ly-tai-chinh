@@ -102,7 +102,6 @@ Kiểm tra local:
 dart format --output=none --set-exit-if-changed lib test
 flutter analyze --no-pub
 flutter test --no-pub
-node tool/test_voice_web.mjs
 npx deno test supabase/functions/_shared/assistant_guard_test.ts
 npx deno run --node-modules-dir=none --allow-read tool/test_ai_fund_migration.mjs
 ```

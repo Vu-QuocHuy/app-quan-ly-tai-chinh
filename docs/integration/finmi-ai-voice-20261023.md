@@ -4,9 +4,9 @@
 
 - Text nhập và text nhận dạng từ voice đi qua cùng bộ phân tích ý định.
 - Voice ưu tiên `vi-VN` hoặc `en-US` theo lựa chọn ngôn ngữ giao diện. AI trả lời, câu hỏi làm rõ và thông báo ghi/sửa dùng ngôn ngữ giao diện, kể cả khi ngôn ngữ đầu vào khác.
-- Web Speech hiển thị chữ trong lúc nói. Web sử dụng năng lượng âm thanh qua Web Audio; native sử dụng amplitude của recorder để phát hiện tiếng nói. Sau ít nhất 150 ms tiếng nói và 2,5 giây im lặng, app chốt phiên âm rồi tự gửi một lần. Đây là VAD theo mức âm thanh, chưa phải mô hình VAD thần kinh; môi trường ồn hoặc micro quá nhỏ cần kiểm tra thực tế.
-- Chạm mic để dừng thủ công sẽ giữ chữ cho người dùng sửa rồi gửi. Giới hạn phiên vẫn là 30 giây. Hủy/chuyển nền/đóng màn hình không tự gửi. Phiên chưa có tiếng nói không tự gửi theo khoảng lặng.
-- Native/web fallback thu WAV 16 kHz mono, gửi `ai-api/transcribe` qua 9Router; chưa có streaming transcription. Trình duyệt không có Web Audio vẫn có dừng thủ công/giới hạn phiên.
+- Mọi nền tảng (kể cả web) dùng chung một luồng: ghi WAV 16 kHz mono bằng `record`, không hiển thị chữ trong lúc nói; khi đang ghi hiển thị sóng âm theo amplitude của recorder. Sau ít nhất 150 ms tiếng nói và 2,5 giây im lặng, app tự dừng. Đây là VAD theo mức âm thanh, chưa phải mô hình VAD thần kinh; môi trường ồn hoặc micro quá nhỏ cần kiểm tra thực tế.
+- Dừng (chạm nút "Dừng và gửi", khoảng lặng hoặc giới hạn 30 giây) sẽ gửi bản ghi tới `ai-api/transcribe` qua 9Router, hiển thị thanh tiến trình "Đang chuyển giọng nói thành văn bản…", rồi tự gửi văn bản cho trợ lý (bước trả lời dùng chỉ báo "Đang suy nghĩ"). Hủy/chuyển nền/đóng màn hình không gửi. Phiên âm lỗi thì giữ nguyên bản nháp đã gõ và hiện thông báo lỗi.
+- Đã bỏ Web Speech API; chưa có streaming transcription.
 - Không có đọc câu trả lời thành tiếng.
 
 ## Các lệnh
