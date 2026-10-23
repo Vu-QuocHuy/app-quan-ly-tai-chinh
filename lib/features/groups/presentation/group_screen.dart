@@ -392,15 +392,21 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
 }
 
 class GroupDetailScreen extends ConsumerStatefulWidget {
-  const GroupDetailScreen({required this.groupId, super.key});
+  const GroupDetailScreen({
+    required this.groupId,
+    this.openSplit = false,
+    super.key,
+  });
 
   final String groupId;
+  final bool openSplit;
 
   @override
   ConsumerState<GroupDetailScreen> createState() => _GroupDetailScreenState();
 }
 
 class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
+  bool _openedRequestedSplit = false;
   bool _busy = false;
   bool _showAllMembers = false;
   bool _showAllExpenses = false;
@@ -408,6 +414,13 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final details = ref.watch(expenseGroupDetailsProvider(widget.groupId));
+    final ready = details.valueOrNull;
+    if (widget.openSplit && !_openedRequestedSplit && ready != null) {
+      _openedRequestedSplit = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_splitMoney(ready));
+      });
+    }
     final service = ref.watch(expenseGroupServiceProvider);
     return Scaffold(
       appBar: AppBar(

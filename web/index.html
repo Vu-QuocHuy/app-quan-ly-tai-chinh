@@ -32,14 +32,57 @@
 
   <title>Finmi</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- ZXing library for mobile_scanner on Flutter Web -->
+  <script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js" type="application/javascript"></script>
 </head>
+<body>
   <script>
     (function() {
+      // Yêu cầu quyền camera qua trình duyệt và giải phóng track sau khi được cấp
+      window._finmiRequestCameraPermission = async function() {
+        console.log("[Finmi] Requesting browser camera permission...");
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          console.warn("[Finmi] navigator.mediaDevices.getUserMedia is not supported in this browser context.");
+          return false;
+        }
+        try {
+          var stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" }
+          });
+          stream.getTracks().forEach(function(track) { track.stop(); });
+          return true;
+        } catch (err1) {
+          try {
+            var stream2 = await navigator.mediaDevices.getUserMedia({ video: true });
+            stream2.getTracks().forEach(function(track) { track.stop(); });
+            return true;
+          } catch (err2) {
+            console.warn("Camera request error:", err2);
+            return false;
+          }
+        }
+      };
+
       var recognition = null;
+      var speechGeneration = 0;
+      var speechStream = null;
+      var speechContext = null;
+      var speechTimer = null;
+      function releaseSpeechAudio() {
+        if (speechTimer) clearInterval(speechTimer);
+        speechTimer = null;
+        if (speechStream) speechStream.getTracks().forEach(function(t) { t.stop(); });
+        speechStream = null;
+        if (speechContext) speechContext.close().catch(function() {});
+        speechContext = null;
+      }
       window._finmiSpeechSupported = function() {
         return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
       };
-      window._finmiStartSpeech = function(lang, onResult, onError, onEnd) {
+      window._finmiStartSpeech = function(lang, onResult, onError, onEnd, onSilence) {
+        var generation = ++speechGeneration;
+        releaseSpeechAudio();
         var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRec) {
           if (onError) onError("Trình duyệt không hỗ trợ Web Speech API");
@@ -47,16 +90,19 @@
         }
 
         function runRecognition() {
+          if (generation !== speechGeneration) return;
           try {
             if (recognition) {
               try { recognition.abort(); } catch(e) {}
               recognition = null;
             }
             recognition = new SpeechRec();
+            var activeRecognition = recognition;
             recognition.lang = lang || 'vi-VN';
             recognition.interimResults = true;
             recognition.continuous = true;
             recognition.onresult = function(event) {
+              if (generation !== speechGeneration) return;
               var text = "";
               for (var i = 0; i < event.results.length; i++) {
                 text += event.results[i][0].transcript;
@@ -64,6 +110,8 @@
               if (onResult) onResult(text);
             };
             recognition.onerror = function(err) {
+              if (generation !== speechGeneration) return;
+              releaseSpeechAudio();
               console.warn("Finmi Speech error:", err);
               var msg = err.error || "Lỗi micro";
               if (err.error === 'not-allowed') {
@@ -72,6 +120,9 @@
               if (onError) onError(msg);
             };
             recognition.onend = function() {
+              if (generation !== speechGeneration) return;
+              releaseSpeechAudio();
+              if (recognition === activeRecognition) recognition = null;
               if (onEnd) onEnd();
             };
             recognition.start();
@@ -84,11 +135,45 @@
         // Explicitly trigger the browser's native microphone permission prompt first
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+            if (generation !== speechGeneration) {
+              stream.getTracks().forEach(function(t) { t.stop(); });
+              return;
+            }
+            speechStream = stream;
             try {
-              stream.getTracks().forEach(function(track) { track.stop(); });
-            } catch(e) {}
+              var AudioCtx = window.AudioContext || window.webkitAudioContext;
+              speechContext = new AudioCtx();
+              speechContext.resume().catch(function() {});
+              var source = speechContext.createMediaStreamSource(stream);
+              var analyser = speechContext.createAnalyser();
+              analyser.fftSize = 2048;
+              source.connect(analyser);
+              var samples = new Float32Array(analyser.fftSize);
+              var candidate = null, lastSpeech = null, hasSpeech = false;
+              speechTimer = setInterval(function() {
+                if (generation !== speechGeneration) return;
+                analyser.getFloatTimeDomainData(samples);
+                var sum = 0;
+                for (var n = 0; n < samples.length; n++) sum += samples[n] * samples[n];
+                var db = 20 * Math.log10(Math.max(0.000001, Math.sqrt(sum / samples.length)));
+                var now = performance.now();
+                if (db > -40) {
+                  if (candidate === null) candidate = now;
+                  if (now - candidate >= 150) { hasSpeech = true; lastSpeech = now; }
+                } else { candidate = null; }
+                if (hasSpeech && lastSpeech !== null && now - lastSpeech >= 2500) {
+                  clearInterval(speechTimer); speechTimer = null;
+                  if (onSilence) onSilence();
+                }
+              }, 100);
+            } catch(e) {
+              // Recognition still works without energy detection. Keep manual
+              // stop / hard limit rather than auto-sending by guessed silence.
+              releaseSpeechAudio();
+            }
             runRecognition();
           }).catch(function(err) {
+            if (generation !== speechGeneration) return;
             console.warn("Finmi getUserMedia permission prompt error:", err);
             if (onError) {
               onError("Trình duyệt chưa cho phép dùng micro. Nếu đang chạy qua khung nhúng, hãy mở ứng dụng ở tab riêng hoặc cấp quyền micro trên thanh địa chỉ.");
@@ -98,12 +183,21 @@
           runRecognition();
         }
       };
+      window._finmiAbortSpeech = function() {
+        speechGeneration++;
+        releaseSpeechAudio();
+        if (recognition) { try { recognition.abort(); } catch(e) {} }
+        recognition = null;
+      };
       window._finmiStopSpeech = function() {
+        releaseSpeechAudio();
         if (recognition) {
           try {
             recognition.stop();
           } catch(e) {}
-          recognition = null;
+        } else {
+          // Invalidate a pending permission request when cancelled before start.
+          speechGeneration++;
         }
       };
       window._finmiGetCookie = function(name) {

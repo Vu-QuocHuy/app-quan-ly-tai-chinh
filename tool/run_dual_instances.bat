@@ -18,13 +18,5 @@ echo Dang mo 2 tab tren trinh duyet...
 start http://localhost:8080/
 start http://localhost:8081/
 
-echo.
-echo ====================================================================
-echo   MEO SO SANH 2 MAY SONG SONG TREN WINDOWS:
-echo   1. Bam vao Tab 1 [Port 8080], nhan [Win + Mui ten trai]
-echo   2. Keo Tab 2 [Port 8081] ra cua so rieng, nhan [Win + Mui ten phai]
-echo   3. Hai may dien thoai se nam song song de test dong bo no real-time!
-echo ====================================================================
-
 popd
 

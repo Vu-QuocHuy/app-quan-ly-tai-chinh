@@ -9,10 +9,14 @@ external void _rawFinmiStartSpeech(
   JSFunction onResult,
   JSFunction onError,
   JSFunction onEnd,
+  JSFunction onSilence,
 );
 
 @JS('_finmiStopSpeech')
 external void _rawFinmiStopSpeech();
+
+@JS('_finmiAbortSpeech')
+external void _rawFinmiAbortSpeech();
 
 bool isWebSpeechSupported() {
   try {
@@ -27,6 +31,7 @@ void startWebSpeech({
   required void Function(String text) onResult,
   required void Function(String error) onError,
   required void Function() onEnd,
+  required void Function() onSilence,
 }) {
   try {
     _rawFinmiStartSpeech(
@@ -34,14 +39,19 @@ void startWebSpeech({
       ((JSString text) => onResult(text.toDart)).toJS,
       ((JSString err) => onError(err.toDart)).toJS,
       (() => onEnd()).toJS,
+      (() => onSilence()).toJS,
     );
   } catch (e) {
     onError(e.toString());
   }
 }
 
-void stopWebSpeech() {
+void stopWebSpeech({bool cancel = false}) {
   try {
-    _rawFinmiStopSpeech();
+    if (cancel) {
+      _rawFinmiAbortSpeech();
+    } else {
+      _rawFinmiStopSpeech();
+    }
   } catch (_) {}
 }

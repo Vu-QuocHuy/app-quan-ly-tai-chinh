@@ -1,4 +1,25 @@
 abstract final class ChatPrivacyPolicy {
+  static String refusal(bool english) => english
+      ? 'I can help with your finances and app features: income, expenses, debts, budgets and groups.'
+      : outOfScopeMessage;
+
+  static String? fixedReply(String text, bool english) {
+    final value = _normalizeQuestion(text);
+    if (RegExp(
+      r'^(ban la ai|ban ten (la )?gi|ten (cua )?ban la gi|who are you|what is your name|what s your name)( nhi| vay| the)?$',
+    ).hasMatch(value)) {
+      return english
+          ? 'I’m FinmiAI, your financial assistant.'
+          : 'Tôi là FinmiAI, trợ lý tài chính của bạn.';
+    }
+    if (RegExp(
+      r'^(toi la ai|minh la ai|who am i|neural networks? la gi|what (is|are) (a )?neural networks?)$',
+    ).hasMatch(value)) {
+      return refusal(english);
+    }
+    return null;
+  }
+
   static const outOfScopeMessage =
       'Mình hỗ trợ các câu hỏi về thu chi, hóa đơn và ngân sách trong ứng dụng. '
       'Bạn thử hỏi về một trong những nội dung đó nhé.';
@@ -158,7 +179,18 @@ abstract final class ChatPrivacyPolicy {
 
   static bool isBlockedQuestion(String value) {
     final question = ' ${_normalizeQuestion(value)} ';
-    return _blockedTopics.any((topic) => question.contains(' $topic '));
+    // Naming a counterparty in a debt is valid; reading another account is not.
+    final debtEntry =
+        RegExp(
+          r'\b(vay|cho vay|no|owe|owes|borrow|borrowed|loan|lent|lend|ghi|nhan|mua|paid|record|received|spent)\b',
+        ).hasMatch(question) &&
+        !RegExp(r'\b(xem|doc|truy cap|show|read|access)\b').hasMatch(question);
+    final privateTopicsStart = _blockedTopics.indexOf('nguoi khac');
+    return _blockedTopics.asMap().entries.any(
+      (entry) =>
+          !(debtEntry && entry.key >= privateTopicsStart) &&
+          question.contains(' ${entry.value} '),
+    );
   }
 
   static String _normalizeQuestion(String value) {

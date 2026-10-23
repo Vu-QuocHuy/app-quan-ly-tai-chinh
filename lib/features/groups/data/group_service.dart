@@ -70,6 +70,57 @@ class ExpenseGroupService {
     await _client.rpc('delete_group_fund_entry', params: {'p_id': id});
   }
 
+  Future<String> addFundEntryWithId({
+    required String groupId,
+    required String kind,
+    required int amountMinor,
+    required String note,
+  }) async {
+    _requiredUuid(groupId, 'group.id');
+    if (!{'deposit', 'expense'}.contains(kind) ||
+        amountMinor < 1 ||
+        amountMinor > _maxSafeInteger ||
+        note.length > 160) {
+      throw const FormatException('Invalid fund entry');
+    }
+    final result = await _client.rpc(
+      'add_group_fund_entry',
+      params: {
+        'p_group_id': groupId,
+        'p_kind': kind,
+        'p_amount_minor': amountMinor,
+        'p_note': note.trim(),
+      },
+    );
+    return _requiredUuid(result, 'fund.id');
+  }
+
+  Future<void> updateOwnFundEntry({
+    required String id,
+    required int amountMinor,
+    required String note,
+    required int expectedAmountMinor,
+    required String expectedNote,
+  }) async {
+    _requiredUuid(id, 'fund.id');
+    if (amountMinor < 1 ||
+        amountMinor > _maxSafeInteger ||
+        note.length > 160 ||
+        expectedNote.length > 160) {
+      throw const FormatException('Invalid fund update');
+    }
+    await _client.rpc(
+      'update_own_group_fund_entry',
+      params: {
+        'p_id': id,
+        'p_amount_minor': amountMinor,
+        'p_note': note.trim(),
+        'p_expected_amount_minor': expectedAmountMinor,
+        'p_expected_note': expectedNote,
+      },
+    );
+  }
+
   Future<void> setFundGoal({
     required String groupId,
     int? goalMinor,

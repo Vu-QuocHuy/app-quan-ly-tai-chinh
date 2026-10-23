@@ -144,19 +144,7 @@ class _FinmiWebFrameState extends State<FinmiWebFrame> {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        tr.dualInstanceTip,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: isDark
-                              ? const Color(0xFF94A3B8)
-                              : const Color(0xFF64748B),
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
+                    const Spacer(),
                     const SizedBox(width: 8),
                     // Switch to Full Screen
                     TextButton.icon(

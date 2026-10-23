@@ -126,6 +126,7 @@ final appRouter = GoRouter(
                   parentNavigatorKey: _rootKey,
                   builder: (context, state) => GroupDetailScreen(
                     groupId: state.pathParameters['groupId']!,
+                    openSplit: state.uri.queryParameters['split'] == '1',
                   ),
                   routes: [
                     GoRoute(

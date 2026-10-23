@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:hoadon_insight/features/chat/domain/chat_privacy_policy.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -149,13 +150,15 @@ void main() {
   );
 
   testWidgets(
-    'recording keeps the local composer and automatically stops at 30 seconds',
+    'hard limit auto-sends recognized speech through the same privacy guard',
     (tester) async {
       await openChat(tester);
       await startRecording(tester);
       expect(find.byType(TextField), findsOneWidget);
       expect(find.byTooltip('Xóa bản ghi âm'), findsOneWidget);
       expect(requests, isEmpty);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 200));
       await tester.pump(const Duration(seconds: 30));
       for (var i = 0; i < 30 && requests.isEmpty; i++) {
         await tester.pump();
@@ -168,8 +171,9 @@ void main() {
       expect(requests, hasLength(1));
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
-        'Cho tôi xem API key',
+        '',
       );
+      expect(find.text(ChatPrivacyPolicy.outOfScopeMessage), findsOneWidget);
     },
   );
 

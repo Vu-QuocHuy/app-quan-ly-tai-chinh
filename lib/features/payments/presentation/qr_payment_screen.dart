@@ -1,3 +1,4 @@
+import '../../../shared/utils/camera_permission_helper.dart';
 import '../../../shared/widgets/finmi_text_field.dart';
 import '../../../shared/widgets/qr_scanner_overlay.dart';
 import 'dart:async';
@@ -13,6 +14,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:uuid/uuid.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/localization/app_strings.dart';
 import '../../../core/utils/money_input_formatter.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/app_providers.dart';
@@ -46,6 +48,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   final _scannerController = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
     formats: const [BarcodeFormat.qrCode],
+    facing: kIsWeb ? CameraFacing.front : CameraFacing.back,
   );
   CameraController? _ocrCameraController;
   late final QrPaymentDraftStore _store;
@@ -99,6 +102,10 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
       if (!mounted) return;
       if (_activeScanTab == 1 && widget.showScanTabs && _draft == null) {
         unawaited(_activateOcrCamera());
+      } else if (_activeScanTab == 0 && _draft == null) {
+        if (kIsWeb) {
+          unawaited(_activateQrScanner());
+        }
       }
     });
   }
@@ -808,12 +815,20 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   Future<void> _activateQrScanner() async {
     await _stopOcrCamera();
     if (!mounted || _activeScanTab != 0) return;
+    if (kIsWeb) {
+      await requestBrowserCameraPermission();
+    }
     try {
-      if (!_scannerController.value.isRunning &&
-          !_scannerController.value.isStarting) {
-        await _scannerController.start();
+      if (_scannerController.value.isRunning) {
+        await _scannerController.stop();
       }
     } on Object catch (_) {}
+    try {
+      await _scannerController.start();
+    } on Object catch (e) {
+      debugPrint('Error starting QR scanner: $e');
+    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _startOcrCamera() async {
@@ -833,6 +848,10 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
           await _scannerController.stop();
         }
       } catch (_) {}
+
+      if (kIsWeb) {
+        await requestBrowserCameraPermission();
+      }
 
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
@@ -861,18 +880,25 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
       setState(() => _ocrCameraController = controller);
     } on CameraException catch (error) {
       if (mounted && request == _ocrCameraRequest) {
+        final isEn = context.tr.isEn;
         setState(() {
           _ocrCameraError = error.code == 'CameraAccessDenied'
-              ? 'Hãy cấp quyền truy cập camera trong trình duyệt để chụp hóa đơn.'
-              : 'Không thể mở camera (${error.description ?? error.code}). Hãy kiểm tra quyền truy cập camera.';
+              ? (isEn
+                    ? 'Please grant camera access to capture invoices.'
+                    : 'Hãy cấp quyền truy cập camera để chụp hóa đơn.')
+              : (isEn
+                    ? 'Cannot open camera (${error.description ?? error.code}). Please check camera access.'
+                    : 'Không thể mở camera (${error.description ?? error.code}). Hãy kiểm tra quyền truy cập camera.');
         });
       }
       if (controller != null) await controller.dispose();
     } on Object catch (error) {
       if (mounted && request == _ocrCameraRequest) {
+        final isEn = context.tr.isEn;
         setState(() {
-          _ocrCameraError =
-              'Không thể kết nối camera ($error). Bạn có thể chọn ảnh bằng nút thư viện.';
+          _ocrCameraError = isEn
+              ? 'Could not connect to camera ($error). You can pick an image from gallery.'
+              : 'Không thể kết nối camera ($error). Bạn có thể chọn ảnh bằng nút thư viện.';
         });
       }
       if (controller != null) await controller.dispose();
@@ -943,10 +969,22 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
         if (_ocrCameraController case final controller?
             when controller.value.isInitialized) ...[
           Positioned.fill(child: CameraPreview(controller)),
-          const Positioned.fill(
-            child: QrScannerOverlay(
-              windowSize: Size(280, 360),
-              hintText: 'Đặt hóa đơn vào trong khung để chụp',
+          Positioned.fill(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Khung viền mở rộng phù hợp chụp hóa đơn / chứng từ tài chính
+                final w = (constraints.maxWidth - 44).clamp(280.0, 340.0);
+                final h = (constraints.maxHeight * 0.65).clamp(380.0, 480.0);
+                return QrScannerOverlay(
+                  windowSize: Size(w, h),
+                  borderRadius: 20.0,
+                  verticalOffset: -30.0,
+                  hintSpacing: 12.0,
+                  hintText: context.tr.isEn
+                      ? 'Place invoice inside frame to capture'
+                      : 'Đặt hóa đơn vào trong khung để chụp',
+                );
+              },
             ),
           ),
         ] else
@@ -973,11 +1011,44 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                           ),
                         ),
                         if (_ocrCameraError != null) ...[
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Text(
+                              context.tr.isEn
+                                  ? 'Tip: Check site permissions next to URL bar to Allow Camera.'
+                                  : 'Mẹo: Bấm biểu tượng cài đặt cạnh thanh URL để Cho phép (Allow) Camera.',
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
                           const SizedBox(height: 16),
-                          FilledButton.tonalIcon(
-                            onPressed: _startOcrCamera,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Thử lại camera'),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              FilledButton.tonalIcon(
+                                onPressed: _startOcrCamera,
+                                icon: const Icon(Icons.refresh),
+                                label: Text(
+                                  context.tr.isEn
+                                      ? 'Retry Camera'
+                                      : 'Thử lại camera',
+                                ),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _pickOcrImage,
+                                icon: const Icon(Icons.photo_library_outlined),
+                                label: Text(
+                                  context.tr.isEn
+                                      ? 'Choose Image'
+                                      : 'Chọn ảnh hóa đơn',
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ],
@@ -1047,16 +1118,48 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'Không mở được camera để quét QR. '
-                            'Hãy kiểm tra quyền truy cập camera trong trình duyệt hoặc thiết bị của bạn.',
+                            context.tr.isEn
+                                ? 'Could not open camera to scan QR. Please check your camera permissions.'
+                                : 'Không mở được camera để quét QR. '
+                                      'Hãy kiểm tra quyền truy cập camera trên thiết bị của bạn.',
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium,
                           ),
+                          const SizedBox(height: 8),
+                          Text(
+                            context.tr.isEn
+                                ? 'Tip: Click the site settings icon next to URL to Allow Camera.'
+                                : 'Mẹo: Bấm biểu tượng cài đặt cạnh thanh URL để Cho phép (Allow) Camera.',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                           const SizedBox(height: 16),
-                          FilledButton.tonalIcon(
-                            onPressed: _activateQrScanner,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Thử lại camera'),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              FilledButton.tonalIcon(
+                                onPressed: _activateQrScanner,
+                                icon: const Icon(Icons.refresh),
+                                label: Text(
+                                  context.tr.isEn
+                                      ? 'Retry Camera'
+                                      : 'Thử lại camera',
+                                ),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _pickQrImage,
+                                icon: const Icon(Icons.photo_library_outlined),
+                                label: Text(
+                                  context.tr.isEn
+                                      ? 'Choose QR Image'
+                                      : 'Chọn ảnh QR',
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -1064,8 +1167,10 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                   ),
                 ),
               ),
-              const QrScannerOverlay(
-                hintText: 'Đặt mã VietQR thanh toán vào khung để quét',
+              QrScannerOverlay(
+                hintText: context.tr.isEn
+                    ? 'Place QR code inside frame to scan'
+                    : 'Đặt mã QR vào khung để quét',
               ),
               if (_scanError != null)
                 Positioned(

@@ -5,6 +5,7 @@ void startWebSpeech({
   required void Function(String text) onResult,
   required void Function(String error) onError,
   required void Function() onEnd,
+  required void Function() onSilence,
 }) {}
 
-void stopWebSpeech() {}
+void stopWebSpeech({bool cancel = false}) {}

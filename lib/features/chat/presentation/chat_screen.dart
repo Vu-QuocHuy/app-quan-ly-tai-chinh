@@ -18,6 +18,11 @@ import '../../invoices/domain/invoice_models.dart';
 import '../../ingestion/data/ai_extraction_client.dart';
 import '../domain/chat_models.dart';
 import '../domain/chat_privacy_policy.dart';
+import '../domain/assistant_command.dart';
+import '../domain/voice_activity.dart';
+import '../data/assistant_command_client.dart';
+import '../application/assistant_actions.dart';
+import '../application/assistant_read_tools.dart';
 import '../data/voice_file_cleanup.dart';
 import '../data/voice_speech_service.dart';
 import '../../../core/localization/app_strings.dart';
@@ -108,6 +113,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final _uuid = const Uuid();
+  late final _chatSessionId = _uuid.v4();
   final _audioRecorder = AudioRecorder();
   late List<ChatMessage> _messages;
   bool _sending = false;
@@ -116,12 +122,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   int _voiceSession = 0;
   bool _transcribing = false;
   Timer? _recordingTimer;
+  StreamSubscription<Amplitude>? _amplitudeSubscription;
+  VoiceActivity _voiceActivity = VoiceActivity();
+  bool _voiceAutoSend = false;
+  String _voiceLocale = 'vi-VN';
   String? _connectionNote;
   TransactionDraftResult? _draftConversation;
   bool _usingWebSpeech = false;
   String _webSpeechBaseText = '';
   final Map<String, _TransactionDraft> _draftCards = {};
   String? _savingDraftMessageId;
+  AssistantCommand? _pendingCommand;
+  AssistantCommand? _duplicateCommand;
+  String? _commandAccount;
 
   @override
   void initState() {
@@ -140,8 +153,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _voiceSession++;
-    if (_usingWebSpeech) stopWebSpeech();
+    if (_usingWebSpeech) stopWebSpeech(cancel: true);
     _recordingTimer?.cancel();
+    unawaited(_amplitudeSubscription?.cancel());
     _inputController.dispose();
     _scrollController.dispose();
     unawaited(
@@ -165,9 +179,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _voiceSession++;
     _recordingTimer?.cancel();
     _recordingTimer = null;
+    _voiceAutoSend = false;
+    final stoppingAmplitude = _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
     if (_usingWebSpeech) {
       _usingWebSpeech = false;
-      stopWebSpeech();
+      stopWebSpeech(cancel: true);
       _inputController.text = _webSpeechBaseText;
     }
     final wasRecording = _recording || _startingRecording;
@@ -176,6 +193,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       _transcribing = wasRecording;
     });
     try {
+      await stoppingAmplitude;
       if (wasRecording) await _audioRecorder.cancel();
     } on Object catch (error) {
       if (mounted) setState(() => _connectionNote = friendlyMessage(error));
@@ -186,6 +204,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(assistantActionsProvider(_chatSessionId));
     final content = Column(
       children: [
         Padding(
@@ -362,8 +381,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                     ? 'Transcribing speech to text…'
                                     : 'Đang chuyển lời nói thành văn bản…')
                               : (context.tr.isEn
-                                    ? 'Listening · tap mic to stop (auto-stops after $_maxVoiceRecordingSeconds s)'
-                                    : 'Đang lắng nghe · chạm mic để dừng (tự dừng sau $_maxVoiceRecordingSeconds giây)'),
+                                    ? 'Listening · sends after 2.5 s of silence · tap mic to review'
+                                    : 'Đang nghe · tự gửi khi ngừng nói 2,5 giây · chạm mic để xem lại'),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.primary,
                             fontWeight: FontWeight.w600,
@@ -525,6 +544,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final session = ++_voiceSession;
 
     final tr = context.tr;
+    _voiceLocale = tr.isEn ? 'en-US' : 'vi-VN';
+    _voiceActivity = VoiceActivity();
+    _voiceAutoSend = false;
     if (kIsWeb && isWebSpeechSupported()) {
       _usingWebSpeech = true;
       _webSpeechBaseText = _inputController.text.trim();
@@ -535,12 +557,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       _recordingTimer?.cancel();
       _recordingTimer = Timer(
         const Duration(seconds: _maxVoiceRecordingSeconds),
-        () => unawaited(_finishVoiceInput()),
+        () => unawaited(_finishVoiceInput(autoSend: true)),
       );
       startWebSpeech(
-        lang: tr.isEn ? 'en-US' : 'vi-VN',
+        lang: _voiceLocale,
         onResult: (text) {
-          if (!mounted || !_usingWebSpeech) return;
+          if (!mounted || !_usingWebSpeech || session != _voiceSession) return;
           final combined = _webSpeechBaseText.isEmpty
               ? text
               : '$_webSpeechBaseText $text';
@@ -550,19 +572,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           );
         },
         onError: (err) {
-          if (!mounted || !_usingWebSpeech) return;
+          if (!mounted || !_usingWebSpeech || session != _voiceSession) return;
           _recordingTimer?.cancel();
           _usingWebSpeech = false;
+          _voiceAutoSend = false;
+          stopWebSpeech(cancel: true);
           setState(() {
             _recording = false;
+            _transcribing = false;
             _connectionNote = err;
           });
         },
         onEnd: () {
-          if (!mounted || !_usingWebSpeech) return;
+          if (!mounted || !_usingWebSpeech || session != _voiceSession) return;
           _recordingTimer?.cancel();
           _usingWebSpeech = false;
-          setState(() => _recording = false);
+          setState(() {
+            _recording = false;
+            _transcribing = false;
+          });
+          final shouldSend =
+              _voiceAutoSend &&
+              _inputController.text.trim().isNotEmpty &&
+              _inputController.text.trim() != _webSpeechBaseText;
+          _voiceAutoSend = false;
+          if (shouldSend) unawaited(_send(_inputController.text));
+        },
+        onSilence: () {
+          if (mounted && session == _voiceSession && _usingWebSpeech) {
+            unawaited(_finishVoiceInput(autoSend: true));
+          }
         },
       );
       return;
@@ -598,9 +637,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _recording = true;
         _connectionNote = null;
       });
+      _amplitudeSubscription = _audioRecorder
+          .onAmplitudeChanged(const Duration(milliseconds: 200))
+          .listen(
+            (amplitude) {
+              if (mounted &&
+                  session == _voiceSession &&
+                  _recording &&
+                  _voiceActivity.sample(amplitude.current, DateTime.now())) {
+                unawaited(_finishVoiceInput(autoSend: true));
+              }
+            },
+            onError: (Object _) {
+              /* Manual stop and the hard limit remain available. */
+            },
+          );
       _recordingTimer = Timer(
         const Duration(seconds: _maxVoiceRecordingSeconds),
-        () => unawaited(_finishVoiceInput()),
+        () => unawaited(_finishVoiceInput(autoSend: _voiceActivity.hasSpeech)),
       );
     } on Object catch (error) {
       if (mounted) setState(() => _connectionNote = friendlyMessage(error));
@@ -609,23 +663,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
-  Future<void> _finishVoiceInput() async {
+  Future<void> _finishVoiceInput({bool autoSend = false}) async {
     if (!_recording) return;
+    if (_transcribing) return;
     _recordingTimer?.cancel();
     _recordingTimer = null;
+    unawaited(_amplitudeSubscription?.cancel());
+    _amplitudeSubscription = null;
 
     if (_usingWebSpeech) {
-      _usingWebSpeech = false;
+      _voiceAutoSend = autoSend;
+      setState(() => _transcribing = true);
+      // Recognition.stop emits its final result before onEnd. Keep callbacks
+      // alive until then so the last words are included exactly once.
       stopWebSpeech();
-      setState(() {
-        _recording = false;
-        _transcribing = false;
-      });
       return;
     }
 
     final session = _voiceSession;
-    final requestLocale = context.tr.isEn ? 'en-US' : 'vi-VN';
+    final requestLocale = _voiceLocale;
+    var transcribed = false;
     String? recordingPath;
     setState(() {
       _recording = false;
@@ -676,6 +733,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         offset: _inputController.text.length,
       );
       setState(() => _connectionNote = null);
+      transcribed = true;
     } on Object catch (error) {
       if (mounted) setState(() => _connectionNote = friendlyMessage(error));
     } finally {
@@ -687,7 +745,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         }
         await deleteVoiceFile(recordingPath);
       }
-      if (mounted) setState(() => _transcribing = false);
+      if (mounted && session == _voiceSession) {
+        setState(() => _transcribing = false);
+        if (transcribed && autoSend) unawaited(_send(_inputController.text));
+      }
     }
   }
 
@@ -701,6 +762,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       return;
     }
     final effectiveQuestion = _enToViPromptMap[question] ?? question;
+    final account = ref.read(authUserProvider).valueOrNull?.id;
+    if (_commandAccount != account) {
+      _pendingCommand = null;
+      _duplicateCommand = null;
+      ref.read(assistantActionsProvider(_chatSessionId)).reset();
+      _commandAccount = account;
+    }
     final isBlockedQuestion = ChatPrivacyPolicy.isBlockedQuestion(
       effectiveQuestion,
     );
@@ -727,6 +795,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
     _scrollToEnd();
 
+    final fixedReply = ChatPrivacyPolicy.fixedReply(question, context.tr.isEn);
+    if (fixedReply != null) {
+      _appendCommandReply(fixedReply);
+      return;
+    }
     if (isBlockedQuestion) {
       setState(() {
         _messages = [
@@ -734,7 +807,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ChatMessage(
             id: _uuid.v4(),
             role: ChatMessageRole.assistant,
-            text: ChatPrivacyPolicy.outOfScopeMessage,
+            text: ChatPrivacyPolicy.refusal(context.tr.isEn),
             createdAt: DateTime.now(),
           ),
         ];
@@ -745,6 +818,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
 
     try {
+      if (ref.read(assistantCommandClientProvider).isConfigured) {
+        await _handleAssistantCommand(question);
+        return;
+      }
       if (draftRequest) {
         await _handleTransactionMessage(effectiveQuestion);
         return;
@@ -788,10 +865,136 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
+  void _appendCommandReply(
+    String text, {
+    List<ChatCitation> citations = const [],
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _messages = [
+        ..._messages,
+        ChatMessage(
+          id: _uuid.v4(),
+          role: ChatMessageRole.assistant,
+          text: text,
+          citations: citations,
+          createdAt: DateTime.now(),
+        ),
+      ];
+      _sending = false;
+    });
+    _scrollToEnd();
+  }
+
+  Future<void> _handleAssistantCommand(String question) async {
+    final en = context.tr.isEn;
+    final actions = ref.read(assistantActionsProvider(_chatSessionId));
+    final account = ref.read(authUserProvider).valueOrNull?.id;
+    final confirmed =
+        _duplicateCommand != null &&
+        RegExp(
+          r'^(đồng ý|xác nhận|vẫn lưu|ghi thêm|có|yes|confirm|save anyway|record another)[.! ]*$',
+          caseSensitive: false,
+        ).hasMatch(question.trim());
+    try {
+      final categories = [
+        ...await ref.read(incomeCategoriesProvider.future),
+        ...await ref.read(categoriesProvider.future),
+      ];
+      final command = confirmed
+          ? _duplicateCommand!
+          : await ref
+                .read(assistantCommandClientProvider)
+                .interpret(
+                  question,
+                  categories: categories,
+                  pending: _pendingCommand,
+                  last: actions.last,
+                );
+      if (!mounted || account != ref.read(authUserProvider).valueOrNull?.id) {
+        if (mounted) {
+          _pendingCommand = null;
+          _duplicateCommand = null;
+          actions.reset();
+          _appendCommandReply(
+            en
+                ? 'Account changed. Please send your request again.'
+                : 'Tài khoản đã thay đổi. Hãy gửi lại yêu cầu.',
+          );
+        }
+        return;
+      }
+      _duplicateCommand = null;
+      if (command.kind == 'cancel') {
+        _pendingCommand = null;
+        _appendCommandReply(
+          en
+              ? 'Cancelled the pending request. Saved entries are unchanged.'
+              : 'Đã hủy yêu cầu đang chờ. Các khoản đã lưu vẫn được giữ.',
+        );
+        return;
+      }
+      if (command.kind == 'identity' || command.kind == 'reject') {
+        _pendingCommand = null;
+        _appendCommandReply(
+          command.kind == 'identity'
+              ? (en
+                    ? 'I’m FinmiAI, your financial assistant.'
+                    : 'Tôi là FinmiAI, trợ lý tài chính của bạn.')
+              : ChatPrivacyPolicy.refusal(en),
+        );
+        return;
+      }
+      if (command.kind == 'query') {
+        _pendingCommand = null;
+        final reply = await _answerWithLlm(question);
+        _appendCommandReply(reply.text, citations: reply.citations);
+        return;
+      }
+      _pendingCommand = command;
+      final missing = command.clarification(en);
+      if (missing != null) {
+        _appendCommandReply(missing);
+        return;
+      }
+      final result = await actions.execute(
+        command,
+        english: en,
+        allowDuplicate: confirmed,
+      );
+      if (!mounted) return;
+      _duplicateCommand = result.confirmDuplicate ? command : null;
+      _pendingCommand = result.confirmDuplicate || result.needsInput
+          ? command
+          : null;
+      _appendCommandReply(result.text);
+      if (result.route != null) {
+        final router = GoRouter.of(context);
+        if (widget.embedded) Navigator.of(context).pop();
+        router.push(result.route!);
+      }
+    } on Object {
+      if (!mounted) return;
+      // A failed write can be an ambiguous network result. Never reroute it to
+      // a different writer, automatically retry, or announce success.
+      _appendCommandReply(
+        en
+            ? 'I could not confirm this request. Check your records before retrying; no automatic retry was made.'
+            : 'Chưa xác nhận được kết quả yêu cầu. Hãy kiểm tra sổ trước khi thử lại; ứng dụng không tự gửi lại lệnh.',
+      );
+    }
+  }
+
   Future<ChatReply> _answerFallback(
     String question, {
     required bool draftRequest,
   }) async {
+    if (context.tr.isEn) {
+      return const ChatReply(
+        text:
+            'FinmiAI is currently offline. Please reconnect to ask questions or record transactions in English.',
+      );
+    }
     try {
       if (ChatPrivacyPolicy.isBlockedQuestion(question)) {
         return const ChatReply(text: ChatPrivacyPolicy.outOfScopeMessage);
@@ -824,7 +1027,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         .timeout(_llmAnswerTimeout);
     if (plan.toolCall == null) return plan;
 
+    final extraFacts = await readAssistantFacts(ref, plan.toolCall!.name);
     final facts =
+        extraFacts ??
         (await ref
                 .read(localChatAssistantProvider)
                 .executeTool(plan.toolCall!)
@@ -1276,8 +1481,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   ChatMessage _welcomeMessage() => ChatMessage(
     id: 'welcome',
     role: ChatMessageRole.assistant,
-    text:
-        'Chào bạn! Mình là Finmi. Bạn muốn xem thu chi, ngân sách hay ghi nhanh một giao dịch?',
+    text: ref.read(appLocaleProvider).languageCode == 'en'
+        ? 'I’m FinmiAI, your financial assistant. Ask about your finances or record income, expenses, debts and group funds.'
+        : 'Tôi là FinmiAI, trợ lý tài chính của bạn. Bạn có thể hỏi về tài chính hoặc ghi thu chi, nợ và quỹ nhóm.',
     createdAt: DateTime.now(),
   );
 

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FinmiAI command v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "operation", "amountMinor", "date", "description", "categoryId", "personName", "debtDirection", "groupName", "frequency"],
+  "properties": {
+    "kind": {"type": "string", "enum": ["query", "identity", "reject", "cancel", "income", "expense", "debt", "recurring_income", "recurring_expense", "group", "fund_deposit", "fund_expense", "open_split"]},
+    "operation": {"type": "string", "enum": ["create", "update_last"]},
+    "amountMinor": {"type": ["integer", "null"], "minimum": 1, "maximum": 9007199254740991},
+    "date": {"type": ["string", "null"], "format": "date"},
+    "description": {"type": "string", "maxLength": 160},
+    "categoryId": {"type": ["string", "null"], "maxLength": 128},
+    "personName": {"type": ["string", "null"], "maxLength": 100},
+    "debtDirection": {"type": ["string", "null"], "enum": ["i_owe", "they_owe", null]},
+    "groupName": {"type": ["string", "null"], "maxLength": 80},
+    "frequency": {"type": ["string", "null"], "enum": ["weekly", "monthly", "yearly", null]}
+  }
+}
