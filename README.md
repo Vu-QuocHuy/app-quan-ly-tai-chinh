@@ -7,7 +7,7 @@
 - Flutter + Material 3, Riverpod, GoRouter.
 - Drift/SQLite; tiền lưu bằng số nguyên theo đơn vị nhỏ nhất.
 - Adapter ingestion thống nhất cho XML, PDF text và OCR.
-- Ảnh hóa đơn, chatbot và bản nháp giao dịch dùng model `cx/gpt-5.6-luna[1m]` mặc định qua 9Router từ Supabase; cần kết nối mạng.
+- Ảnh hóa đơn dùng Gemini 3.6 Flash qua Supabase; chatbot và bản nháp giao dịch dùng 9Router; cần kết nối mạng.
 - Khóa 9router chỉ được lưu trong Supabase Secrets.
 - Trợ lý tài chính gửi câu hỏi và facts được whitelist từ dữ liệu local tới LLM để trả lời; ảnh hóa đơn được xử lý trong luồng OCR riêng.
 - Connector tỷ giá chỉ gọi provider allowlist ở backend, có timeout và hiển thị nguồn cập nhật.
@@ -111,6 +111,7 @@ supabase link --project-ref YOUR_PROJECT_REF
 supabase db push
 supabase secrets set NINER_ROUTER_API_KEY=your_9router_key
 supabase secrets set NINER_ROUTER_BASE_URL=https://your-9router-host/v1
+supabase secrets set GEMINI_API_KEY=your_gemini_api_key
 supabase secrets set AI_MAX_REQUESTS_PER_MINUTE=30
 supabase secrets set AI_MAX_REQUESTS_PER_DAY=500
 supabase secrets set AI_WORKER_SECRET=at-least-32-random-characters
@@ -130,7 +131,7 @@ flutter run --dart-define-from-file=config/supabase.local.json
 Mặc định lệnh trên chạy flavor `dev`. Với staging hoặc production, dùng thêm
 `--flavor staging`/`--flavor production` và đặt `APP_ENV` tương ứng.
 
-Chat, bản nháp giao dịch và OCR dùng model `NINER_ROUTER_MODEL` (mặc định `cx/gpt-5.6-luna[1m]`) qua 9Router; phiên âm dùng `openai/gpt-4o-transcribe`. Chat gửi câu hỏi cùng facts đã whitelist từ dữ liệu local cho LLM trả lời.
+Chat và bản nháp giao dịch dùng model `NINER_ROUTER_MODEL` (mặc định `cx/gpt-5.6-luna[1m]`) qua 9Router; OCR hóa đơn dùng Gemini `gemini-3.6-flash`; phiên âm dùng `openai/gpt-4o-transcribe`. Chat gửi câu hỏi cùng facts đã whitelist từ dữ liệu local cho LLM trả lời.
 
 API chat được gọi trực tiếp từ màn hình trợ lý.
 

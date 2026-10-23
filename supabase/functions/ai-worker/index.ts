@@ -21,19 +21,8 @@ class WorkerError extends Error {
   }
 }
 
-const ninerRouterApiKey = () => Deno.env.get("NINER_ROUTER_API_KEY")?.trim();
-const ninerRouterBaseUrl = (): string => {
-  const configured = Deno.env.get("NINER_ROUTER_BASE_URL")?.trim();
-  if (!configured) throw new WorkerError("AI_NOT_CONFIGURED", "NINER_ROUTER_BASE_URL chưa được cấu hình.");
-  try {
-    const url = new URL(configured);
-    if (url.protocol !== "http:" || url.hostname !== "103.199.18.103" || url.port !== "20128" || url.pathname.replace(/\/+$/, "") !== "/v1" || url.username || url.password || url.search || url.hash) throw new Error("invalid-url");
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    throw new WorkerError("AI_NOT_CONFIGURED", "NINER_ROUTER_BASE_URL không hợp lệ.");
-  }
-};
-const ninerRouterModel = Deno.env.get("NINER_ROUTER_MODEL")?.trim() || "cx/gpt-5.6-luna[1m]";
+const geminiApiKey = () => Deno.env.get("GEMINI_API_KEY")?.trim();
+const geminiModel = "gemini-3.6-flash";
 const maxTextLength = 50_000;
 const maxImageBytes = 15_000_000;
 const batchSize = configuredInteger("AI_WORKER_BATCH_SIZE", 3, 1, 10);
@@ -179,13 +168,13 @@ function extractionResult(requestId: string, invoice: JsonObject): JsonObject {
       {field: "discountMinor", rawValue: String(invoice.discountMinor), value: String(invoice.discountMinor), confidence: 0.75},
       {field: "totalMinor", rawValue: String(invoice.totalMinor), value: String(invoice.totalMinor), confidence: 0.75},
     ],
-    modelVersion: ninerRouterModel,
+    modelVersion: geminiModel,
   };
 }
 
 async function generateInvoice(text?: string, image?: {mimeType: string; data: string}): Promise<JsonObject> {
-  const apiKey = ninerRouterApiKey();
-  if (!apiKey) throw new WorkerError("AI_NOT_CONFIGURED", "NINER_ROUTER_API_KEY chưa được cấu hình.");
+  const apiKey = geminiApiKey();
+  if (!apiKey) throw new WorkerError("AI_NOT_CONFIGURED", "GEMINI_API_KEY chưa được cấu hình.");
   const prompt = [
     "Trích xuất hóa đơn/biên lai Việt Nam từ OCR text.",
     "Không suy đoán trường không nhìn thấy; dùng null hoặc 0.",
@@ -197,30 +186,29 @@ async function generateInvoice(text?: string, image?: {mimeType: string; data: s
     text ? "OCR text:" : "Phân tích trực tiếp ảnh hóa đơn đính kèm:",
     ...(text ? [text] : []),
   ].join("\n");
-  const content: JsonObject[] | string = image
-    ? [
-        {type: "text", text: prompt},
-        {type: "image_url", image_url: {url: `data:${image.mimeType};base64,${image.data}`}},
-      ]
-    : prompt;
-  const systemPrompt = `Chỉ trả về JSON hợp lệ theo schema sau:\n${JSON.stringify(invoiceSchema)}`;
-  const response = await fetch(`${ninerRouterBaseUrl()}/chat/completions`, {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
     method: "POST",
-    headers: {"Content-Type": "application/json", Authorization: `Bearer ${apiKey}`},
+    headers: {"Content-Type": "application/json", "x-goog-api-key": apiKey},
     body: JSON.stringify({
-      model: ninerRouterModel,
-      messages: [
-        {role: "system", content: systemPrompt},
-        {role: "user", content},
-      ],
-      temperature: 0.1,
-      response_format: {type: "json_object"},
+      systemInstruction: {parts: [{text: "Chỉ trích xuất dữ liệu có trên hóa đơn, không suy đoán."}]},
+      contents: [{
+        role: "user",
+        parts: [
+          {text: prompt},
+          ...(image ? [{inlineData: {mimeType: image.mimeType, data: image.data}}] : []),
+        ],
+      }],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+        responseSchema: invoiceSchema,
+      },
     }),
     signal: AbortSignal.timeout(30_000),
   });
-  if (!response.ok) throw new WorkerError(response.status === 429 ? "MODEL_RATE_LIMITED" : "MODEL_ERROR", "9router không xử lý được job.");
+  if (!response.ok) throw new WorkerError(response.status === 429 ? "MODEL_RATE_LIMITED" : "MODEL_ERROR", "Gemini không xử lý được job.");
   const payload: unknown = await response.json();
-  const output = chatCompletionText(payload);
+  const output = geminiResponseText(payload);
   if (output === null) throw new WorkerError("EMPTY_MODEL_RESPONSE", "Model không trả nội dung.");
   try {
     const value: unknown = JSON.parse(output);
@@ -231,10 +219,16 @@ async function generateInvoice(text?: string, image?: {mimeType: string; data: s
   }
 }
 
-function chatCompletionText(payload: unknown): string | null {
-  if (!isObject(payload) || !Array.isArray(payload.choices) || !isObject(payload.choices[0])) return null;
-  const message = payload.choices[0].message;
-  return isObject(message) && typeof message.content === "string" ? message.content : null;
+function geminiResponseText(payload: unknown): string | null {
+  if (!isObject(payload) || !Array.isArray(payload.candidates) || !isObject(payload.candidates[0])) return null;
+  const content = payload.candidates[0].content;
+  if (!isObject(content) || !Array.isArray(content.parts)) return null;
+  const text = content.parts
+    .filter((part): part is JsonObject => isObject(part) && typeof part.text === "string")
+    .map((part) => part.text as string)
+    .join("")
+    .trim();
+  return text || null;
 }
 
 function validateInvoice(value: JsonObject): void {

@@ -5,7 +5,7 @@
 - `chat`: model `NINER_ROUTER_MODEL` (mặc định `cx/gpt-5.6-luna[1m]`) trả lời câu hỏi từ facts được whitelist.
 - `draft_transaction`: trích xuất bản nháp thu/chi từ tin nhắn; không ghi dữ liệu cho tới khi người dùng xác nhận trong app.
 - `transcribe`: chuyển WAV tiếng Việt thành văn bản qua 9router STT.
-- `extract`: chuyển OCR text thành hóa đơn có cấu trúc.
+- `extract`: chuyển OCR text thành hóa đơn có cấu trúc; job ảnh do `ai-worker` phân tích bằng Gemini `gemini-3.6-flash`.
 - `classify`: phân loại merchant bằng bộ rule nhẹ.
 - `extract_submit`, `extract_status`, `extract_cancel`, `extract_retry`: quản lý job trích xuất bất đồng bộ.
 
@@ -65,6 +65,7 @@ supabase login
 supabase link --project-ref YOUR_PROJECT_REF
 supabase secrets set NINER_ROUTER_API_KEY=your_9router_key
 supabase secrets set NINER_ROUTER_BASE_URL=https://your-9router-host/v1
+supabase secrets set GEMINI_API_KEY=your_gemini_api_key
 supabase secrets set AI_WORKER_SECRET=at-least-32-random-characters
 supabase secrets set HEALTHCHECK_SECRET=another-at-least-32-random-characters
 supabase functions deploy ai-api
@@ -201,5 +202,6 @@ supabase functions serve ai-api
 
 Lệnh local cần Docker theo yêu cầu của Supabase CLI. Gửi yêu cầu bằng phiên đăng
 nhập Supabase như khi chạy ứng dụng. Khi test local, đặt `NINER_ROUTER_API_KEY`
-và `NINER_ROUTER_BASE_URL` trong môi trường chạy function. Chat và OCR dùng
-model `NINER_ROUTER_MODEL` (mặc định `cx/gpt-5.6-luna[1m]`). Không commit `.env`.
+và `NINER_ROUTER_BASE_URL` cho `ai-api`, cùng `GEMINI_API_KEY` cho `ai-worker`.
+Chat dùng model `NINER_ROUTER_MODEL` (mặc định `cx/gpt-5.6-luna[1m]`); OCR ảnh
+dùng `gemini-3.6-flash`. Không commit `.env`.

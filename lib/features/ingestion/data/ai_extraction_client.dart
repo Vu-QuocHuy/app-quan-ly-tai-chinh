@@ -9,6 +9,7 @@ import '../../invoices/domain/invoice_models.dart';
 import '../domain/extraction.dart';
 import '../domain/invoice_validator.dart';
 import '../domain/source_hasher.dart';
+import 'receipt_image_optimizer.dart';
 
 class TransactionDraftResult {
   const TransactionDraftResult({
@@ -202,12 +203,16 @@ class AiExtractionClient implements InvoiceExtractor {
     if (!isConfigured) {
       throw const NetworkException('Backend AI chưa được cấu hình.');
     }
+    final image = await optimizeReceiptImageForOcr(
+      input.bytes,
+      mimeType: _mimeType(input.fileName),
+    );
     final body = {
       'action': 'extract',
       'requestId': _uuid.v4(),
       'locale': locale,
-      'imageBase64': base64Encode(input.bytes),
-      'mimeType': _mimeType(input.fileName),
+      'imageBase64': base64Encode(image.bytes),
+      'mimeType': image.mimeType,
     };
     final data = await _supabaseFunctions!.invoke(
       body,

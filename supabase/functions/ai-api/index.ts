@@ -121,9 +121,11 @@ const ninerRouterBaseUrl = (): string => {
   }
 };
 const ninerRouterModel = Deno.env.get("NINER_ROUTER_MODEL")?.trim() || "cx/gpt-5.6-luna[1m]";
+const geminiApiKey = () => Deno.env.get("GEMINI_API_KEY")?.trim();
+const geminiModel = "gemini-3.6-flash";
 const transcriptionModel = Deno.env.get("GROQ_MODEL")?.trim() || "whisper-large-v3";
 const maxTextLength = 50_000;
-const maxImageBase64Length = 19_000_000;
+const maxImageBase64Length = 21_000_000;
 const maxBodyBytes = configuredInteger("AI_MAX_BODY_BYTES", 24_000_000, 1_024, 25_000_000);
 const maxRequestsPerMinute = configuredInteger("AI_MAX_REQUESTS_PER_MINUTE", 30, 1, 120);
 const maxRequestsPerDay = configuredInteger("AI_MAX_REQUESTS_PER_DAY", 500, 1, 5_000);
@@ -604,7 +606,7 @@ async function extractInvoice(request: ExtractionRequest) {
   const image = request.imageBase64 && request.mimeType
     ? {mimeType: request.mimeType, data: request.imageBase64}
     : undefined;
-  const parsed = await generateNinerRouterJson(prompt, invoiceSchema, 0.1, 30_000, image);
+  const parsed = await generateGeminiJson(prompt, invoiceSchema, 0.1, 30_000, image);
   parsed.discountMinor ??= 0;
   normalizeInvoiceItemFields(parsed);
   const categoryNormalization = normalizeInvoiceCategories(parsed);
@@ -618,8 +620,71 @@ async function extractInvoice(request: ExtractionRequest) {
       {field: "discountMinor", rawValue: String(parsed.discountMinor), value: String(parsed.discountMinor), confidence: 0.75},
       {field: "totalMinor", rawValue: String(parsed.totalMinor), value: String(parsed.totalMinor), confidence: 0.75},
     ],
-    modelVersion: ninerRouterModel,
+    modelVersion: geminiModel,
   };
+}
+
+async function generateGeminiJson(
+  prompt: string,
+  schema: unknown,
+  temperature: number,
+  timeoutMs: number,
+  image?: {mimeType: string; data: string},
+): Promise<JsonObject> {
+  const apiKey = geminiApiKey();
+  if (!apiKey) {
+    throw new FunctionError(503, "AI_NOT_CONFIGURED", "GEMINI_API_KEY chưa được cấu hình trong Supabase Secrets.");
+  }
+  let response: Response;
+  try {
+    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "x-goog-api-key": apiKey},
+      body: JSON.stringify({
+        systemInstruction: {parts: [{text: "Chỉ trích xuất dữ liệu có trên hóa đơn, không suy đoán."}]},
+        contents: [{
+          role: "user",
+          parts: [
+            {text: prompt},
+            ...(image ? [{inlineData: {mimeType: image.mimeType, data: image.data}}] : []),
+          ],
+        }],
+        generationConfig: {
+          temperature,
+          responseMimeType: "application/json",
+          responseSchema: schema,
+        },
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch {
+    throw new FunctionError(504, "MODEL_TIMEOUT", "Gemini không phản hồi đúng hạn.");
+  }
+  if (!response.ok) {
+    console.warn("gemini_invoice_error", JSON.stringify({status: response.status}));
+    throw new FunctionError(response.status === 429 ? 429 : 502, response.status === 429 ? "MODEL_RATE_LIMITED" : "MODEL_ERROR", "Gemini không thể xử lý hóa đơn.");
+  }
+  const text = geminiResponseText(await response.json());
+  if (!text) throw new FunctionError(502, "EMPTY_MODEL_RESPONSE", "Gemini không trả dữ liệu hóa đơn.");
+  try {
+    const value: unknown = JSON.parse(text);
+    if (!isObject(value)) throw new Error("not-object");
+    return value;
+  } catch {
+    throw new FunctionError(502, "INVALID_MODEL_JSON", "Gemini không trả JSON hợp lệ.");
+  }
+}
+
+function geminiResponseText(payload: unknown): string | null {
+  if (!isObject(payload) || !Array.isArray(payload.candidates) || !isObject(payload.candidates[0])) return null;
+  const content = payload.candidates[0].content;
+  if (!isObject(content) || !Array.isArray(content.parts)) return null;
+  const text = content.parts
+    .filter((part): part is JsonObject => isObject(part) && typeof part.text === "string")
+    .map((part) => part.text as string)
+    .join("")
+    .trim();
+  return text || null;
 }
 
 async function submitExtractionJob(request: Request, input: ExtractionRequest) {
@@ -1418,6 +1483,8 @@ async function recordAiMetric(
           ? "merchant-rules-v1"
           : action === "transcribe"
           ? transcriptionModel
+          : action === "extract"
+          ? geminiModel
           : ninerRouterModel,
         p_error_code: errorCode ?? null,
       }),

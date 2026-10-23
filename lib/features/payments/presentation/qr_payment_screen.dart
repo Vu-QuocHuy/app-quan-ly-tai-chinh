@@ -69,6 +69,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   bool _isPickingImage = false;
   bool _isPickingOcrImage = false;
   bool _isCapturingOcrImage = false;
+  bool _isProcessingOcrImage = false;
   bool _isStartingOcrCamera = false;
   String? _ocrCameraError;
   int _ocrCameraRequest = 0;
@@ -832,7 +833,8 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
   }
 
   Future<void> _startOcrCamera() async {
-    if (_isStartingOcrCamera ||
+    if (_isProcessingOcrImage ||
+        _isStartingOcrCamera ||
         _ocrCameraController?.value.isInitialized == true) {
       return;
     }
@@ -929,7 +931,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
     try {
       final image = await controller.takePicture();
       await _stopOcrCamera();
-      await widget.onOcrImageReady?.call(image);
+      await _processOcrImage(image);
     } on CameraException {
       if (mounted) _showMessage('Không chụp được ảnh. Hãy thử lại.');
     } on Object {
@@ -949,7 +951,7 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
     try {
       final image = await ImagePicker().pickImage(source: ImageSource.gallery);
       if (image != null && mounted) {
-        await widget.onOcrImageReady?.call(image);
+        await _processOcrImage(image);
       }
     } on Object {
       if (mounted) _showMessage('Không thể mở ảnh. Hãy chọn ảnh khác.');
@@ -958,6 +960,17 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
         setState(() => _isPickingOcrImage = false);
         if (_activeScanTab == 1) unawaited(_startOcrCamera());
       }
+    }
+  }
+
+  Future<void> _processOcrImage(XFile image) async {
+    final onReady = widget.onOcrImageReady;
+    if (onReady == null || _isProcessingOcrImage) return;
+    setState(() => _isProcessingOcrImage = true);
+    try {
+      await onReady(image);
+    } finally {
+      if (mounted) setState(() => _isProcessingOcrImage = false);
     }
   }
 
@@ -1055,7 +1068,8 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
                     ),
             ),
           ),
-        if (_ocrCameraController?.value.isInitialized == true)
+        if (_ocrCameraController?.value.isInitialized == true &&
+            !_isProcessingOcrImage)
           Positioned(
             bottom: 16,
             left: 0,
@@ -1071,23 +1085,66 @@ class _QrPaymentScreenState extends ConsumerState<QrPaymentScreen>
               ),
             ),
           ),
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionButton.small(
-            heroTag: 'ocr-gallery',
-            onPressed: widget.onOcrImageReady == null || _isPickingOcrImage
-                ? null
-                : _pickOcrImage,
-            tooltip: 'Chọn ảnh từ thư viện',
-            child: _isPickingOcrImage
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.photo_library_outlined),
+        if (!_isProcessingOcrImage)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton.small(
+              heroTag: 'ocr-gallery',
+              onPressed: widget.onOcrImageReady == null || _isPickingOcrImage
+                  ? null
+                  : _pickOcrImage,
+              tooltip: 'Chọn ảnh từ thư viện',
+              child: _isPickingOcrImage
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.photo_library_outlined),
+            ),
           ),
-        ),
+        if (_isProcessingOcrImage)
+          Positioned.fill(
+            child: ColoredBox(
+              color: theme.colorScheme.scrim.withValues(alpha: 0.58),
+              child: Center(
+                child: Card(
+                  margin: const EdgeInsets.all(24),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Semantics(
+                      liveRegion: true,
+                      label: context.tr.isEn
+                          ? 'Reading invoice. Please wait.'
+                          : 'Đang đọc hóa đơn. Vui lòng chờ.',
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 20),
+                          Text(
+                            context.tr.isEn
+                                ? 'Reading invoice…'
+                                : 'Đang đọc hóa đơn…',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            context.tr.isEn
+                                ? 'Extracting the invoice details. Please wait.'
+                                : 'Đang trích xuất thông tin hóa đơn. Vui lòng chờ.',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
