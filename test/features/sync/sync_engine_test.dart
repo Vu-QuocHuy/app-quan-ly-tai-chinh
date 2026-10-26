@@ -181,6 +181,98 @@ void main() {
     expect(summaries, hasLength(2));
     expect(pullGateway.calls, 1);
   });
+
+  test(
+    'pulls categories before invoices that reference a custom category',
+    () async {
+      final pullGateway = _FirstPullGateway();
+      final cursors = DriftSyncCursorStore(database);
+      final coordinator = SyncCoordinator(
+        upload: SyncEngine(
+          store: outbox,
+          identity: const _Identity(),
+          gateway: _RecordingGateway(),
+        ),
+        identity: const _Identity(),
+        download: SyncPullCoordinator(
+          repository: invoices,
+          cursors: cursors,
+          gateway: pullGateway,
+        ),
+        referenceDownloads: [
+          SyncPullCoordinator(
+            repository: invoices,
+            cursors: cursors,
+            gateway: pullGateway,
+            aggregateType: 'category',
+          ),
+        ],
+      );
+
+      final summary = await coordinator.runOnce();
+
+      expect(summary.applied, 2);
+      final saved = await invoices.findById('invoice-1');
+      expect(saved?.categoryId, 'custom_housing');
+    },
+  );
+}
+
+/// Serves what a brand-new device sees: a user-created category plus an
+/// invoice filed under it.
+class _FirstPullGateway implements SyncPullGateway {
+  static final _updatedAt = DateTime.utc(2026, 10, 1);
+
+  @override
+  bool get isConfigured => true;
+
+  @override
+  Future<SyncPullPage> pull({
+    required String userId,
+    String aggregateType = 'invoice',
+    SyncCursor? cursor,
+    int limit = 50,
+  }) async {
+    if (cursor != null) {
+      return const SyncPullPage(changes: [], hasMore: false);
+    }
+    final payload = switch (aggregateType) {
+      'category' => <String, dynamic>{
+        'id': 'custom_housing',
+        'name': 'Nhà ở',
+        'iconName': 'home',
+        'colorValue': 0xFF0F766E,
+      },
+      'invoice' => <String, dynamic>{
+        'id': 'invoice-1',
+        'sellerName': 'Tiền thuê nhà',
+        'currencyCode': 'VND',
+        'subtotalMinor': 6500000,
+        'taxMinor': 0,
+        'totalMinor': 6500000,
+        'sourceType': 'manual',
+        'status': 'confirmed',
+        'categoryId': 'custom_housing',
+        'createdAt': _updatedAt.toIso8601String(),
+        'updatedAt': _updatedAt.toIso8601String(),
+      },
+      _ => null,
+    };
+    if (payload == null) return const SyncPullPage(changes: [], hasMore: false);
+    return SyncPullPage(
+      changes: [
+        SyncPullChange(
+          id: payload['id'] as String,
+          aggregateType: aggregateType,
+          operation: 'upsert',
+          updatedAt: _updatedAt,
+          revision: 1,
+          payload: payload,
+        ),
+      ],
+      hasMore: false,
+    );
+  }
 }
 
 class _Identity implements SyncIdentityProvider {

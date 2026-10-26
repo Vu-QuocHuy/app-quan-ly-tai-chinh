@@ -2,9 +2,13 @@
   "name": "quan-ly-tai-chinh-tools",
   "private": true,
   "scripts": {
-    "supabase": "supabase"
+    "supabase": "supabase",
+    "e2e:build": "flutter build web --dart-define=APP_ENV=dev --dart-define=E2E=true --dart-define-from-file=config/supabase.local.json -o build/web-e2e",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "e2e:report": "playwright show-report e2e/playwright-report"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "supabase": "^2.116.0"
   }
 }

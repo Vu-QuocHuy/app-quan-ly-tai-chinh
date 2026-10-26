@@ -77,3 +77,8 @@ app.*.map.json
 /preview_redesign*.html
 /image*.png
 /finmi.png
+
+# Playwright E2E
+/e2e/.auth/
+/e2e/test-results/
+/e2e/playwright-report/

@@ -60,16 +60,19 @@ class SyncCoordinator {
     if (userId == null || download == null) {
       return SyncRunSummary(upload: upload);
     }
-    final invoiceDownload = await download.runOnce(
-      userId: userId,
-      batchSize: batchSize,
-    );
+    // References first: invoices FK into categories, so a fresh device that
+    // pulls an invoice under a user-created category before the category
+    // itself fails the whole sync, on every retry.
     final referenceResults = <SyncPullResult>[];
     for (final coordinator in referenceDownloads) {
       referenceResults.add(
         await coordinator.runOnce(userId: userId, batchSize: batchSize),
       );
     }
+    final invoiceDownload = await download.runOnce(
+      userId: userId,
+      batchSize: batchSize,
+    );
     return SyncRunSummary(
       upload: upload,
       download: invoiceDownload,

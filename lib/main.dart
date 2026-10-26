@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -27,6 +28,10 @@ Future<void> main() {
 
 Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // E2E web builds expose the semantics tree so Playwright can find widgets.
+  if (const bool.fromEnvironment('E2E')) {
+    SemanticsBinding.instance.ensureSemantics();
+  }
   AppErrorReporter.instance.install();
   await SupabaseBootstrap.initialize();
   _configureErrorMonitoring();
