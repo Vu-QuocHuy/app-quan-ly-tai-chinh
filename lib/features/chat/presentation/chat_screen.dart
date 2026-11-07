@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/config/feature_flags.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../income/data/income_repository.dart';
@@ -18,11 +19,14 @@ import '../../invoices/domain/invoice_models.dart';
 import '../../ingestion/data/ai_extraction_client.dart';
 import '../domain/chat_models.dart';
 import '../domain/chat_privacy_policy.dart';
+import '../domain/chat_routing_rules.dart';
 import '../domain/assistant_command.dart';
 import '../domain/voice_activity.dart';
 import '../data/assistant_command_client.dart';
 import '../application/assistant_actions.dart';
 import '../application/assistant_read_tools.dart';
+import '../application/chat_metrics.dart';
+import '../application/local_chat_router.dart';
 import '../data/voice_file_cleanup.dart';
 import 'voice_waveform.dart';
 import '../../../core/localization/app_strings.dart';
@@ -117,6 +121,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   final _audioRecorder = AudioRecorder();
   late List<ChatMessage> _messages;
   bool _sending = false;
+  // Per-turn measurement for M6/M7/M9 (see chat_metrics.dart).
+  final _turnStopwatch = Stopwatch();
+  int _turnLlmCalls = 0;
+  ChatRoute _turnRoute = ChatRoute.llm;
+  String? _turnLocalIntent;
+  List<String> _turnPrefetchedTools = const [];
   bool _recording = false;
   bool _startingRecording = false;
   int _voiceSession = 0;
@@ -205,6 +215,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   @override
   Widget build(BuildContext context) {
     ref.watch(assistantActionsProvider(_chatSessionId));
+    // Keep routing flags loaded while the user types, so _send reads them
+    // synchronously instead of falling back to defaults.
+    ref.watch(featureFlagsProvider);
     final content = Column(
       children: [
         Padding(
@@ -782,13 +795,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       _connectionNote = null;
     });
     _scrollToEnd();
+    _startTurn();
 
     final fixedReply = ChatPrivacyPolicy.fixedReply(question, context.tr.isEn);
     if (fixedReply != null) {
+      _turnRoute = ChatRoute.fixed;
       _appendCommandReply(fixedReply);
+      _finishTurn();
       return;
     }
     if (isBlockedQuestion) {
+      _turnRoute = ChatRoute.fixed;
       setState(() {
         _messages = [
           ..._messages,
@@ -802,18 +819,55 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _sending = false;
       });
       _scrollToEnd();
+      _finishTurn();
       return;
     }
 
+    final flags = ref.read(featureFlagsProvider).value ?? FeatureFlags.defaults;
+    final noPendingState =
+        _pendingCommand == null &&
+        _duplicateCommand == null &&
+        _draftConversation == null;
     try {
-      if (ref.read(assistantCommandClientProvider).isConfigured) {
+      // H3: standard lookups are answered from local SQLite (0 LLM calls).
+      if (flags.chatLocalRouter &&
+          !context.tr.isEn &&
+          !draftRequest &&
+          noPendingState) {
+        final local = await tryAnswerLocally(
+          ref,
+          effectiveQuestion,
+          timeout: _localAnswerTimeout,
+        );
+        if (!mounted) return;
+        if (local != null) {
+          _turnRoute = ChatRoute.local;
+          _turnLocalIntent = local.intent.name;
+          _appendCommandReply(
+            local.reply.text,
+            citations: local.reply.citations,
+          );
+          return;
+        }
+      }
+      // H2: a read-only question never needs `assistant_command`.
+      final skipCommand =
+          flags.chatSkipCommand &&
+          !draftRequest &&
+          noPendingState &&
+          ChatRoutingRules.isReadOnlyQuestion(effectiveQuestion);
+      if (!skipCommand &&
+          ref.read(assistantCommandClientProvider).isConfigured) {
+        _turnRoute = ChatRoute.command;
         await _handleAssistantCommand(question, draftRequest: draftRequest);
         return;
       }
       if (draftRequest) {
+        _turnRoute = ChatRoute.draft;
         await _handleTransactionMessage(effectiveQuestion);
         return;
       }
+      _turnRoute = ChatRoute.llm;
       final reply = await _answerWithLlm(question);
       final assistantMessage = ChatMessage(
         id: _uuid.v4(),
@@ -831,6 +885,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       _scrollToEnd();
     } on Object {
       if (!mounted) return;
+      _turnRoute = ChatRoute.fallback;
       final reply = await _answerFallback(
         effectiveQuestion,
         draftRequest: draftRequest,
@@ -850,6 +905,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _sending = false;
       });
       _scrollToEnd();
+    } finally {
+      _finishTurn();
+    }
+  }
+
+  void _startTurn() {
+    _turnStopwatch
+      ..reset()
+      ..start();
+    _turnLlmCalls = 0;
+    _turnRoute = ChatRoute.llm;
+    _turnLocalIntent = null;
+    _turnPrefetchedTools = const [];
+  }
+
+  void _finishTurn() {
+    if (!_turnStopwatch.isRunning) return;
+    _turnStopwatch.stop();
+    try {
+      ref
+          .read(chatMetricsRecorderProvider)
+          .recordTurn(
+            ChatTurnMetric(
+              route: _turnRoute,
+              llmCalls: _turnLlmCalls,
+              latencyMs: _turnStopwatch.elapsedMilliseconds,
+              localIntent: _turnLocalIntent,
+              prefetchedTools: _turnPrefetchedTools,
+            ),
+          );
+    } on Object {
+      // Telemetry must never break the chat (e.g. widget already disposed).
     }
   }
 
@@ -898,6 +985,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         ...await ref.read(incomeCategoriesProvider.future),
         ...await ref.read(categoriesProvider.future),
       ];
+      if (!confirmed) _turnLlmCalls++;
       final command = confirmed
           ? _duplicateCommand!
           : await ref
@@ -1032,6 +1120,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   Future<ChatReply> _answerWithLlm(String question) async {
     final client = ref.read(aiChatClientProvider);
+    final flags = ref.read(featureFlagsProvider).value ?? FeatureFlags.defaults;
+    // H4: read the likely FACTS locally first, so a single `chat` call
+    // (tools disabled) is enough instead of tool-call → facts → answer.
+    if (flags.chatPrefetchFacts) {
+      final prefetched = await prefetchChatFacts(
+        ref,
+        question,
+        timeout: _localAnswerTimeout,
+      );
+      if (prefetched != null) {
+        _turnPrefetchedTools = prefetched.tools;
+        _turnLlmCalls++;
+        final answer = await client
+            .answer(question, facts: prefetched.facts)
+            .timeout(_llmAnswerTimeout);
+        if (answer.toolCall != null) {
+          throw const FormatException('Chatbot vượt quá số lượt gọi công cụ.');
+        }
+        return answer;
+      }
+    }
+
+    _turnLlmCalls++;
     final plan = await client
         .answer(question, facts: const [], allowToolCalls: true)
         .timeout(_llmAnswerTimeout);
@@ -1045,6 +1156,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 .executeTool(plan.toolCall!)
                 .timeout(_localAnswerTimeout))
             .facts;
+    _turnLlmCalls++;
     final answer = await client
         .answer(question, facts: facts)
         .timeout(_llmAnswerTimeout);
@@ -1091,6 +1203,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     ];
     final now = DateTime.now();
     final previous = _draftConversation;
+    _turnLlmCalls++;
     final result = await ref
         .read(aiExtractionClientProvider)
         .draftTransaction(

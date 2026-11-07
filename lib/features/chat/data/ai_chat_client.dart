@@ -11,6 +11,7 @@ class AiChatClient {
     Uuid? uuid,
     this.enabled = true,
     this.locale = 'vi-VN',
+    this.compactPrompt = false,
   }) : _functions = supabaseClient == null
            ? null
            : SupabaseFunctionClient(client: supabaseClient),
@@ -20,6 +21,10 @@ class AiChatClient {
   final Uuid _uuid;
   final bool enabled;
   final String locale;
+
+  /// H5 (`ai.chat.compact_prompt`): ask the server for the compact system
+  /// prompt with a `max_tokens` cap. Omitted entirely for the B0 baseline.
+  final bool compactPrompt;
 
   bool get isConfigured => enabled && _functions?.isConfigured == true;
 
@@ -42,6 +47,7 @@ class AiChatClient {
           .map((fact) => {'key': fact.key, 'value': fact.value})
           .toList(),
       'allowToolCalls': allowToolCalls,
+      if (compactPrompt) 'promptVersion': 'compact',
     }, errorMessage: 'Không thể kết nối chatbot AI lúc này.');
     final answer = data['answer'];
     if (answer is! String || answer.trim().isEmpty) {

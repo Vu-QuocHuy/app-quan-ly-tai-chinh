@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/auth/data/supabase_auth_service.dart';
+import '../../features/chat/application/chat_metrics.dart';
 import '../../features/chat/data/ai_chat_client.dart';
 import '../../features/chat/data/chat_history_store.dart';
 import '../../features/chat/domain/local_chat_assistant.dart';
@@ -272,6 +273,7 @@ final aiChatClientProvider = Provider<AiChatClient>((ref) {
   return AiChatClient(
     supabaseClient: client,
     enabled: flags.onlineAi,
+    compactPrompt: flags.chatCompactPrompt,
     locale: ref.watch(appLocaleProvider).languageCode == 'en'
         ? 'en-US'
         : 'vi-VN',
@@ -301,12 +303,16 @@ final aiExtractionJobClientProvider = Provider<AiExtractionJobClient>((ref) {
 });
 
 final importCoordinatorProvider = Provider<ImportCoordinator>((ref) {
+  final flags = ref.watch(featureFlagsProvider).value ?? FeatureFlags.defaults;
+  final metrics = ref.watch(chatMetricsRecorderProvider);
   return ImportCoordinator(
     repository: ref.watch(invoiceRepositoryProvider),
     xmlExtractor: XmlInvoiceExtractor(),
     pdfTextService: const PdfTextService(),
     aiExtractor: ref.watch(aiExtractionClientProvider),
     heuristicExtractor: HeuristicTextExtractor(),
+    classifyMerchantLocally: flags.classifyLocal,
+    onLocalMerchantClassification: metrics.recordLocalClassification,
   );
 });
 

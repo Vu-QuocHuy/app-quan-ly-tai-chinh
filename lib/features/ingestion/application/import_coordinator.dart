@@ -14,6 +14,7 @@ import '../domain/duplicate_detector.dart';
 import '../domain/extraction.dart';
 import '../domain/invoice_extractor_registry.dart';
 import '../domain/line_category_classifier.dart';
+import '../domain/merchant_category_classifier.dart';
 import '../domain/ocr_text_normalizer.dart';
 
 class ImportOutcome {
@@ -42,9 +43,16 @@ class ImportCoordinator {
     DuplicateDetector duplicateDetector = const DuplicateDetector(),
     LineCategoryClassifier lineCategoryClassifier =
         const LineCategoryClassifier(),
+    MerchantCategoryClassifier merchantClassifier =
+        const MerchantCategoryClassifier(),
+    bool classifyMerchantLocally = false,
+    void Function({required bool matched})? onLocalMerchantClassification,
     Uuid uuid = const Uuid(),
     Iterable<InvoiceExtractor> additionalExtractors = const [],
   }) : _repository = repository,
+       _merchantClassifier = merchantClassifier,
+       _classifyMerchantLocally = classifyMerchantLocally,
+       _onLocalMerchantClassification = onLocalMerchantClassification,
        _pdfTextService = pdfTextService,
        _aiExtractor = aiExtractor,
        _heuristicExtractor = heuristicExtractor,
@@ -62,6 +70,12 @@ class ImportCoordinator {
   final HeuristicTextExtractor _heuristicExtractor;
   final DuplicateDetector _duplicateDetector;
   final LineCategoryClassifier _lineCategoryClassifier;
+  final MerchantCategoryClassifier _merchantClassifier;
+
+  /// H8 (`ai.classify.local`): run `merchant-rules-v1` on device instead of
+  /// calling the `classify` action (saves a round trip and a quota unit).
+  final bool _classifyMerchantLocally;
+  final void Function({required bool matched})? _onLocalMerchantClassification;
   final Uuid _uuid;
   final InvoiceExtractorRegistry _extractorRegistry;
 
@@ -162,6 +176,14 @@ class ImportCoordinator {
       }
     }
     if (merchantRuleCategoryId == null &&
+        (categoryId == null || categoryId == 'other') &&
+        _classifyMerchantLocally) {
+      final merchantCategoryId = _merchantClassifier.classify(
+        result.invoice.sellerName,
+      );
+      _onLocalMerchantClassification?.call(matched: merchantCategoryId != null);
+      if (merchantCategoryId != null) categoryId = merchantCategoryId;
+    } else if (merchantRuleCategoryId == null &&
         (categoryId == null || categoryId == 'other') &&
         _aiExtractor.isConfigured) {
       try {

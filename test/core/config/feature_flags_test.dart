@@ -40,6 +40,44 @@ void main() {
     expect(flags.externalRates, isTrue);
   });
 
+  test(
+    'TV2 optimisation flags default on and can be turned off for B0',
+    () async {
+      expect(FeatureFlags.defaults.chatLocalRouter, isTrue);
+      expect(FeatureFlags.defaults.classifyLocal, isTrue);
+      final now = DateTime.utc(2026, 11, 7, 8);
+      final cache = _MemoryCache(
+        jsonEncode({
+          'fetchedAt': now.toIso8601String(),
+          'environment': 'dev',
+          'rows': [
+            for (final key in [
+              'ai.chat.local_router',
+              'ai.chat.skip_command',
+              'ai.chat.prefetch_facts',
+              'ai.chat.compact_prompt',
+              'ai.classify.local',
+            ])
+              {'key': key, 'enabled': false, 'rollout_percentage': 100},
+          ],
+        }),
+      );
+
+      final flags = await RemoteConfigService(
+        null,
+        cache: cache,
+        now: () => now,
+      ).load(userId: 'user-1');
+
+      expect(flags.chatLocalRouter, isFalse);
+      expect(flags.chatSkipCommand, isFalse);
+      expect(flags.chatPrefetchFacts, isFalse);
+      expect(flags.chatCompactPrompt, isFalse);
+      expect(flags.classifyLocal, isFalse);
+      expect(flags.onlineAi, isTrue);
+    },
+  );
+
   test('ignores expired cached flags', () async {
     final now = DateTime.utc(2026, 9, 17, 8);
     final cache = _MemoryCache(

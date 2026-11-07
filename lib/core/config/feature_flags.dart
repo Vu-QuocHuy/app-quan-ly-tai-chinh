@@ -10,7 +10,24 @@ import 'app_environment.dart';
 enum AppFeatureFlag {
   onlineAi('online_ai'),
   cloudSync('cloud_sync'),
-  externalRates('external_rates');
+  externalRates('external_rates'),
+
+  // TV2 – chatbot/classify optimisations. Turn a row OFF in
+  // `app_feature_flags` to measure the B0 baseline, ON for B1.
+  /// H3: answer standard lookups from local SQLite with 0 LLM calls.
+  chatLocalRouter('ai.chat.local_router'),
+
+  /// H2: skip the `assistant_command` call for read-only questions.
+  chatSkipCommand('ai.chat.skip_command'),
+
+  /// H4: prefetch local FACTS and send them with the first `chat` call.
+  chatPrefetchFacts('ai.chat.prefetch_facts'),
+
+  /// H5: compact `answerChat` system prompt + `max_tokens`.
+  chatCompactPrompt('ai.chat.compact_prompt'),
+
+  /// H8: run `merchant-rules-v1` on device instead of calling `classify`.
+  classifyLocal('ai.classify.local');
 
   const AppFeatureFlag(this.key);
 
@@ -23,6 +40,11 @@ class FeatureFlags {
     this.onlineAi = true,
     this.cloudSync = true,
     this.externalRates = true,
+    this.chatLocalRouter = true,
+    this.chatSkipCommand = true,
+    this.chatPrefetchFacts = true,
+    this.chatCompactPrompt = true,
+    this.classifyLocal = true,
   });
 
   static const defaults = FeatureFlags();
@@ -30,30 +52,37 @@ class FeatureFlags {
   final bool onlineAi;
   final bool cloudSync;
   final bool externalRates;
+  final bool chatLocalRouter;
+  final bool chatSkipCommand;
+  final bool chatPrefetchFacts;
+  final bool chatCompactPrompt;
+  final bool classifyLocal;
 
   bool isEnabled(AppFeatureFlag flag) => switch (flag) {
     AppFeatureFlag.onlineAi => onlineAi,
     AppFeatureFlag.cloudSync => cloudSync,
     AppFeatureFlag.externalRates => externalRates,
+    AppFeatureFlag.chatLocalRouter => chatLocalRouter,
+    AppFeatureFlag.chatSkipCommand => chatSkipCommand,
+    AppFeatureFlag.chatPrefetchFacts => chatPrefetchFacts,
+    AppFeatureFlag.chatCompactPrompt => chatCompactPrompt,
+    AppFeatureFlag.classifyLocal => classifyLocal,
   };
 
-  FeatureFlags _with(AppFeatureFlag flag, bool value) => switch (flag) {
-    AppFeatureFlag.onlineAi => FeatureFlags(
-      onlineAi: value,
-      cloudSync: cloudSync,
-      externalRates: externalRates,
-    ),
-    AppFeatureFlag.cloudSync => FeatureFlags(
-      onlineAi: onlineAi,
-      cloudSync: value,
-      externalRates: externalRates,
-    ),
-    AppFeatureFlag.externalRates => FeatureFlags(
-      onlineAi: onlineAi,
-      cloudSync: cloudSync,
-      externalRates: value,
-    ),
-  };
+  FeatureFlags _with(AppFeatureFlag flag, bool value) {
+    bool v(AppFeatureFlag candidate) =>
+        candidate == flag ? value : isEnabled(candidate);
+    return FeatureFlags(
+      onlineAi: v(AppFeatureFlag.onlineAi),
+      cloudSync: v(AppFeatureFlag.cloudSync),
+      externalRates: v(AppFeatureFlag.externalRates),
+      chatLocalRouter: v(AppFeatureFlag.chatLocalRouter),
+      chatSkipCommand: v(AppFeatureFlag.chatSkipCommand),
+      chatPrefetchFacts: v(AppFeatureFlag.chatPrefetchFacts),
+      chatCompactPrompt: v(AppFeatureFlag.chatCompactPrompt),
+      classifyLocal: v(AppFeatureFlag.classifyLocal),
+    );
+  }
 
   Map<String, bool> toJson() => {
     for (final flag in AppFeatureFlag.values) flag.key: isEnabled(flag),
