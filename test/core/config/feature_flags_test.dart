@@ -60,6 +60,61 @@ void main() {
 
     expect(flags.onlineAi, isTrue);
   });
+
+  test('AI optimization flags default to OFF (baseline B0)', () async {
+    final flags = await RemoteConfigService(
+      null,
+      cache: _MemoryCache(),
+    ).load(userId: 'user-1');
+
+    for (final flag in AiOptimizationFlag.values) {
+      expect(flags.isAiEnabled(flag), isFalse, reason: flag.key);
+    }
+    expect(flags.aiFlagSet, 'none');
+  });
+
+  test('reads AI optimization flags with rollout like the server', () async {
+    final now = DateTime.utc(2026, 11, 12, 8);
+    final cache = _MemoryCache(
+      jsonEncode({
+        'fetchedAt': now.toIso8601String(),
+        'environment': 'dev',
+        'rows': [
+          {
+            'key': 'ai.router.failover',
+            'enabled': true,
+            'rollout_percentage': 100,
+          },
+          {
+            'key': 'ai.chat.local_router',
+            'enabled': true,
+            'rollout_percentage': 100,
+          },
+          // 0% rollout must stay OFF even when enabled.
+          {
+            'key': 'ai.chat.prompt_v2',
+            'enabled': true,
+            'rollout_percentage': 0,
+          },
+          {'key': 'ai.extract.validator', 'enabled': false},
+          {'key': 'ai.unknown', 'enabled': true},
+        ],
+      }),
+    );
+
+    final flags = await RemoteConfigService(
+      null,
+      cache: cache,
+      now: () => now,
+    ).load(userId: 'user-1');
+
+    expect(flags.isAiEnabled(AiOptimizationFlag.routerFailover), isTrue);
+    expect(flags.isAiEnabled(AiOptimizationFlag.chatLocalRouter), isTrue);
+    expect(flags.isAiEnabled(AiOptimizationFlag.chatPromptV2), isFalse);
+    expect(flags.isAiEnabled(AiOptimizationFlag.extractValidator), isFalse);
+    expect(flags.aiFlagSet, 'ai.chat.local_router,ai.router.failover');
+    expect(flags.onlineAi, isTrue, reason: 'legacy flags keep defaults');
+  });
 }
 
 class _MemoryCache implements FeatureFlagCache {

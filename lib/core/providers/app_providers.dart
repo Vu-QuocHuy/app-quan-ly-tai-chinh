@@ -45,6 +45,7 @@ import '../../features/sync/data/supabase_sync_gateway.dart';
 import '../../features/sync/domain/sync_gateway.dart';
 import '../../features/sync/domain/sync_models.dart';
 import '../config/feature_flags.dart';
+import '../monitoring/ai_telemetry.dart';
 import '../database/app_database.dart';
 import '../database/local_database_scope.dart';
 import '../security/supabase_bootstrap.dart';
@@ -97,10 +98,26 @@ final authIdentitiesProvider = FutureProvider.autoDispose<List<UserIdentity>>((
   return service.getUserIdentities();
 });
 
-final featureFlagsProvider = FutureProvider<FeatureFlags>((ref) {
+final featureFlagsProvider = FutureProvider<FeatureFlags>((ref) async {
   final client = ref.watch(supabaseClientProvider);
   final user = ref.watch(authUserProvider).value;
-  return RemoteConfigService(client).load(userId: user?.id);
+  final flags = await RemoteConfigService(client).load(userId: user?.id);
+  // N3: tag telemetry with the active flag set (B0 = "none") and upload it
+  // only when `ai.telemetry.upload` is ON for this user.
+  final telemetry = AiTelemetry.instance;
+  await telemetry.load();
+  telemetry.configure(
+    flagSet: flags.aiFlagSet,
+    uploader:
+        client != null &&
+            user != null &&
+            flags.isAiEnabled(AiOptimizationFlag.telemetryUpload)
+        ? (batch) => client
+              .rpc('record_ai_client_events', params: {'p_events': batch})
+              .timeout(const Duration(seconds: 5))
+        : null,
+  );
+  return flags;
 });
 
 final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) {

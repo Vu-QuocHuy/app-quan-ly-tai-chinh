@@ -1,4 +1,9 @@
+import {addUsage, type AiUsage, emptyUsage, geminiUsage} from "../_shared/ai_platform.ts";
+
 type JsonObject = Record<string, unknown>;
+
+/** Per-job accounting written to ai_request_metrics (action = extract_job). */
+type JobUsage = {usage: AiUsage; hasUsage: boolean; payloadBytes: number; llmCalls: number};
 
 type ExtractionJob = {
   id: string;
@@ -91,14 +96,18 @@ Deno.serve(async (request) => {
     await cleanupCostUsage();
     await cleanupJobs();
     await cleanupClientErrors();
+    await cleanupClientAiEvents();
     const jobs = await claimJobs();
     let succeeded = 0;
     let failed = 0;
     for (const job of jobs) {
+      const jobStartedAt = Date.now();
+      const accounting: JobUsage = {usage: emptyUsage(), hasUsage: false, payloadBytes: 0, llmCalls: 0};
       try {
-        const result = await processJob(job);
+        const result = await processJob(job, accounting);
         await finishJob(job.id, true, result);
         await deleteInput(job.input_path);
+        await recordJobMetric(job.id, 200, Date.now() - jobStartedAt, accounting);
         succeeded += 1;
       } catch (error) {
         const code = error instanceof WorkerError ? error.code : "WORKER_FAILED";
@@ -106,6 +115,7 @@ Deno.serve(async (request) => {
           await finishJob(job.id, false, null, code);
         } catch {
         }
+        await recordJobMetric(job.id, code === "MODEL_RATE_LIMITED" ? 429 : 502, Date.now() - jobStartedAt, accounting, code);
         console.warn("ai_job_failed", JSON.stringify({code}));
         failed += 1;
       }
@@ -133,7 +143,7 @@ async function claimJobs(): Promise<ExtractionJob[]> {
   return rows.filter(isExtractionJob);
 }
 
-async function processJob(job: ExtractionJob): Promise<JsonObject> {
+async function processJob(job: ExtractionJob, accounting: JobUsage): Promise<JsonObject> {
   if (!isSafeInputPath(job.input_path)) {
     throw new WorkerError("INPUT_PATH_INVALID", "Đường dẫn input không hợp lệ.");
   }
@@ -141,14 +151,14 @@ async function processJob(job: ExtractionJob): Promise<JsonObject> {
   if (job.input_kind === "text") {
     const text = new TextDecoder().decode(bytes).trim();
     if (!text || text.length > maxTextLength) throw new WorkerError("TEXT_INVALID", "OCR text không hợp lệ.");
-    const invoice = await generateInvoice(text);
+    const invoice = await generateInvoice(accounting, text);
     return extractionResult(job.request_id, invoice);
   }
   if (bytes.length > maxImageBytes || !job.input_mime_type ||
       !supportedImageMimeTypes.has(job.input_mime_type)) {
     throw new WorkerError("IMAGE_INVALID", "Ảnh input không hợp lệ.");
   }
-  const invoice = await generateInvoice(undefined, {
+  const invoice = await generateInvoice(accounting, undefined, {
     mimeType: job.input_mime_type,
     data: encodeBase64(bytes),
   });
@@ -172,7 +182,11 @@ function extractionResult(requestId: string, invoice: JsonObject): JsonObject {
   };
 }
 
-async function generateInvoice(text?: string, image?: {mimeType: string; data: string}): Promise<JsonObject> {
+async function generateInvoice(
+  accounting: JobUsage,
+  text?: string,
+  image?: {mimeType: string; data: string},
+): Promise<JsonObject> {
   const apiKey = geminiApiKey();
   if (!apiKey) throw new WorkerError("AI_NOT_CONFIGURED", "GEMINI_API_KEY chưa được cấu hình.");
   const prompt = [
@@ -186,28 +200,42 @@ async function generateInvoice(text?: string, image?: {mimeType: string; data: s
     text ? "OCR text:" : "Phân tích trực tiếp ảnh hóa đơn đính kèm:",
     ...(text ? [text] : []),
   ].join("\n");
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json", "x-goog-api-key": apiKey},
-    body: JSON.stringify({
-      systemInstruction: {parts: [{text: "Chỉ trích xuất dữ liệu có trên hóa đơn, không suy đoán."}]},
-      contents: [{
-        role: "user",
-        parts: [
-          {text: prompt},
-          ...(image ? [{inlineData: {mimeType: image.mimeType, data: image.data}}] : []),
-        ],
-      }],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: "application/json",
-        responseJsonSchema: invoiceSchema,
-      },
-    }),
-    signal: AbortSignal.timeout(30_000),
+  const requestBody = JSON.stringify({
+    systemInstruction: {parts: [{text: "Chỉ trích xuất dữ liệu có trên hóa đơn, không suy đoán."}]},
+    contents: [{
+      role: "user",
+      parts: [
+        {text: prompt},
+        ...(image ? [{inlineData: {mimeType: image.mimeType, data: image.data}}] : []),
+      ],
+    }],
+    generationConfig: {
+      temperature: 0.1,
+      responseMimeType: "application/json",
+      responseJsonSchema: invoiceSchema,
+    },
   });
+  accounting.payloadBytes += new TextEncoder().encode(requestBody).byteLength;
+  accounting.llmCalls += 1;
+  let response: Response;
+  try {
+    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "x-goog-api-key": apiKey},
+      body: requestBody,
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch {
+    throw new WorkerError("MODEL_TIMEOUT", "Gemini không phản hồi đúng hạn.");
+  }
   if (!response.ok) throw new WorkerError(response.status === 429 ? "MODEL_RATE_LIMITED" : "MODEL_ERROR", "Gemini không xử lý được job.");
   const payload: unknown = await response.json();
+  // N2: input / output / thinking tokens for the async OCR path.
+  const usage = geminiUsage(payload);
+  if (usage) {
+    addUsage(accounting.usage, usage);
+    accounting.hasUsage = true;
+  }
   const output = geminiResponseText(payload);
   if (output === null) throw new WorkerError("EMPTY_MODEL_RESPONSE", "Model không trả nội dung.");
   try {
@@ -368,6 +396,45 @@ async function cleanupExpiredInputs(): Promise<void> {
 async function cleanupMetrics(): Promise<void> {
   try {
     await adminJson("/rest/v1/rpc/cleanup_ai_request_metrics", {
+      method: "POST",
+      body: JSON.stringify({p_retention_days: 30}),
+    });
+  } catch {
+  }
+}
+
+async function recordJobMetric(
+  jobId: string,
+  statusCode: number,
+  durationMs: number,
+  accounting: JobUsage,
+  errorCode?: string,
+): Promise<void> {
+  try {
+    await adminJson("/rest/v1/rpc/record_ai_worker_metric", {
+      method: "POST",
+      body: JSON.stringify({
+        p_job_id: jobId,
+        p_status_code: statusCode,
+        p_duration_ms: Math.max(0, Math.min(durationMs, 600000)),
+        p_model: geminiModel,
+        p_error_code: errorCode ?? null,
+        p_details: {
+          provider: "gemini",
+          ...(accounting.hasUsage ? {...accounting.usage} : {}),
+          payloadBytes: accounting.payloadBytes,
+          llmCalls: accounting.llmCalls,
+        },
+      }),
+    });
+  } catch {
+    console.warn("ai_job_metric_failed", JSON.stringify({jobId}));
+  }
+}
+
+async function cleanupClientAiEvents(): Promise<void> {
+  try {
+    await adminJson("/rest/v1/rpc/cleanup_ai_client_events", {
       method: "POST",
       body: JSON.stringify({p_retention_days: 30}),
     });

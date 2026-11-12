@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/monitoring/ai_telemetry.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../income/data/income_repository.dart';
@@ -749,6 +750,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _cancellingVoice) {
       return;
     }
+    // N3: one chat turn = send → answer shown; counts LLM calls (M6),
+    // local offload (M7) and end-to-end latency (M9).
+    final turn = AiTelemetry.instance.beginTurn('chat');
+    try {
+      await _sendTurn(question);
+    } finally {
+      turn.end();
+    }
+  }
+
+  Future<void> _sendTurn(String question) async {
     final effectiveQuestion = _enToViPromptMap[question] ?? question;
     final account = ref.read(authUserProvider).valueOrNull?.id;
     if (_commandAccount != account) {
@@ -999,6 +1011,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     String question, {
     required bool draftRequest,
   }) async {
+    AiTelemetry.instance.currentTurn?.markFallback();
     if (context.tr.isEn) {
       return const ChatReply(
         text:

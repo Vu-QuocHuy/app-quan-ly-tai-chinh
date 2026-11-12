@@ -1,3 +1,5 @@
+import {parseAllowedHosts, validateNinerRouterBaseUrl} from "../_shared/ai_platform.ts";
+
 const headers = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
@@ -113,8 +115,8 @@ function aiProviderConfigured(): boolean {
   const value = Deno.env.get("NINER_ROUTER_BASE_URL")?.trim();
   if (!key || !value) return false;
   try {
-    const url = new URL(value);
-    return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash;
+    validateNinerRouterBaseUrl(value, parseAllowedHosts(Deno.env.get("NINER_ROUTER_ALLOWED_HOSTS"), "finmi.ddns.net"));
+    return true;
   } catch {
     return false;
   }
