@@ -123,6 +123,8 @@ const ninerRouterBaseUrl = (): string => {
 const ninerRouterModel = Deno.env.get("NINER_ROUTER_MODEL")?.trim() || "cx/gpt-5.6-luna[1m]";
 const geminiApiKey = () => Deno.env.get("GEMINI_API_KEY")?.trim();
 const geminiModel = "gemini-3.6-flash";
+const extractThinkingLow = Deno.env.get("AI_EXTRACT_THINKING_LOW") === "true";
+const extractMaxOutputTokens = configuredInteger("AI_EXTRACT_MAX_OUTPUT_TOKENS", 0, 1024, 65536);
 const transcriptionModel = Deno.env.get("GROQ_MODEL")?.trim() || "whisper-large-v3";
 const maxTextLength = 50_000;
 const maxImageBase64Length = 21_000_000;
@@ -304,14 +306,16 @@ Deno.serve(async (request) => {
         await draftTransaction(draftRequest),
       );
     }
-    if (["classify", "extract"].includes(action)) {
+    if (action === "extract") {
+      return completed(request, action, startedAt, await extractOnce(request, parseExtraction(body)));
+    }
+    if (action === "classify") {
       await enforceQuota(request, action);
     } else {
       enforceRateLimit(await rateLimitIdentifier(request));
     }
 
     if (action === "classify") return completed(request, action, startedAt, classifyMerchant(parseClassification(body)));
-    if (action === "extract") return completed(request, action, startedAt, await extractInvoice(parseExtraction(body)));
     if (action === "extract_submit") return completed(request, action, startedAt, await submitExtractionJob(request, parseExtraction(body)));
     if (action === "extract_status") return completed(request, action, startedAt, await extractionJobStatus(request, parseJobId(body)));
     if (action === "extract_cancel") return completed(request, action, startedAt, await cancelExtractionJob(request, parseJobId(body)));
@@ -581,6 +585,63 @@ async function transcribeAudio(request: TranscriptionRequest) {
   return {requestId: request.requestId, text};
 }
 
+async function extractOnce(request: Request, input: ExtractionRequest): Promise<JsonObject> {
+  const user = await userRestJson(request, "/auth/v1/user");
+  if (!isObject(user) || typeof user.id !== "string") {
+    throw new FunctionError(401, "AUTH_REQUIRED", "Phiên đăng nhập không hợp lệ.");
+  }
+  const fingerprint = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(input)));
+  const claim = {
+    p_user_id: user.id,
+    p_request_id: input.requestId,
+    p_fingerprint: Array.from(new Uint8Array(fingerprint), (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    p_owner_token: crypto.randomUUID(),
+  };
+  const entry = await ocrReplay({...claim, p_action: "claim"});
+  if (entry.status === "completed" && isObject(entry.result)) return entry.result;
+  if (entry.status === "pending" || entry.status === "conflict") {
+    throw new FunctionError(409, entry.status === "pending" ? "OCR_IN_PROGRESS" : "OCR_REQUEST_CONFLICT",
+      entry.status === "pending" ? "Hóa đơn đang được đọc. Vui lòng thử lại." : "Mã yêu cầu đã được dùng cho nội dung khác.");
+  }
+  if (entry.status !== "claimed") {
+    throw new FunctionError(503, "OCR_REPLAY_UNAVAILABLE", "Không thể xác nhận trạng thái đọc hóa đơn.");
+  }
+  let result: JsonObject;
+  try {
+    await enforceQuota(request, "extract");
+    result = await extractInvoice(input);
+  } catch (error) {
+    await ocrReplay({...claim, p_action: "release"}).catch(() => {});
+    throw error;
+  }
+  const saved = await ocrReplay({...claim, p_action: "complete", p_result: result});
+  if (saved.status !== "completed") {
+    throw new FunctionError(503, "OCR_REPLAY_UNAVAILABLE", "Không thể lưu kết quả đọc hóa đơn.");
+  }
+  return result;
+}
+
+async function ocrReplay(body: JsonObject): Promise<JsonObject> {
+  const url = Deno.env.get("SUPABASE_URL")?.trim();
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
+  try {
+    if (url && key) {
+      const response = await fetch(url + "/rest/v1/rpc/ocr_replay", {
+        method: "POST",
+        headers: {apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json"},
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (response.ok) {
+        const result: unknown = await response.json();
+        if (isObject(result)) return result;
+      }
+    }
+  } catch {
+  }
+  throw new FunctionError(503, "OCR_REPLAY_UNAVAILABLE", "Không thể truy cập trạng thái đọc hóa đơn.");
+}
+
 async function extractInvoice(request: ExtractionRequest) {
   const prompt = [
     "Trích xuất hóa đơn hoặc biên lai Việt Nam. Đọc ảnh gốc nếu có ảnh đính kèm.",
@@ -606,7 +667,7 @@ async function extractInvoice(request: ExtractionRequest) {
   const image = request.imageBase64 && request.mimeType
     ? {mimeType: request.mimeType, data: request.imageBase64}
     : undefined;
-  const parsed = await generateGeminiJson(prompt, invoiceSchema, 0.1, 30_000, image);
+  const {parsed, usageMetadata} = await generateGeminiJson(prompt, invoiceSchema, 0.1, 30_000, image);
   parsed.discountMinor ??= 0;
   normalizeInvoiceItemFields(parsed);
   const categoryNormalization = normalizeInvoiceCategories(parsed);
@@ -621,6 +682,7 @@ async function extractInvoice(request: ExtractionRequest) {
       {field: "totalMinor", rawValue: String(parsed.totalMinor), value: String(parsed.totalMinor), confidence: 0.75},
     ],
     modelVersion: geminiModel,
+    usageMetadata,
   };
 }
 
@@ -630,7 +692,7 @@ async function generateGeminiJson(
   temperature: number,
   timeoutMs: number,
   image?: {mimeType: string; data: string},
-): Promise<JsonObject> {
+): Promise<{parsed: JsonObject; usageMetadata: JsonObject | null}> {
   const apiKey = geminiApiKey();
   if (!apiKey) {
     throw new FunctionError(503, "AI_NOT_CONFIGURED", "GEMINI_API_KEY chưa được cấu hình trong Supabase Secrets.");
@@ -653,6 +715,8 @@ async function generateGeminiJson(
           temperature,
           responseMimeType: "application/json",
           responseJsonSchema: schema,
+          ...(extractThinkingLow ? {thinkingConfig: {thinkingLevel: "low"}} : {}),
+          ...(extractMaxOutputTokens > 0 ? {maxOutputTokens: extractMaxOutputTokens} : {}),
         },
       }),
       signal: AbortSignal.timeout(timeoutMs),
@@ -664,12 +728,17 @@ async function generateGeminiJson(
     console.warn("gemini_invoice_error", JSON.stringify({status: response.status}));
     throw new FunctionError(response.status === 429 ? 429 : 502, response.status === 429 ? "MODEL_RATE_LIMITED" : "MODEL_ERROR", "Gemini không thể xử lý hóa đơn.");
   }
-  const text = geminiResponseText(await response.json());
+  const payload: unknown = await response.json();
+  const candidate = isObject(payload) && Array.isArray(payload.candidates) ? payload.candidates[0] : null;
+  if (isObject(candidate) && candidate.finishReason === "MAX_TOKENS") {
+    throw new FunctionError(502, "MODEL_OUTPUT_TRUNCATED", "Gemini vượt giới hạn khi đọc hóa đơn. Kết quả chưa được lưu.");
+  }
+  const text = geminiResponseText(payload);
   if (!text) throw new FunctionError(502, "EMPTY_MODEL_RESPONSE", "Gemini không trả dữ liệu hóa đơn.");
   try {
     const value: unknown = JSON.parse(text);
     if (!isObject(value)) throw new Error("not-object");
-    return value;
+    return {parsed: value, usageMetadata: isObject(payload) && isObject(payload.usageMetadata) ? payload.usageMetadata : null};
   } catch {
     throw new FunctionError(502, "INVALID_MODEL_JSON", "Gemini không trả JSON hợp lệ.");
   }

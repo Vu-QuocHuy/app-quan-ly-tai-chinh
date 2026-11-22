@@ -79,4 +79,72 @@ void main() {
       contains('Tổng các dòng hàng chưa khớp với tiền trước thuế.'),
     );
   });
+
+  test('warns when the invoice date is in the future', () {
+    final result = validator.validate(
+      invoice().copyWith(issuedAt: DateTime.now().add(const Duration(days: 2))),
+    );
+    expect(result.warnings, contains('Ngày lập hóa đơn nằm trong tương lai.'));
+  });
+
+  group('applyRuleConfidence', () {
+    const evidence = [
+      FieldEvidenceEntity(
+        id: 'e-seller',
+        fieldName: 'sellerName',
+        normalizedValue: 'Demo',
+        source: InvoiceSourceType.imageOcr,
+        confidence: 0.75,
+      ),
+      FieldEvidenceEntity(
+        id: 'e-total',
+        fieldName: 'totalMinor',
+        normalizedValue: '110000',
+        source: InvoiceSourceType.imageOcr,
+        confidence: 0.75,
+      ),
+    ];
+
+    double totalConfidence(InvoiceEntity value) => value.evidence
+        .singleWhere((item) => item.fieldName == 'totalMinor')
+        .confidence;
+
+    test('keeps confidence when totals reconcile', () {
+      final result = validator.applyRuleConfidence(
+        invoice().copyWith(
+          evidence: evidence,
+          lines: const [
+            InvoiceLineEntity(id: 'l1', description: 'A', totalMinor: 60000),
+            InvoiceLineEntity(id: 'l2', description: 'B', totalMinor: 40000),
+          ],
+        ),
+      );
+      expect(totalConfidence(result), 0.75);
+    });
+
+    test('downgrades total when subtotal + tax does not match total', () {
+      final result = validator.applyRuleConfidence(
+        invoice(total: 90000).copyWith(evidence: evidence),
+      );
+      expect(totalConfidence(result), InvoiceValidator.ruleFailedConfidence);
+      expect(
+        result.evidence
+            .singleWhere((item) => item.fieldName == 'sellerName')
+            .confidence,
+        0.75,
+      );
+    });
+
+    test('downgrades total when line items do not sum to total', () {
+      final result = validator.applyRuleConfidence(
+        invoice(subtotal: 0, tax: 0, total: 110000).copyWith(
+          evidence: evidence,
+          lines: const [
+            InvoiceLineEntity(id: 'l1', description: 'A', totalMinor: 50000),
+          ],
+        ),
+      );
+      expect(totalConfidence(result), InvoiceValidator.ruleFailedConfidence);
+    });
+  });
 }

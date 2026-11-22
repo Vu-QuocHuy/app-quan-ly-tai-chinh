@@ -13,8 +13,10 @@ import '../data/xml_invoice_extractor.dart';
 import '../domain/duplicate_detector.dart';
 import '../domain/extraction.dart';
 import '../domain/invoice_extractor_registry.dart';
+import '../domain/invoice_validator.dart';
 import '../domain/line_category_classifier.dart';
 import '../domain/ocr_text_normalizer.dart';
+import '../domain/source_hasher.dart';
 
 class ImportOutcome {
   const ImportOutcome({
@@ -98,21 +100,46 @@ class ImportCoordinator {
     required String fileName,
     required String imagePath,
     Future<void>? abortSignal,
+    String? requestId,
   }) async {
     _validateSize(bytes);
+    final duplicate = await _repository.findBySourceHash(
+      SourceHasher.sha256Of(bytes),
+    );
+    if (duplicate != null) {
+      return ImportOutcome(
+        result: ExtractionResult(
+          invoice: duplicate,
+          adapterName: 'existing-invoice',
+          adapterVersion: 'v1',
+        ),
+        exactDuplicate: duplicate,
+      );
+    }
     final input = ExtractionInput(
       bytes: bytes,
       fileName: fileName,
       sourceType: InvoiceSourceType.imageOcr,
       localPath: imagePath,
       abortSignal: abortSignal,
+      requestId: requestId,
     );
     if (!_aiExtractor.isConfigured) {
       throw const NetworkException(
         'Cần kết nối dịch vụ AI để phân tích ảnh hóa đơn. Bạn có thể nhập thủ công.',
       );
     }
-    final outcome = await _complete(await _aiExtractor.extractImage(input));
+    final extracted = await _aiExtractor.extractImage(input);
+    final outcome = await _complete(
+      ExtractionResult(
+        invoice: const InvoiceValidator().applyRuleConfidence(
+          extracted.invoice,
+        ),
+        adapterName: extracted.adapterName,
+        adapterVersion: extracted.adapterVersion,
+        warnings: extracted.warnings,
+      ),
+    );
     return ImportOutcome(
       result: outcome.result,
       exactDuplicate: outcome.exactDuplicate,

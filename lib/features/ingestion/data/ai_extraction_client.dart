@@ -209,7 +209,7 @@ class AiExtractionClient implements InvoiceExtractor {
     );
     final body = {
       'action': 'extract',
-      'requestId': _uuid.v4(),
+      'requestId': input.requestId ?? _uuid.v4(),
       'locale': locale,
       'imageBase64': base64Encode(image.bytes),
       'mimeType': image.mimeType,

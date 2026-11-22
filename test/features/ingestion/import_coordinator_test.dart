@@ -11,6 +11,7 @@ import 'package:hoadon_insight/features/ingestion/data/heuristic_text_extractor.
 import 'package:hoadon_insight/features/ingestion/data/pdf_text_service.dart';
 import 'package:hoadon_insight/features/ingestion/data/xml_invoice_extractor.dart';
 import 'package:hoadon_insight/features/ingestion/domain/extraction.dart';
+import 'package:hoadon_insight/features/ingestion/domain/source_hasher.dart';
 import 'package:hoadon_insight/features/invoices/data/drift_invoice_repository.dart';
 import 'package:hoadon_insight/features/invoices/domain/invoice_models.dart';
 
@@ -60,6 +61,38 @@ void main() {
     expect(outcome.result.adapterName, 'fake-vlm-image');
   });
 
+  test('opens five saved images without calling the VLM again', () async {
+    final now = DateTime(2026, 9, 17);
+    final aiExtractor = _FakeAiExtractor();
+    final coordinator = _buildCoordinator(repository, aiExtractor: aiExtractor);
+    for (var index = 0; index < 5; index++) {
+      final bytes = Uint8List.fromList([1, 2, index]);
+      await repository.saveInvoice(
+        InvoiceEntity(
+          id: 'existing-$index',
+          sellerName: 'Siêu thị Demo',
+          currencyCode: 'VND',
+          subtotalMinor: 125000,
+          taxMinor: 0,
+          totalMinor: 125000,
+          sourceType: InvoiceSourceType.imageOcr,
+          sourceHash: SourceHasher.sha256Of(bytes),
+          status: InvoiceStatus.confirmed,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      final outcome = await coordinator.importImage(
+        bytes: bytes,
+        fileName: 'receipt.jpg',
+        imagePath: '/tmp/receipt.jpg',
+      );
+      expect(outcome.exactDuplicate?.id, 'existing-$index');
+      expect(outcome.result.invoice.id, 'existing-$index');
+    }
+    expect(aiExtractor.imageExtractionCalls, 0);
+  });
+
   test('requires the VLM service for image extraction', () async {
     final coordinator = _buildCoordinator(repository);
 
@@ -71,6 +104,21 @@ void main() {
       ),
       throwsA(isA<NetworkException>()),
     );
+  });
+
+  test('passes the same pending import ID on each attempt', () async {
+    final aiExtractor = _FakeAiExtractor();
+    final coordinator = _buildCoordinator(repository, aiExtractor: aiExtractor);
+    for (var attempt = 0; attempt < 2; attempt++) {
+      await coordinator.importImage(
+        bytes: Uint8List.fromList([1, 2, 3]),
+        fileName: 'receipt.jpg',
+        imagePath: '/tmp/receipt.jpg',
+        requestId: 'pending-import-1',
+      );
+    }
+
+    expect(aiExtractor.imageRequestIds, ['pending-import-1', 'pending-import-1']);
   });
 
   test(
@@ -135,6 +183,7 @@ class _FakeAiExtractor extends AiExtractionClient {
   final String? merchantCategoryId;
 
   int imageExtractionCalls = 0;
+  final imageRequestIds = <String?>[];
   Uint8List? lastImageBytes;
 
   @override
@@ -151,6 +200,7 @@ class _FakeAiExtractor extends AiExtractionClient {
   @override
   Future<ExtractionResult> extractImage(ExtractionInput input) async {
     imageExtractionCalls++;
+    imageRequestIds.add(input.requestId);
     lastImageBytes = Uint8List.fromList(input.bytes);
     return _result(input, adapterName: 'fake-vlm-image');
   }
