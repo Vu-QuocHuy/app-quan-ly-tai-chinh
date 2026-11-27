@@ -43,6 +43,15 @@ Function để trích xuất; dữ liệu này không được ghi vào log và 
 - Khi cloud đã bật, report lỗi fatal được ghi vào bảng monitoring private qua RPC server-side, giới hạn 20 report/user/phút và cleanup sau tối đa 30 ngày; user không có quyền đọc report của chính mình qua API.
 - Android release không dùng debug keystore: Gradle chỉ nhận keystore từ biến môi trường hoặc `android/key.properties` bị ignore, còn workflow production fail nếu thiếu hoặc sai keystore.
 
+## Nhà cung cấp AI 9Router (N1)
+
+- Trước đây `NINER_ROUTER_BASE_URL` bị khóa cứng vào `http://103.199.18.103:20128/v1`. Đi qua HTTP thuần nên Bearer API key của 9Router, câu hỏi chat và `FACTS` tài chính của người dùng đều truyền dạng plaintext, ai đứng trên đường truyền giữa Supabase Edge và máy chủ đó cũng đọc hoặc sửa được.
+- Từ 2026-11-12, 9Router chạy sau TLS tại `https://finmi.ddns.net/v1`. Edge Function (`ai-api`, `health`) chỉ chấp nhận URL `https:` có host nằm trong `NINER_ROUTER_ALLOWED_HOSTS` (mặc định `finmi.ddns.net`), path `/v1`, không có user/password/query/hash. Không có cờ nào cho phép quay về HTTP.
+- URL, API key và host allowlist chỉ nằm trong Supabase Secrets. Log `niner_router_request` không còn ghi `baseUrl`, chỉ ghi model, kích thước payload và mã lỗi.
+- Rủi ro còn lại: `ddns.net` là tên miền DDNS miễn phí. Nếu bản ghi DNS bị chiếm, TLS vẫn chặn được MITM vì chứng chỉ phải khớp host, nhưng dịch vụ có thể bị gián đoạn. Lộ trình: chuyển sang tên miền riêng, bật HSTS, xoay vòng `NINER_ROUTER_API_KEY` sau khi đổi endpoint và chặn truy cập trực tiếp vào IP cũ ở firewall.
+- Nếu 9Router lỗi 429, 5xx hoặc timeout, cờ `ai.router.failover` chuyển sang Gemini (key trong Secrets). Khi cả hai cùng lỗi, app trả lời từ dữ liệu trên máy. Quota của người dùng được hoàn qua RPC `refund_ai_quota`; RPC này chỉ `service_role` gọi được nên người dùng không tự hoàn quota được.
+- Header debug `x-finmi-flags` và `x-finmi-fault`, cùng `_meta` usage trong response, chỉ hoạt động khi đặt `AI_ALLOW_DEBUG_HEADERS=true` hoặc `AI_EXPOSE_USAGE_META=true`. Hai biến này **không được bật ở production**.
+
 ## Trước production
 
 - Cấu hình redirect URL/password recovery trong Supabase Auth và kiểm thử email trên môi trường staging.

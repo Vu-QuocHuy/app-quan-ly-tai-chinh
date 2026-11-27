@@ -64,7 +64,9 @@ Không ghi API key vào file hoặc Git:
 supabase login
 supabase link --project-ref YOUR_PROJECT_REF
 supabase secrets set NINER_ROUTER_API_KEY=your_9router_key
-supabase secrets set NINER_ROUTER_BASE_URL=https://your-9router-host/v1
+supabase secrets set NINER_ROUTER_BASE_URL=https://finmi.ddns.net/v1
+supabase secrets set NINER_ROUTER_ALLOWED_HOSTS=finmi.ddns.net
+supabase secrets set AI_FLAG_ENVIRONMENT=production  # dev/staging cho project thử nghiệm
 supabase secrets set GEMINI_API_KEY=your_gemini_api_key
 supabase secrets set AI_WORKER_SECRET=at-least-32-random-characters
 supabase secrets set HEALTHCHECK_SECRET=another-at-least-32-random-characters

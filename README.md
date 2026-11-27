@@ -110,7 +110,9 @@ AI chỉ được gọi khi người dùng đã đăng nhập Supabase. 9router 
 supabase link --project-ref YOUR_PROJECT_REF
 supabase db push
 supabase secrets set NINER_ROUTER_API_KEY=your_9router_key
-supabase secrets set NINER_ROUTER_BASE_URL=https://your-9router-host/v1
+supabase secrets set NINER_ROUTER_BASE_URL=https://finmi.ddns.net/v1
+supabase secrets set NINER_ROUTER_ALLOWED_HOSTS=finmi.ddns.net
+supabase secrets set AI_FLAG_ENVIRONMENT=production  # dev/staging cho project thử nghiệm
 supabase secrets set GEMINI_API_KEY=your_gemini_api_key
 supabase secrets set AI_MAX_REQUESTS_PER_MINUTE=30
 supabase secrets set AI_MAX_REQUESTS_PER_DAY=500

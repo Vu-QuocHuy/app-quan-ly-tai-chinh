@@ -17,12 +17,60 @@ enum AppFeatureFlag {
   final String key;
 }
 
+/// AI optimization switches used to compare baseline (B0, all OFF) with the
+/// optimized build (B1). Rows live in `public.app_feature_flags`; the server
+/// evaluates the same keys in `supabase/functions/_shared/ai_platform.ts`.
+enum AiOptimizationFlag {
+  /// TV1 – O1/O3: Gemini `thinkingLevel: low` + `maxOutputTokens` (server).
+  extractThinkingLow('ai.extract.thinking_low'),
+
+  /// TV1 – O2: resize receipts to 1600 px before upload (client).
+  extractImage1600('ai.extract.image_1600'),
+
+  /// TV1 – O4: hash + duplicate check before calling `extract` (client).
+  extractPrecheckDedup('ai.extract.precheck_dedup'),
+
+  /// TV1 – O5: arithmetic validator instead of fixed confidence (client).
+  extractValidator('ai.extract.validator'),
+
+  /// TV2 – H3: answer standard lookups locally, 0 LLM calls (client).
+  chatLocalRouter('ai.chat.local_router'),
+
+  /// TV2 – H2/H4: skip `assistant_command` for questions, send FACTS in the
+  /// first `chat` call (client).
+  chatMergeCalls('ai.chat.merge_calls'),
+
+  /// TV2 – H5: shorter `answerChat` system prompt (server).
+  chatPromptV2('ai.chat.prompt_v2'),
+
+  /// TV2 – H8: run `merchant-rules-v1` on device (client).
+  classifyLocal('ai.classify.local'),
+
+  /// TV3 – N5: circuit breaker + failover 9Router → Gemini → local (server).
+  routerFailover('ai.router.failover'),
+
+  /// TV3 – N3: upload client AI telemetry to `ai_client_events` (client).
+  telemetryUpload('ai.telemetry.upload');
+
+  const AiOptimizationFlag(this.key);
+
+  final String key;
+
+  static AiOptimizationFlag? fromKey(String key) {
+    for (final flag in values) {
+      if (flag.key == key) return flag;
+    }
+    return null;
+  }
+}
+
 @immutable
 class FeatureFlags {
   const FeatureFlags({
     this.onlineAi = true,
     this.cloudSync = true,
     this.externalRates = true,
+    this.aiOptimizations = const {},
   });
 
   static const defaults = FeatureFlags();
@@ -30,6 +78,26 @@ class FeatureFlags {
   final bool onlineAi;
   final bool cloudSync;
   final bool externalRates;
+
+  /// Enabled AI optimization flags. Missing = OFF (baseline behaviour).
+  final Set<AiOptimizationFlag> aiOptimizations;
+
+  bool isAiEnabled(AiOptimizationFlag flag) => aiOptimizations.contains(flag);
+
+  /// Stable label matching `ai_request_metrics.flag_set` (`none` = B0).
+  String get aiFlagSet {
+    final keys = aiOptimizations.map((flag) => flag.key).toList()..sort();
+    return keys.isEmpty ? 'none' : keys.join(',');
+  }
+
+  FeatureFlags _withAi(AiOptimizationFlag flag, bool value) => FeatureFlags(
+    onlineAi: onlineAi,
+    cloudSync: cloudSync,
+    externalRates: externalRates,
+    aiOptimizations: value
+        ? {...aiOptimizations, flag}
+        : aiOptimizations.where((item) => item != flag).toSet(),
+  );
 
   bool isEnabled(AppFeatureFlag flag) => switch (flag) {
     AppFeatureFlag.onlineAi => onlineAi,
@@ -42,21 +110,25 @@ class FeatureFlags {
       onlineAi: value,
       cloudSync: cloudSync,
       externalRates: externalRates,
+      aiOptimizations: aiOptimizations,
     ),
     AppFeatureFlag.cloudSync => FeatureFlags(
       onlineAi: onlineAi,
       cloudSync: value,
       externalRates: externalRates,
+      aiOptimizations: aiOptimizations,
     ),
     AppFeatureFlag.externalRates => FeatureFlags(
       onlineAi: onlineAi,
       cloudSync: cloudSync,
       externalRates: value,
+      aiOptimizations: aiOptimizations,
     ),
   };
 
   Map<String, bool> toJson() => {
     for (final flag in AppFeatureFlag.values) flag.key: isEnabled(flag),
+    for (final flag in AiOptimizationFlag.values) flag.key: isAiEnabled(flag),
   };
 }
 
@@ -165,6 +237,16 @@ class RemoteConfigService {
       final key = row['key'];
       final enabled = row['enabled'];
       if (key is! String || enabled is! bool) continue;
+      final rollout = row['rollout_percentage'];
+      final rolloutPercentage = rollout is num
+          ? rollout.toInt().clamp(0, 100)
+          : 100;
+      final aiFlag = AiOptimizationFlag.fromKey(key);
+      if (aiFlag != null) {
+        final active = enabled && _isInRollout(key, rolloutPercentage, userId);
+        flags = flags._withAi(aiFlag, active);
+        continue;
+      }
       AppFeatureFlag? flag;
       for (final candidate in AppFeatureFlag.values) {
         if (candidate.key == key) {
@@ -173,22 +255,19 @@ class RemoteConfigService {
         }
       }
       if (flag == null) continue;
-      final rollout = row['rollout_percentage'];
-      final rolloutPercentage = rollout is num
-          ? rollout.toInt().clamp(0, 100)
-          : 100;
-      final active = enabled && _isInRollout(flag, rolloutPercentage, userId);
+      final active =
+          enabled && _isInRollout(flag.key, rolloutPercentage, userId);
       flags = flags._with(flag, active);
     }
     return flags;
   }
 
-  bool _isInRollout(AppFeatureFlag flag, int percentage, String? userId) {
+  bool _isInRollout(String flagKey, int percentage, String? userId) {
     if (percentage <= 0 || userId == null || userId.trim().isEmpty) {
       return false;
     }
     if (percentage >= 100) return true;
-    final digest = sha256.convert(utf8.encode('${userId.trim()}:${flag.key}'));
+    final digest = sha256.convert(utf8.encode('${userId.trim()}:$flagKey'));
     var bucket = 0;
     for (final byte in digest.bytes.take(4)) {
       bucket = (bucket << 8) | byte;
