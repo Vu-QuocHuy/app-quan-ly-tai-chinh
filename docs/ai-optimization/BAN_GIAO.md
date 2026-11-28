@@ -102,14 +102,22 @@ Các giá trị `AI_FLAG_PROFILE`: `server` (mặc định, dùng cờ trong DB)
 - [ ] Sau khi có dữ liệu thật, điền `assets/ai_lab/pricing.json` mục `chat_baseline_b0` (token trung bình mỗi lượt gọi LLM ở B0) để overlay tính tiền tiết kiệm của chat.
 - **Xong khi:** 4 file CSV + bảng tổng hợp M6/M7/M9 + M8, router đã sửa, và 6 câu từ chối đã kiểm.
 
-### Trang điều khiển một-màn-hình (tùy chọn)
+### Màn hình demo: hai điện thoại, bật/tắt từng tối ưu, số liệu realtime
 
-`powershell tool/run_dual_instances.ps1` còn bật một máy chủ tĩnh ở cổng 8090 và mở `http://localhost:8090/`: một tab chứa **hai iframe** (B0 trái, B1 phải) và một thanh nút gửi cùng một lệnh cho cả hai (câu hỏi có sẵn, lỗi giả lập 429/500/timeout, bóp méo tổng, hóa đơn mẫu 1/2, reset; mục "Gửi cho" chọn cả hai hoặc một bên). Nếu không dùng được, hai tab 8080/8081 vẫn chạy bình thường.
+`powershell tool/run_dual_instances.ps1 -Metrics` (hoặc `toolun_dual_instances.bat metrics`) bật hai app (8080 = B0, 8081 = B1) và một máy chủ tĩnh ở cổng 8090:
 
-Giao tiếp bằng `postMessage` (chỉ nhận từ `http://localhost:8090`), cùng 5 lệnh `ask|fault|importAsset|tamper|reset`; test hợp đồng `python tool/demo/controller/test_controller_contract.py` bảo đảm trang HTML và bộ phân tích Dart không lệch nhau. **Chưa thử trong trình duyệt thật**: người đầu tiên chạy hãy kiểm các điểm sau và ghi lại kết quả:
-- iframe có hiển thị được app Flutter không (dev server có thể chặn nhúng);
-- bấm "Gửi cho: Cả hai" thật sự làm cả hai bản trả lời;
-- sau khi tải lại một bản, công tắc lỗi giả lập/bóp méo của bản đó trở về mặc định trong khi radio của trang điều khiển giữ giá trị cũ (cần bấm lại).
+- **`http://localhost:8090/` (điều khiển):** hai khung điện thoại cạnh nhau, mỗi khung có nhãn trực tiếp "B0 – GỐC" / "B1 – TỐI ƯU" / "TÙY CHỈNH n/10", cảnh báo "LỆCH CỜ" khi cờ client khác cờ server. Giữa hai khung là **bảng 10 tính năng × 2 cột (B0 | B1)**; mỗi ô là một công tắc phản ánh đúng trạng thái app báo về, bật/tắt sẽ đổi cờ của app đang chạy (cờ phía máy có hiệu lực ngay; cờ phía server qua header `x-finmi-flags`, nên server dev phải bật `AI_ALLOW_DEBUG_HEADERS=true`). Có "Tắt hết" / "Bật hết" cho từng khung, các nút câu hỏi có sẵn, lỗi giả lập, bóp méo tổng, hóa đơn mẫu và Reset; mục "Gửi cho" chọn cả hai hoặc một bên.
+- **`http://localhost:8090/metrics.html` (số liệu realtime):** mở ở cửa sổ/màn hình khác. Hai cột B0 và B1 cùng cột "B1 so với B0": cờ đang bật, số lượt gọi, token, tiết kiệm, ảnh trùng chặn được, % trả lời trên máy, thanh token OCR (đầu vào / suy luận / đầu ra), độ trễ từng lượt chat và bảng 30 lời gọi gần nhất.
+- **Xem thử giao diện không cần app:** thêm `?mock=1` vào URL của một trong hai trang (có banner tím "DỮ LIỆU GIẢ LẬP"; `&mismatch=1` để xem cảnh báo LỆCH CỜ). Chế độ này không bao giờ bật nếu thiếu tham số.
+- Cũng đổi được cờ ngay trong app, ở bảng AI Lab mục "Tính năng tối ưu" (10 công tắc + hai nút B0/B1).
+
+Giao thức giữa các thành phần: [`ailab-protocol.md`](ailab-protocol.md). Bộ test hợp đồng (`python -I tool/demo/controller/test_controller_contract.py`, `node --test tool/demo/controller/lib.test.js`) bảo đảm trang HTML, `lib.js` và Dart không lệch nhau về khóa cờ và tên lệnh.
+
+**Chưa thử với app thật trong trình duyệt** (chỉ có test, build web thành công và ảnh chụp ở chế độ giả lập). Người đầu tiên chạy hãy kiểm và ghi lại:
+- iframe có nhúng được app Flutter không; bấm "Gửi cho: Cả hai" có làm cả hai bản trả lời;
+- bật/tắt một công tắc có đổi trạng thái ở cả banner trong app lẫn bảng điều khiển; công tắc phía server có làm `flagSet` của server đổi theo (nếu không, kiểm `AI_ALLOW_DEBUG_HEADERS`);
+- trang số liệu nhận được dữ liệu từ cả hai bản (`BroadcastChannel` giữa hai tab);
+- sau khi tải lại một bản, nó trở về cờ mặc định của `AI_FLAG_PROFILE` và bảng điều khiển tự đồng bộ lại trong vài giây.
 
 ### Bảng điều khiển AI Lab trong app
 

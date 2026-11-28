@@ -38,7 +38,7 @@ Năm tình huống spec ngụ ý nhưng không task nào của TV1–TV3 kiểm 
 
 ## Tiến độ (cập nhật 28/11, nhánh `integration/ai-opt`)
 
-Cổng chất lượng trên nhánh đã merge: `flutter analyze` sạch; **715 test Flutter**, 35 Deno, 75 Python đạt; `deno check` cả 3 function; `flutter build web --debug` thành công. Bàn giao cho TV1/TV2/TV3: [`docs/ai-optimization/BAN_GIAO.md`](../../ai-optimization/BAN_GIAO.md).
+Cổng chất lượng trên nhánh đã merge: `flutter analyze` sạch; **775 test Flutter**, 35 Deno, 75 Python, 20 Node đạt; `deno check` cả 3 function; `flutter build web --debug` thành công. Demo hai điện thoại + bật/tắt từng tối ưu + trang số liệu realtime: xem `docs/ai-optimization/ailab-protocol.md` và BAN_GIAO. Bàn giao cho TV1/TV2/TV3: [`docs/ai-optimization/BAN_GIAO.md`](../../ai-optimization/BAN_GIAO.md).
 
 | Task | Trạng thái |
 |---|---|
