@@ -306,6 +306,7 @@ final aiExtractionClientProvider = Provider<AiExtractionClient>((ref) {
     locale: ref.watch(appLocaleProvider).languageCode == 'en'
         ? 'en-US'
         : 'vi-VN',
+    use1600Profile: flags.isAiEnabled(AiOptimizationFlag.extractImage1600),
   );
 });
 
@@ -331,6 +332,10 @@ final importCoordinatorProvider = Provider<ImportCoordinator>((ref) {
       AiOptimizationFlag.classifyLocal,
     ),
     onLocalMerchantClassification: metrics.recordLocalClassification,
+    precheckDedup: flags.isAiEnabled(AiOptimizationFlag.extractPrecheckDedup),
+    validatorEnabled: flags.isAiEnabled(AiOptimizationFlag.extractValidator),
+    onDuplicateBlocked: (payloadBytes) => AiTelemetry.instance
+        .recordDuplicateBlocked(payloadBytes: payloadBytes),
   );
 });
 

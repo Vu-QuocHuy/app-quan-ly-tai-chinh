@@ -66,6 +66,7 @@ class AiExtractionClient implements InvoiceExtractor {
     InvoiceValidator? validator,
     this.enabled = true,
     this.locale = 'vi-VN',
+    this.use1600Profile = false,
   }) : _supabaseFunctions = supabaseClient == null
            ? null
            : SupabaseFunctionClient(client: supabaseClient),
@@ -77,6 +78,9 @@ class AiExtractionClient implements InvoiceExtractor {
   final InvoiceValidator _validator;
   final bool enabled;
   final String locale;
+
+  /// O2 (`ai.extract.image_1600`): downscale receipts to 1600 px before upload.
+  final bool use1600Profile;
 
   bool get isConfigured => enabled && _supabaseFunctions?.isConfigured == true;
 
@@ -206,6 +210,7 @@ class AiExtractionClient implements InvoiceExtractor {
     final image = await optimizeReceiptImageForOcr(
       input.bytes,
       mimeType: _mimeType(input.fileName),
+      use1600Profile: use1600Profile,
     );
     final body = {
       'action': 'extract',

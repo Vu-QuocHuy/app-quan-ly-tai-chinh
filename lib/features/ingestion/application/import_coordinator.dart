@@ -49,12 +49,18 @@ class ImportCoordinator {
         const MerchantCategoryClassifier(),
     bool classifyMerchantLocally = false,
     void Function({required bool matched})? onLocalMerchantClassification,
+    bool precheckDedup = false,
+    bool validatorEnabled = false,
+    void Function(int payloadBytes)? onDuplicateBlocked,
     Uuid uuid = const Uuid(),
     Iterable<InvoiceExtractor> additionalExtractors = const [],
   }) : _repository = repository,
        _merchantClassifier = merchantClassifier,
        _classifyMerchantLocally = classifyMerchantLocally,
        _onLocalMerchantClassification = onLocalMerchantClassification,
+       _precheckDedup = precheckDedup,
+       _validatorEnabled = validatorEnabled,
+       _onDuplicateBlocked = onDuplicateBlocked,
        _pdfTextService = pdfTextService,
        _aiExtractor = aiExtractor,
        _heuristicExtractor = heuristicExtractor,
@@ -78,6 +84,17 @@ class ImportCoordinator {
   /// calling the `classify` action (saves a round trip and a quota unit).
   final bool _classifyMerchantLocally;
   final void Function({required bool matched})? _onLocalMerchantClassification;
+
+  /// O4 (`ai.extract.precheck_dedup`): look the image hash up before calling
+  /// the VLM. Off (B0) the duplicate is only found after extraction.
+  final bool _precheckDedup;
+
+  /// O5 (`ai.extract.validator`): replace the model's fixed confidence with
+  /// arithmetic evidence (`InvoiceValidator.applyRuleConfidence`).
+  final bool _validatorEnabled;
+
+  /// Called with the image size when O4 avoided a model call.
+  final void Function(int payloadBytes)? _onDuplicateBlocked;
   final Uuid _uuid;
   final InvoiceExtractorRegistry _extractorRegistry;
 
@@ -117,10 +134,11 @@ class ImportCoordinator {
     String? requestId,
   }) async {
     _validateSize(bytes);
-    final duplicate = await _repository.findBySourceHash(
-      SourceHasher.sha256Of(bytes),
-    );
+    final duplicate = _precheckDedup
+        ? await _repository.findBySourceHash(SourceHasher.sha256Of(bytes))
+        : null;
     if (duplicate != null) {
+      _onDuplicateBlocked?.call(bytes.length);
       return ImportOutcome(
         result: ExtractionResult(
           invoice: duplicate,
@@ -146,9 +164,9 @@ class ImportCoordinator {
     final extracted = await _aiExtractor.extractImage(input);
     final outcome = await _complete(
       ExtractionResult(
-        invoice: const InvoiceValidator().applyRuleConfidence(
-          extracted.invoice,
-        ),
+        invoice: _validatorEnabled
+            ? const InvoiceValidator().applyRuleConfidence(extracted.invoice)
+            : extracted.invoice,
         adapterName: extracted.adapterName,
         adapterVersion: extracted.adapterVersion,
         warnings: extracted.warnings,

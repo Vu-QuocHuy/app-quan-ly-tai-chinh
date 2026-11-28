@@ -75,6 +75,8 @@ void main() {
       if (warns(altered)) injectedDetected++;
     }
     expect(injectedCases, greaterThan(0));
+    // The replay script reports its result on stdout on purpose.
+    // ignore: avoid_print
     print(jsonEncode({
       'correct_total': correct,
       'warnings_on_correct_total': falseAlarms,

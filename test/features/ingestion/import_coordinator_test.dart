@@ -61,10 +61,14 @@ void main() {
     expect(outcome.result.adapterName, 'fake-vlm-image');
   });
 
-  test('opens five saved images without calling the VLM again', () async {
+  test('O4 ON: opens five saved images without calling the VLM again', () async {
     final now = DateTime(2026, 9, 17);
     final aiExtractor = _FakeAiExtractor();
-    final coordinator = _buildCoordinator(repository, aiExtractor: aiExtractor);
+    final coordinator = _buildCoordinator(
+      repository,
+      aiExtractor: aiExtractor,
+      precheckDedup: true,
+    );
     for (var index = 0; index < 5; index++) {
       final bytes = Uint8List.fromList([1, 2, index]);
       await repository.saveInvoice(
@@ -91,6 +95,118 @@ void main() {
       expect(outcome.result.invoice.id, 'existing-$index');
     }
     expect(aiExtractor.imageExtractionCalls, 0);
+  });
+
+  test('O4 OFF (B0): a saved image still reaches the VLM', () async {
+    final now = DateTime(2026, 9, 17);
+    final bytes = Uint8List.fromList([1, 2, 77]);
+    await repository.saveInvoice(
+      InvoiceEntity(
+        id: 'existing-b0',
+        sellerName: 'Siêu thị Demo',
+        currencyCode: 'VND',
+        subtotalMinor: 125000,
+        taxMinor: 0,
+        totalMinor: 125000,
+        sourceType: InvoiceSourceType.imageOcr,
+        sourceHash: SourceHasher.sha256Of(bytes),
+        status: InvoiceStatus.confirmed,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    final aiExtractor = _FakeAiExtractor();
+    final coordinator = _buildCoordinator(repository, aiExtractor: aiExtractor);
+
+    await coordinator.importImage(
+      bytes: bytes,
+      fileName: 'receipt.jpg',
+      imagePath: '/tmp/receipt.jpg',
+    );
+
+    expect(aiExtractor.imageExtractionCalls, 1);
+  });
+
+  test('O4 ON: reports the bytes of a blocked duplicate', () async {
+    final now = DateTime(2026, 9, 17);
+    final bytes = Uint8List.fromList([1, 2, 3, 4, 5]);
+    await repository.saveInvoice(
+      InvoiceEntity(
+        id: 'existing-cb',
+        sellerName: 'Siêu thị Demo',
+        currencyCode: 'VND',
+        subtotalMinor: 125000,
+        taxMinor: 0,
+        totalMinor: 125000,
+        sourceType: InvoiceSourceType.imageOcr,
+        sourceHash: SourceHasher.sha256Of(bytes),
+        status: InvoiceStatus.confirmed,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    final blocked = <int>[];
+    final coordinator = _buildCoordinator(
+      repository,
+      aiExtractor: _FakeAiExtractor(),
+      precheckDedup: true,
+      onDuplicateBlocked: blocked.add,
+    );
+
+    await coordinator.importImage(
+      bytes: bytes,
+      fileName: 'receipt.jpg',
+      imagePath: '/tmp/receipt.jpg',
+    );
+
+    expect(blocked, [5]);
+  });
+
+  test('O5 OFF (B0): a mismatching total keeps the model confidence', () async {
+    final coordinator = _buildCoordinator(
+      repository,
+      aiExtractor: _FakeAiExtractor(mismatchedTotal: true),
+    );
+
+    final outcome = await coordinator.importImage(
+      bytes: Uint8List.fromList([9, 9, 1]),
+      fileName: 'receipt.jpg',
+      imagePath: '/tmp/receipt.jpg',
+    );
+
+    expect(_totalConfidence(outcome), 0.75);
+  });
+
+  test('O5 ON: a mismatching total drops confidence to 0.50', () async {
+    final coordinator = _buildCoordinator(
+      repository,
+      aiExtractor: _FakeAiExtractor(mismatchedTotal: true),
+      validatorEnabled: true,
+    );
+
+    final outcome = await coordinator.importImage(
+      bytes: Uint8List.fromList([9, 9, 2]),
+      fileName: 'receipt.jpg',
+      imagePath: '/tmp/receipt.jpg',
+    );
+
+    expect(_totalConfidence(outcome), 0.5);
+  });
+
+  test('O5 ON: a consistent total keeps confidence 0.75', () async {
+    final coordinator = _buildCoordinator(
+      repository,
+      aiExtractor: _FakeAiExtractor(withEvidence: true),
+      validatorEnabled: true,
+    );
+
+    final outcome = await coordinator.importImage(
+      bytes: Uint8List.fromList([9, 9, 3]),
+      fileName: 'receipt.jpg',
+      imagePath: '/tmp/receipt.jpg',
+    );
+
+    expect(_totalConfidence(outcome), 0.75);
   });
 
   test('requires the VLM service for image extraction', () async {
@@ -210,6 +326,9 @@ ImportCoordinator _buildCoordinator(
   AiExtractionClient? aiExtractor,
   bool classifyMerchantLocally = false,
   void Function({required bool matched})? onLocalMerchantClassification,
+  bool precheckDedup = false,
+  bool validatorEnabled = false,
+  void Function(int payloadBytes)? onDuplicateBlocked,
 }) {
   return ImportCoordinator(
     repository: repository,
@@ -219,8 +338,15 @@ ImportCoordinator _buildCoordinator(
     heuristicExtractor: HeuristicTextExtractor(),
     classifyMerchantLocally: classifyMerchantLocally,
     onLocalMerchantClassification: onLocalMerchantClassification,
+    precheckDedup: precheckDedup,
+    validatorEnabled: validatorEnabled,
+    onDuplicateBlocked: onDuplicateBlocked,
   );
 }
+
+double _totalConfidence(ImportOutcome outcome) => outcome.result.invoice.evidence
+    .firstWhere((item) => item.fieldName == 'totalMinor')
+    .confidence;
 
 class _FakeAiExtractor extends AiExtractionClient {
   _FakeAiExtractor({
@@ -228,7 +354,13 @@ class _FakeAiExtractor extends AiExtractionClient {
     this.lineCategoryIds = const [],
     this.merchantCategoryId,
     this.sellerName = 'Siêu thị Demo',
+    this.mismatchedTotal = false,
+    this.withEvidence = false,
   }) : super(enabled: false);
+
+  /// Subtotal 125.000 but total 150.000: the arithmetic does not reconcile.
+  final bool mismatchedTotal;
+  final bool withEvidence;
 
   final String extractedCategoryId;
   final String sellerName;
@@ -273,9 +405,21 @@ class _FakeAiExtractor extends AiExtractionClient {
         currencyCode: 'VND',
         subtotalMinor: 125000,
         taxMinor: 0,
-        totalMinor: 125000,
+        totalMinor: mismatchedTotal ? 150000 : 125000,
         sourceType: input.sourceType,
         categoryId: extractedCategoryId,
+        evidence: mismatchedTotal || withEvidence
+            ? [
+                FieldEvidenceEntity(
+                  id: 'evidence-total',
+                  fieldName: 'totalMinor',
+                  rawValue: '125000',
+                  normalizedValue: '125000',
+                  source: input.sourceType,
+                  confidence: 0.75,
+                ),
+              ]
+            : const [],
         status: InvoiceStatus.needsReview,
         createdAt: now,
         updatedAt: now,
