@@ -232,5 +232,20 @@ void main() {
       store.fault = 'timeout';
       expect(store.fault, 'timeout');
     });
+
+    test('lastServerFlagSet lấy flagSet của lời gọi gần nhất có giá trị, reset xóa', () {
+      expect(store.lastServerFlagSet, isNull);
+      store.recordCall(const AiLabCall(
+          action: 'chat', durationMs: 1, serverFlagSet: 'none'));
+      expect(store.lastServerFlagSet, 'none');
+      store.recordCall(const AiLabCall(action: 'chat', durationMs: 1));
+      expect(store.lastServerFlagSet, 'none');
+      store.recordCall(const AiLabCall(
+          action: 'chat', durationMs: 1, serverFlagSet: 'a,b'));
+      expect(store.lastServerFlagSet, 'a,b');
+
+      store.reset();
+      expect(store.lastServerFlagSet, isNull);
+    });
   });
 }
