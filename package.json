@@ -6,6 +6,8 @@
     "start-8080": "flutter run -d web-server --web-port=8080 --web-hostname=localhost --dart-define=APP_ENV=dev --dart-define=AI_FLAG_PROFILE=b0 --dart-define=AI_LAB=true --dart-define-from-file=config/supabase.local.json",
     "start-8081": "flutter run -d web-server --web-port=8081 --web-hostname=localhost --dart-define=APP_ENV=dev --dart-define=AI_FLAG_PROFILE=b1 --dart-define=AI_LAB=true --dart-define-from-file=config/supabase.local.json",
     "start-controller": "python -m http.server 8090 --directory tool/demo/controller",
+    "start-metrics": "cmd /c start http://localhost:8090/metrics.html",
+    "test-demo-web": "node --test tool/demo/controller/lib.test.js",
     "start-dual": "tool\\run_dual_instances.bat",
     "start-dual-ps": "powershell -ExecutionPolicy Bypass -File tool\\run_dual_instances.ps1"
   },

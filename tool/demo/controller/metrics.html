@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finmi – Số liệu AI Lab realtime</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; }
+  .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 10px; }
+  .topbar h1 { font-size: 20px; flex: 1 1 280px; }
+  .ro { font-size: 12px; color: var(--muted); }
+  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+  section.card > h2 { font-size: 16px; margin-bottom: 8px; }
+  .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+  .cols > div { min-width: 0; }
+  @media (max-width: 640px) {
+    .wrap { padding: 8px 8px 32px; }
+    table.flags td.c, table.flags th.c { width: 90px; }
+    table.cmp { min-width: 520px; }
+    table.flags { min-width: 400px; }
+    table.cmp th[scope="row"] { min-width: 170px; }
+    table.flags th[scope="row"] { min-width: 190px; }
+    .topbar h1 { font-size: 18px; }
+  }
+  .col-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 6px; }
+  .col-head h3 { font-size: 14px; color: var(--muted); }
+
+  .conn { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; }
+  @media (max-width: 640px) { .conn { grid-template-columns: minmax(0, 1fr); } }
+  .conn-item { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--panel2); }
+  .conn-item strong { margin-right: 6px; }
+  .conn-item.stale { border-color: var(--warn-line); background: var(--warn-bg); color: var(--warn-fg); }
+
+  .scroll { overflow-x: auto; }
+  table.cmp th[scope="col"] { font-size: 13px; }
+  table.cmp td.v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  table.cmp td.d { text-align: right; font-variant-numeric: tabular-nums; font-weight: 800; white-space: nowrap; }
+  table.cmp tr.big td.v { font-size: 20px; }
+  table.flags td.c, table.flags th.c { text-align: center; width: 170px; }
+  table.flags tr.diff th[scope="row"] { box-shadow: inset 4px 0 0 var(--warn-line); }
+  .diff-mark { font-size: 11px; font-weight: 800; color: var(--warn-fg); background: var(--warn-bg);
+    border: 1px solid var(--warn-line); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+  table.flags tbody th[scope="row"] { font-weight: 500; }
+  table.flags tr.grp th { background: var(--panel2); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+
+  svg.chart { width: 100%; height: auto; display: block; }
+  svg.chart text { fill: var(--fg); font: 11px system-ui, sans-serif; }
+  svg.chart .axis { stroke: var(--muted); stroke-width: 1; }
+  svg.chart .grid { stroke: var(--grid); stroke-width: 1; }
+  svg.chart .barlabel { font-size: 10px; font-weight: 700; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; }
+  .legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .legend svg { width: 18px; height: 18px; flex: none; border: 1px solid var(--muted); border-radius: 3px; }
+  .summary { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+  .tok-list { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13px; margin: 6px 0 0; padding: 0; list-style: none; }
+  .tok-list b { font-variant-numeric: tabular-nums; }
+  .empty { color: var(--muted); padding: 10px 0; }
+
+  .calls { max-height: 560px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .calls table { font-size: 13px; }
+  .calls thead th { position: sticky; top: 0; background: var(--panel2); z-index: 1; }
+  .fo { display: inline-block; font-weight: 800; font-size: 12px; padding: 0 6px; border-radius: 4px;
+    background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--warn-line); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="pat-local" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" style="fill:var(--route-local)"/></pattern>
+    <pattern id="pat-cloud" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" style="fill:var(--route-cloud)"/><line x1="0" y1="0" x2="0" y2="7" stroke-width="2.6" style="stroke:var(--panel)"/></pattern>
+    <pattern id="pat-fallback" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="7" style="fill:var(--route-fallback)"/><circle cx="3.5" cy="3.5" r="1.5" style="fill:var(--panel)"/></pattern>
+    <pattern id="pat-degraded" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="7" style="fill:var(--route-degraded)"/><path d="M0 0L7 7M7 0L0 7" stroke-width="1.4" style="stroke:var(--panel)"/></pattern>
+    <pattern id="pat-other" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="6" height="6" style="fill:var(--route-other)"/><path d="M0 3H6" stroke-width="1.5" style="stroke:var(--panel)"/></pattern>
+    <pattern id="pat-input" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" style="fill:var(--tok-input)"/></pattern>
+    <pattern id="pat-think" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" style="fill:var(--tok-think)"/><line x1="0" y1="0" x2="0" y2="7" stroke-width="2.6" style="stroke:var(--panel)"/></pattern>
+    <pattern id="pat-output" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="7" style="fill:var(--tok-output)"/><circle cx="3.5" cy="3.5" r="1.5" style="fill:var(--panel)"/></pattern>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header class="topbar">
+    <h1>Số liệu AI Lab – B0 so với B1 (realtime)</h1>
+    <a class="btn" href="index.html" target="finmi-controller">← Trang điều khiển</a>
+    <span class="ro">Trang chỉ đọc – không gửi lệnh tới ứng dụng.</span>
+  </header>
+
+  <section class="card" aria-labelledby="h-conn">
+    <h2 id="h-conn">Kết nối</h2>
+    <div class="conn" id="conn" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-flags">
+    <h2 id="h-flags">Hồ sơ và cờ tối ưu</h2>
+    <div class="scroll" id="flags"></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-kpi">
+    <h2 id="h-kpi">Chỉ số chính</h2>
+    <div class="scroll" id="kpi"></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-ocr">
+    <h2 id="h-ocr">Token của lần đọc hóa đơn gần nhất</h2>
+    <div class="cols" id="ocr"></div>
+    <ul class="legend" aria-label="Chú giải token">
+      <li><svg viewBox="0 0 18 18" aria-hidden="true"><rect width="18" height="18" fill="url(#pat-input)"/></svg>Đầu vào</li>
+      <li><svg viewBox="0 0 18 18" aria-hidden="true"><rect width="18" height="18" fill="url(#pat-think)"/></svg>Suy luận</li>
+      <li><svg viewBox="0 0 18 18" aria-hidden="true"><rect width="18" height="18" fill="url(#pat-output)"/></svg>Đầu ra</li>
+    </ul>
+  </section>
+
+  <section class="card" aria-labelledby="h-lat">
+    <h2 id="h-lat">Độ trễ từng lượt chat (tối đa 20 lượt gần nhất)</h2>
+    <div class="cols" id="lat"></div>
+    <ul class="legend" id="route-legend" aria-label="Chú giải loại đường xử lý"></ul>
+  </section>
+
+  <section class="card" aria-labelledby="h-calls">
+    <h2 id="h-calls">30 lời gọi API gần nhất (mới nhất ở trên)</h2>
+    <div class="cols" id="calls"></div>
+  </section>
+</div>
+
+<script src="lib.js"></script>
+<script>
+(function () {
+  'use strict';
+  var L = window.FinmiLib;
+  var PANES = ['b0', 'b1'];
+  var NAMES = { b0: 'B0', b1: 'B1' };
+  var STALE_MS = 15000;
+  var state = { b0: null, b1: null };      // { m: normalised metrics, at: epoch ms }
+  var shown = {};                          // last HTML written per container id
+  var queued = false;
+  var mock = null;
+  var channel = null;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function put(id, html) {
+    if (shown[id] === html) return;
+    shown[id] = html;
+    document.getElementById(id).innerHTML = html;
+  }
+  function metricOf(p) { return state[p] ? state[p].m : null; }
+  function pill(p, big) {
+    var m = metricOf(p);
+    return '<span class="pill ' + L.profileTone(m) + (big ? ' big' : '') + '">' + esc(L.profileLabel(m)) + '</span>';
+  }
+  function colHead(p) {
+    var m = metricOf(p);
+    return '<div class="col-head"><h3>' + NAMES[p] + '</h3>' + pill(p) +
+      (L.flagMismatch(m) ? '<span class="warn">⚠ LỆCH CỜ</span>' : '') + '</div>';
+  }
+
+  // --------------------------------------------------------------- input
+  function accept(pane, raw, at) {
+    var m = L.normalizeMetrics(raw);
+    if (!m) return;
+    state[pane] = { m: m, at: typeof at === 'number' ? at : Date.now() };
+    schedule();
+  }
+
+  function openChannel() {
+    if (typeof BroadcastChannel === 'undefined') return;
+    try {
+      channel = new BroadcastChannel(L.CHANNEL_NAME);
+      channel.onmessage = function (ev) {
+        var d = ev.data;
+        if (!d || d.ailab !== 1 || (d.pane !== 'b0' && d.pane !== 'b1')) return;
+        accept(d.pane, d.metrics, d.receivedAt);
+      };
+      requestSnapshot();
+    } catch (e) { channel = null; }
+  }
+  function requestSnapshot() {
+    if (!channel) return;
+    try { channel.postMessage({ ailab: 1, request: 'snapshot' }); } catch (e) { /* ignore */ }
+  }
+
+  // ------------------------------------------------------------ rendering
+  function schedule() {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(function () { queued = false; render(); });
+  }
+
+  function renderConn() {
+    var now = Date.now();
+    var html = PANES.map(function (p) {
+      if (!state[p]) {
+        return '<div class="conn-item stale"><strong>○ ' + NAMES[p] + '</strong>Chưa nhận dữ liệu từ ' + NAMES[p] +
+          ' – hãy mở trang điều khiển và kiểm tra ứng dụng đã chạy</div>';
+      }
+      var age = now - state[p].at;
+      if (age > STALE_MS) {
+        return '<div class="conn-item stale"><strong>⚠ ' + NAMES[p] + '</strong>Không có dữ liệu mới (cập nhật ' +
+          esc(L.ageLabel(age)) + ')</div>';
+      }
+      return '<div class="conn-item"><strong>● ' + NAMES[p] + '</strong>Đang nhận – cập nhật ' + esc(L.ageLabel(age)) + '</div>';
+    }).join('');
+    put('conn', html);
+  }
+
+  function flagChip(v) {
+    if (v === true) return '<span class="chip on">✔ BẬT</span>';
+    if (v === false) return '<span class="chip off">✖ TẮT</span>';
+    return '<span class="chip unk">—</span>';
+  }
+
+  function renderFlags() {
+    var m0 = metricOf('b0'), m1 = metricOf('b1');
+    var diff = L.flagsDiff(m0, m1);
+    var html = '<table class="flags"><thead><tr><th scope="col">Kỹ thuật tối ưu</th>' +
+      '<th scope="col" class="c">B0<br>' + pill('b0') + (L.flagMismatch(m0) ? '<br><span class="warn">⚠ LỆCH CỜ</span>' : '') + '</th>' +
+      '<th scope="col" class="c">B1<br>' + pill('b1') + (L.flagMismatch(m1) ? '<br><span class="warn">⚠ LỆCH CỜ</span>' : '') + '</th>' +
+      '</tr></thead><tbody>';
+    var group = null;
+    L.FLAGS.forEach(function (f) {
+      if (f.group !== group) {
+        group = f.group;
+        html += '<tr class="grp"><th scope="colgroup" colspan="3">' + esc(group) + '</th></tr>';
+      }
+      var isDiff = diff.indexOf(f.key) >= 0;
+      html += '<tr' + (isDiff ? ' class="diff"' : '') + '><th scope="row">' + esc(f.name) +
+        '<span class="where">' + esc(f.where) + '</span>' + (isDiff ? '<span class="diff-mark">KHÁC</span>' : '') + '</th>' +
+        '<td class="c">' + flagChip(m0 ? m0.flags[f.key] : null) + '</td>' +
+        '<td class="c">' + flagChip(m1 ? m1.flags[f.key] : null) + '</td></tr>';
+    });
+    put('flags', html + '</tbody></table>');
+  }
+
+  function avgTurnMs(m) {
+    if (!m) return null;
+    var v = m.turns.map(function (t) { return t.durationMs; }).filter(function (x) { return x !== null; });
+    if (!v.length) return null;
+    return v.reduce(function (a, b) { return a + b; }, 0) / v.length;
+  }
+
+  function renderKpi() {
+    var m0 = metricOf('b0'), m1 = metricOf('b1');
+    var rows = [];
+    function row(label, a, b, fmt, opts) {
+      opts = opts || {};
+      var delta = opts.points
+        ? (a !== null && b !== null ? (b - a >= 0 ? '+' : L.MINUS) + Math.abs(Math.round(b - a)) + ' điểm %' : L.DASH)
+        : L.formatDelta(L.percentDelta(a, b));
+      rows.push('<tr' + (opts.big ? ' class="big"' : '') + '><th scope="row">' + esc(label) + '</th><td class="v">' + esc(fmt(a)) +
+        '</td><td class="v">' + esc(fmt(b)) + '</td><td class="d">' + esc(delta) + '</td></tr>');
+    }
+    function tot(m, k) { return m ? m.totals[k] : null; }
+    function positive(a, b) { return (typeof a === 'number' && a > 0) || (typeof b === 'number' && b > 0); }
+    function usdWithVnd(v) {
+      return v === null ? L.DASH : L.formatUsd(v) + ' (≈ ' + L.formatVnd(L.usdToVnd(v)) + ')';
+    }
+
+    row('Lượt gọi LLM', tot(m0, 'llmCalls'), tot(m1, 'llmCalls'), L.formatInt, { big: true });
+    row('Token', tot(m0, 'tokens'), tot(m1, 'tokens'), L.formatInt, { big: true });
+    row('Chi phí ước tính', tot(m0, 'costUsd'), tot(m1, 'costUsd'), L.formatUsd);
+    row('Thời gian chat trung bình', avgTurnMs(m0), avgTurnMs(m1), L.formatMs);
+    var sh0 = m0 ? L.localShare(m0.turns) : null, sh1 = m1 ? L.localShare(m1.turns) : null;
+    row('Câu trả lời trên máy (% trong các lượt gần nhất)', sh0, sh1, L.formatPercent, { points: true, big: true });
+    if (positive(tot(m0, 'savedLlmCalls'), tot(m1, 'savedLlmCalls'))) {
+      row('Tiết kiệm lượt gọi LLM', tot(m0, 'savedLlmCalls'), tot(m1, 'savedLlmCalls'), L.formatInt);
+    }
+    if (positive(tot(m0, 'savedUsd'), tot(m1, 'savedUsd'))) {
+      row('Tiết kiệm tiền', tot(m0, 'savedUsd'), tot(m1, 'savedUsd'), usdWithVnd);
+    }
+    row('Ảnh trùng chặn được', tot(m0, 'savedOcrCalls'), tot(m1, 'savedOcrCalls'), L.formatInt);
+
+    put('kpi', '<table class="cmp"><thead><tr><th scope="col">Chỉ số</th>' +
+      '<th scope="col" class="num">B0 ' + pill('b0') + '</th><th scope="col" class="num">B1 ' + pill('b1') +
+      '</th><th scope="col" class="num">B1 so với B0</th></tr></thead><tbody>' + rows.join('') + '</tbody></table>');
+  }
+
+  // Shared scale so the two bars are visually comparable.
+  function extractTotal(m) {
+    var ex = m ? m.lastExtract : null;
+    if (!ex) return 0;
+    return (ex.inputTokens || 0) + (ex.thinkingTokens || 0) + (ex.outputTokens || 0);
+  }
+
+  function renderOcr() {
+    var max = Math.max(extractTotal(metricOf('b0')), extractTotal(metricOf('b1')), 1);
+    var W = 520, H = 34;
+    var html = PANES.map(function (p) {
+      var m = metricOf(p);
+      var ex = m ? m.lastExtract : null;
+      var body;
+      if (!m) {
+        body = '<div class="empty">Chưa nhận dữ liệu từ ' + NAMES[p] + '</div>';
+      } else if (!ex || extractTotal(m) === 0) {
+        body = '<div class="empty">Chưa có lần đọc hóa đơn nào có token (server cần bật AI_EXPOSE_USAGE_META).</div>';
+      } else {
+        var parts = [
+          { k: 'inputTokens', label: 'Đầu vào', pat: 'pat-input' },
+          { k: 'thinkingTokens', label: 'Suy luận', pat: 'pat-think' },
+          { k: 'outputTokens', label: 'Đầu ra', pat: 'pat-output' }
+        ];
+        var x = 0, rects = '';
+        parts.forEach(function (pt) {
+          var v = ex[pt.k] || 0;
+          var w = v / max * W;
+          if (w <= 0) return;
+          rects += '<rect x="' + x.toFixed(1) + '" y="2" width="' + w.toFixed(1) + '" height="' + (H - 4) +
+            '" fill="url(#' + pt.pat + ')" stroke="var(--fg)" stroke-width="1"><title>' + esc(pt.label) + ': ' + esc(L.formatInt(v)) + '</title></rect>';
+          if (w > 44) {
+            rects += '<text class="barlabel" x="' + (x + w / 2).toFixed(1) + '" y="' + (H / 2 + 4) +
+              '" text-anchor="middle" style="paint-order:stroke;stroke:var(--panel);stroke-width:3px">' + esc(L.formatInt(v)) + '</text>';
+          }
+          x += w;
+        });
+        var total = extractTotal(m);
+        body = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + NAMES[p] + ': tổng ' + esc(L.formatInt(total)) + ' token">' + rects + '</svg>' +
+          '<ul class="tok-list"><li>Đầu vào <b>' + esc(L.formatInt(ex.inputTokens)) + '</b></li>' +
+          '<li>Suy luận <b>' + esc(L.formatInt(ex.thinkingTokens)) + '</b></li>' +
+          '<li>Đầu ra <b>' + esc(L.formatInt(ex.outputTokens)) + '</b></li>' +
+          '<li>Tổng <b>' + esc(L.formatInt(total)) + '</b></li>' +
+          '<li>Thời gian <b>' + esc(L.formatMs(ex.durationMs)) + '</b></li>' +
+          '<li>Nhà cung cấp <b>' + esc(ex.provider === null ? L.DASH : ex.provider) + '</b></li></ul>';
+      }
+      return '<div>' + colHead(p) + body + '</div>';
+    }).join('');
+    put('ocr', html);
+  }
+
+  // Axis with 4 equal steps of a "round" size (100, 200, 250, 500, 1000 ms ...).
+  function axisStep(v) {
+    var steps = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 30000, 60000];
+    for (var i = 0; i < steps.length; i++) { if (steps[i] * 4 >= v) return steps[i]; }
+    return 60000;
+  }
+
+  function patFor(route) { return L.ROUTES[route] ? 'pat-' + route : 'pat-other'; }
+
+  function renderLatency() {
+    var all = [];
+    PANES.forEach(function (p) {
+      var m = metricOf(p);
+      if (m) m.turns.forEach(function (t) { if (t.durationMs !== null) all.push(t.durationMs); });
+    });
+    var yMax = axisStep(Math.max.apply(null, all.concat([0]))) * 4;
+    var W = 520, H = 220, ml = 46, mr = 6, mt = 8, mb = 34;
+    var pw = W - ml - mr, ph = H - mt - mb;
+    var html = PANES.map(function (p) {
+      var m = metricOf(p);
+      var body;
+      if (!m) {
+        body = '<div class="empty">Chưa nhận dữ liệu từ ' + NAMES[p] + '</div>';
+      } else if (!m.turns.length) {
+        body = '<div class="empty">Chưa có lượt chat nào.</div>';
+      } else {
+        var s = '';
+        for (var i = 0; i <= 4; i++) {
+          var yv = yMax * i / 4, y = mt + ph - ph * i / 4;
+          s += '<line class="grid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1) + '"/>' +
+            '<text x="' + (ml - 5) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + esc(L.formatMs(yv)) + '</text>';
+        }
+        var slot = pw / 20, bw = slot * 0.72;
+        var offset = 20 - m.turns.length;            // right-align: newest turn at the right edge
+        m.turns.forEach(function (t, idx) {
+          var d = t.durationMs === null ? 0 : t.durationMs;
+          var h = Math.max(d > 0 ? 2 : 0, d / yMax * ph);
+          var x = ml + (offset + idx) * slot + (slot - bw) / 2;
+          var y2 = mt + ph - h;
+          s += '<rect x="' + x.toFixed(1) + '" y="' + y2.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) +
+            '" fill="url(#' + patFor(t.route) + ')" stroke="var(--fg)" stroke-width="0.8">' +
+            '<title>Lượt ' + (idx + 1) + ': ' + esc(L.routeLabel(t.route)) + ', ' + esc(L.formatMs(t.durationMs)) +
+            ', ' + esc(t.llmCalls === null ? L.DASH : t.llmCalls) + ' lượt gọi LLM</title></rect>' +
+            '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (mt + ph + 13) + '" text-anchor="middle" class="barlabel">' + esc(L.routeShort(t.route)) + '</text>';
+        });
+        s += '<line class="axis" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + (mt + ph) + '" y2="' + (mt + ph) + '"/>' +
+          '<text x="' + (ml + pw / 2) + '" y="' + (H - 4) + '" text-anchor="middle">Lượt chat (cũ → mới), chữ cái = đường xử lý</text>';
+        var ds = m.turns.map(function (t) { return t.durationMs; }).filter(function (v) { return v !== null; });
+        var avg = ds.length ? ds.reduce(function (a, b) { return a + b; }, 0) / ds.length : null;
+        var mx = ds.length ? Math.max.apply(null, ds) : null;
+        body = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + NAMES[p] + ': ' + m.turns.length +
+          ' lượt, trung bình ' + esc(L.formatMs(avg)) + ', lâu nhất ' + esc(L.formatMs(mx)) + '">' + s + '</svg>' +
+          '<p class="summary">' + m.turns.length + ' lượt · trung bình ' + esc(L.formatMs(avg)) + ' · lâu nhất ' + esc(L.formatMs(mx)) + '</p>';
+      }
+      return '<div>' + colHead(p) + body + '</div>';
+    }).join('');
+    put('lat', html);
+  }
+
+  function renderLegend() {
+    var items = L.ROUTE_ORDER.map(function (r) {
+      return '<li><svg viewBox="0 0 18 18" aria-hidden="true"><rect width="18" height="18" fill="url(#pat-' + r + ')"/></svg>' +
+        '<b>' + esc(L.routeShort(r)) + '</b> ' + esc(L.routeLabel(r)) + '</li>';
+    });
+    put('route-legend', items.join(''));
+  }
+
+  function renderCalls() {
+    var html = PANES.map(function (p) {
+      var m = metricOf(p);
+      var body;
+      if (!m) {
+        body = '<div class="empty">Chưa nhận dữ liệu từ ' + NAMES[p] + '</div>';
+      } else if (!m.calls.length) {
+        body = '<div class="empty">Chưa có lời gọi API nào.</div>';
+      } else {
+        var rows = m.calls.slice().reverse().map(function (call) {
+          return '<tr><td>' + esc(call.action === null ? L.DASH : call.action) + '</td>' +
+            '<td class="num">' + esc(L.formatMs(call.durationMs)) + '</td>' +
+            '<td class="num">' + esc(L.formatInt(L.sumTokens(call))) + '</td>' +
+            '<td>' + esc(call.provider === null ? L.DASH : call.provider) + '</td>' +
+            '<td>' + (call.failover ? '<span class="fo">⇄ DỰ PHÒNG</span>' : L.DASH) + '</td></tr>';
+        }).join('');
+        body = '<div class="calls" tabindex="0" role="region" aria-label="Lời gọi API của ' + NAMES[p] + '"><table><thead><tr>' +
+          '<th scope="col">Hành động</th><th scope="col" class="num">Thời gian</th><th scope="col" class="num">Token</th>' +
+          '<th scope="col">Nhà cung cấp</th><th scope="col">Dự phòng</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      }
+      return '<div>' + colHead(p) + body + '</div>';
+    }).join('');
+    put('calls', html);
+  }
+
+  function render() {
+    renderConn(); renderFlags(); renderKpi(); renderOcr(); renderLatency(); renderLegend(); renderCalls();
+  }
+
+  // ----------------------------------------------------------------- mock
+  function startMock() {
+    var s = document.createElement('script');
+    s.src = 'mock.js';
+    s.onload = function () {
+      var M = window.FinmiMock;
+      M.showBanner();
+      mock = M.create({ mismatch: M.isMismatchRequested(location.search) });
+      function push() { PANES.forEach(function (p) { accept(p, mock.snapshot(p), Date.now()); }); }
+      push();
+      setInterval(function () { PANES.forEach(function (p) { mock.step(p); }); push(); }, 2000);
+    };
+    document.head.appendChild(s);
+  }
+
+  // ----------------------------------------------------------------- boot
+  render();
+  if (/[?&]mock=1(&|$)/.test(location.search)) {
+    startMock();
+  } else {
+    openChannel();
+    setInterval(function () { if (!state.b0 || !state.b1) requestSnapshot(); }, 5000);
+  }
+  setInterval(renderConn, 1000);
+})();
+</script>
+</body>
+</html>
