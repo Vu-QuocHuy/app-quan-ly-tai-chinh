@@ -2,6 +2,9 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hoadon_insight/core/config/ai_flag_overrides.dart';
+import 'package:hoadon_insight/core/config/ai_flag_profile.dart';
+import 'package:hoadon_insight/core/config/feature_flags.dart';
 import 'package:hoadon_insight/core/monitoring/ai_lab_store.dart';
 import 'package:hoadon_insight/core/monitoring/ai_telemetry.dart';
 import 'package:hoadon_insight/core/providers/app_providers.dart';
@@ -18,13 +21,19 @@ void main() {
   late List<String> loadedAssets;
   late ProviderContainer container;
   late DefaultAiLabActions actions;
+  late AiFlagOverrides flagOverrides;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     AiLabStore.instance.reset();
     loadedAssets = [];
+    flagOverrides = AiFlagOverrides(
+      profile: AiFlagProfile.parse('server'),
+      allowChanges: true,
+    );
     container = ProviderContainer(
       overrides: [
+        aiFlagOverridesProvider.overrideWithValue(flagOverrides),
         chatHistoryStoreProvider.overrideWithValue(const ChatHistoryStore()),
       ],
     );
@@ -110,5 +119,26 @@ void main() {
     expect(container.read(aiLabPromptRequestProvider), isNull);
     expect(container.read(aiLabLastAnswerProvider), isNull);
     expect(preferences.getString('invoices.cache'), 'giữ nguyên');
+  });
+
+  group('setFlags', () {
+    test('b1 bật hết, b0 tắt hết', () {
+      actions.setFlags('b1');
+      expect(flagOverrides.kind, AiFlagProfileKind.b1);
+      actions.setFlags('b0');
+      expect(flagOverrides.kind, AiFlagProfileKind.b0);
+    });
+
+    test('Map đặt từng cờ, khóa lạ bị bỏ qua', () {
+      actions.setFlags({'ai.chat.merge_calls': true, 'x': true});
+      expect(flagOverrides.enabled, {AiOptimizationFlag.chatMergeCalls});
+      actions.setFlags({'ai.chat.merge_calls': false});
+      expect(flagOverrides.enabled, isEmpty);
+    });
+
+    test('spec sai kiểu ném ArgumentError', () {
+      expect(() => actions.setFlags('b2'), throwsArgumentError);
+      expect(() => actions.setFlags(42), throwsArgumentError);
+    });
   });
 }

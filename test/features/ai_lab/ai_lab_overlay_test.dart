@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hoadon_insight/core/config/ai_flag_overrides.dart';
+import 'package:hoadon_insight/core/config/ai_flag_profile.dart';
+import 'package:hoadon_insight/core/config/feature_flags.dart';
 import 'package:hoadon_insight/core/monitoring/ai_lab_store.dart';
 import 'package:hoadon_insight/features/ai_lab/ai_lab_config.dart';
 import 'package:hoadon_insight/features/ai_lab/presentation/ai_lab_banner.dart';
@@ -115,5 +118,35 @@ void main() {
       ),
     );
     expect(find.text('LỆCH CỜ'), findsOneWidget);
+  });
+
+  testWidgets('banner theo AiFlagOverrides: đổi cờ là đổi banner', (
+    tester,
+  ) async {
+    final overrides = AiFlagOverrides(
+      profile: AiFlagProfile.parse('b0'),
+      allowChanges: true,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          builder: (context, child) => AiLabOverlay(
+            enabled: true,
+            overrides: overrides,
+            child: child!,
+          ),
+          home: const Scaffold(),
+        ),
+      ),
+    );
+    expect(find.text('B0 – GỐC'), findsOneWidget);
+    overrides.setAll(true);
+    await tester.pump();
+    expect(find.text('B1 – TỐI ƯU'), findsOneWidget);
+    overrides.setAll(false);
+    overrides.setFlag(AiOptimizationFlag.chatLocalRouter, true);
+    await tester.pump();
+    expect(find.text('TÙY CHỈNH'), findsOneWidget);
+    expect(find.text('1/10 bật'), findsOneWidget);
   });
 }

@@ -5,6 +5,7 @@ import '../../../app/theme/app_tokens.dart';
 import '../../../core/monitoring/ai_lab_store.dart';
 import '../application/ai_lab_actions.dart';
 import 'ai_lab_batch_section.dart';
+import 'ai_lab_flags_section.dart';
 
 /// Câu hỏi mẫu cho các cảnh demo (đúng từng chữ theo runbook).
 const aiLabPresetQuestions = [
@@ -38,6 +39,8 @@ class AiLabControlPanel extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const AiLabFlagsSection(),
+        const SizedBox(height: AppSpacing.sm),
         Text('Câu hỏi mẫu', style: labelStyle),
         const SizedBox(height: AppSpacing.xs),
         for (final question in aiLabPresetQuestions)

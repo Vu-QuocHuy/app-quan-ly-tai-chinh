@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/config/ai_flag_overrides.dart';
+import '../../../core/config/ai_flag_profile.dart';
+import '../../../core/config/feature_flags.dart';
 import '../../../core/monitoring/ai_lab_store.dart';
-
-enum AiLabProfileKind { b0, b1, custom, server }
 
 /// Màu ngữ nghĩa của banner (đỏ/xanh/vàng/xám). Theme của app không có token
 /// "success"/"warning" nên các màu này khai báo tại đây, chỉ dùng cho debug.
@@ -16,16 +17,6 @@ abstract final class AiLabBannerColors {
   /// Profile tùy chỉnh: vàng nhạt, khác với cảnh báo.
   static const custom = Color(0xFFFFE082);
   static const grey = Color(0xFF616161);
-}
-
-/// `AI_FLAG_PROFILE` -> loại banner. `only:*` là profile tùy chỉnh; giá trị lạ
-/// coi như `server`.
-AiLabProfileKind aiLabProfileKindFrom(String profile) {
-  final value = profile.trim().toLowerCase();
-  if (value == 'b0') return AiLabProfileKind.b0;
-  if (value == 'b1') return AiLabProfileKind.b1;
-  if (value.startsWith('only:')) return AiLabProfileKind.custom;
-  return AiLabProfileKind.server;
 }
 
 Set<String> _flagSet(String raw) => raw
@@ -42,47 +33,60 @@ bool aiLabFlagSetsMatch(String a, String b) {
   return left.length == right.length && left.containsAll(right);
 }
 
-/// Banner chữ lớn ở đầu màn hình: profile cờ đang chạy, hoặc cảnh báo
-/// "LỆCH CỜ" khi tập cờ server trả về khác tập cờ client.
+/// Banner chữ lớn ở đầu màn hình: profile cờ đang chạy (theo [overrides], đổi
+/// trực tiếp khi bật/tắt cờ), hoặc cảnh báo "LỆCH CỜ" khi tập cờ server trả về
+/// khác tập cờ hiệu lực của client.
+///
+/// [clientFlagSet] là tập cờ hiệu lực khi chưa ghi đè (cờ lấy từ server); khi
+/// có ghi đè thì tập cờ được tính thẳng từ [overrides].
 class AiLabBanner extends StatelessWidget {
-  const AiLabBanner({
-    super.key,
-    required this.kind,
-    required this.clientFlagSet,
-  });
+  const AiLabBanner({super.key, this.overrides, required this.clientFlagSet});
 
-  final AiLabProfileKind kind;
+  /// Mặc định [AiFlagOverrides.instance].
+  final AiFlagOverrides? overrides;
   final String clientFlagSet;
 
   @override
   Widget build(BuildContext context) {
+    final flagOverrides = overrides ?? AiFlagOverrides.instance;
     final store = AiLabStore.instance;
     return ListenableBuilder(
-      listenable: store,
+      listenable: Listenable.merge([store, flagOverrides]),
       builder: (context, _) {
+        final kind = flagOverrides.kind;
+        final enabled = flagOverrides.enabled;
+        final effectiveSet = enabled == null
+            ? clientFlagSet
+            : FeatureFlags(aiOptimizations: enabled).aiFlagSet;
         final server = store.lastServerFlagSet;
         final mismatch =
-            server != null && !aiLabFlagSetsMatch(clientFlagSet, server);
+            server != null && !aiLabFlagSetsMatch(effectiveSet, server);
 
         final (String label, Color color) = mismatch
             ? ('LỆCH CỜ', AiLabBannerColors.amber)
             : switch (kind) {
-                AiLabProfileKind.b0 => ('B0 – GỐC', AiLabBannerColors.red),
-                AiLabProfileKind.b1 => ('B1 – TỐI ƯU', AiLabBannerColors.green),
-                AiLabProfileKind.custom => (
+                AiFlagProfileKind.b0 => ('B0 – GỐC', AiLabBannerColors.red),
+                AiFlagProfileKind.b1 => (
+                  'B1 – TỐI ƯU',
+                  AiLabBannerColors.green,
+                ),
+                AiFlagProfileKind.custom => (
                   'TÙY CHỈNH',
                   AiLabBannerColors.custom,
                 ),
-                AiLabProfileKind.server => ('SERVER', AiLabBannerColors.grey),
+                AiFlagProfileKind.server => ('SERVER', AiLabBannerColors.grey),
               };
         final onColor = ThemeData.estimateBrightnessForColor(color) ==
                 Brightness.dark
             ? Colors.white
             : Colors.black87;
         final theme = Theme.of(context).textTheme;
+        final total = AiOptimizationFlag.values.length;
         final detail = mismatch
-            ? 'client: ${clientFlagSet.isEmpty ? 'none' : clientFlagSet}'
+            ? 'client: ${effectiveSet.isEmpty ? 'none' : effectiveSet}'
                   ' · server: $server'
+            : kind == AiFlagProfileKind.custom
+            ? '${flagOverrides.enabledCount}/$total bật'
             : null;
 
         return ColoredBox(

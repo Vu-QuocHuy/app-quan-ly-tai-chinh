@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/config/ai_flag_overrides.dart';
 import '../../../core/monitoring/ai_lab_store.dart';
 import '../ai_lab_config.dart';
 import 'ai_lab_banner.dart';
@@ -17,6 +18,7 @@ class AiLabOverlay extends StatelessWidget {
     required this.child,
     this.enabled,
     this.clientFlagSet = 'none',
+    this.overrides,
   });
 
   final Widget child;
@@ -24,8 +26,12 @@ class AiLabOverlay extends StatelessWidget {
   /// Mặc định theo [AiLabConfig.enabled]; test có thể ép giá trị.
   final bool? enabled;
 
-  /// Tập cờ phía client (`a,b` hoặc `none`) để đối chiếu với server.
+  /// Tập cờ hiệu lực khi chưa ghi đè (`a,b` hoặc `none`) để đối chiếu với
+  /// server; khi có ghi đè, banner tính từ [overrides].
   final String clientFlagSet;
+
+  /// Mặc định [AiFlagOverrides.instance]; test có thể thay.
+  final AiFlagOverrides? overrides;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +48,7 @@ class AiLabOverlay extends StatelessWidget {
             child: Material(
               type: MaterialType.transparency,
               child: AiLabBanner(
-                kind: aiLabProfileKindFrom(AiLabConfig.flagProfile),
+                overrides: overrides,
                 clientFlagSet: clientFlagSet,
               ),
             ),

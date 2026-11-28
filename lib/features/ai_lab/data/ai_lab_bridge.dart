@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../core/config/feature_flags.dart';
 import '../application/ai_lab_actions.dart';
 import 'ai_lab_bridge_stub.dart'
     if (dart.library.js_interop) 'ai_lab_bridge_web.dart'
@@ -11,6 +12,9 @@ const Set<String> aiLabAllowedOrigins = {
   'http://localhost:8090',
   'http://127.0.0.1:8090',
 };
+
+/// Only origin the app talks back to (`window.parent.postMessage`).
+const String aiLabControllerOrigin = 'http://localhost:8090';
 
 const int aiLabMaxAskLength = 500;
 const String aiLabAssetPrefix = 'assets/ai_lab/';
@@ -79,6 +83,59 @@ class AiLabReset extends AiLabCommand {
   int get hashCode => 'reset'.hashCode;
 }
 
+/// Sets the AI optimisation flags: [spec] is `'b0'`, `'b1'` or an unmodifiable
+/// `Map<String, bool>` whose keys are known flag keys.
+class AiLabFlags extends AiLabCommand {
+  const AiLabFlags(this.spec);
+  final Object spec;
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! AiLabFlags) return false;
+    final mine = spec;
+    final theirs = other.spec;
+    if (mine is Map && theirs is Map) return mapEquals(mine, theirs);
+    return mine == theirs;
+  }
+
+  @override
+  int get hashCode {
+    final value = spec;
+    if (value is Map) {
+      final keys = value.keys.map((key) => '$key').toList()..sort();
+      return Object.hash('flags', Object.hashAll(keys));
+    }
+    return Object.hash('flags', value);
+  }
+}
+
+/// Asks the app to publish a `metrics` event right away.
+class AiLabHello extends AiLabCommand {
+  const AiLabHello();
+
+  @override
+  bool operator ==(Object other) => other is AiLabHello;
+
+  @override
+  int get hashCode => 'hello'.hashCode;
+}
+
+/// `flags` value -> [AiLabFlags], or `null` when it is not `"b0"`, `"b1"` or a
+/// non-empty object of known flag keys with bool values.
+AiLabFlags? _parseFlags(Object? value) {
+  if (value == 'b0' || value == 'b1') return AiLabFlags(value!);
+  if (value is! Map || value.isEmpty) return null;
+  final result = <String, bool>{};
+  for (final entry in value.entries) {
+    final key = entry.key;
+    final on = entry.value;
+    if (key is! String || on is! bool) return null;
+    if (AiOptimizationFlag.fromKey(key) == null) return null;
+    result[key] = on;
+  }
+  return AiLabFlags(Map.unmodifiable(result));
+}
+
 /// Parses a `postMessage` payload. Returns `null` for anything that is not a
 /// valid command from an allowed origin. Never throws.
 AiLabCommand? parseAiLabMessage(Object? data, String origin) {
@@ -116,6 +173,10 @@ AiLabCommand? parseAiLabMessage(Object? data, String origin) {
         return AiLabTamper(value);
       case 'reset':
         return const AiLabReset();
+      case 'flags':
+        return _parseFlags(value);
+      case 'hello':
+        return const AiLabHello();
       default:
         return null;
     }
@@ -139,6 +200,24 @@ Future<void> runAiLabCommand(AiLabActions actions, AiLabCommand command) {
       return Future<void>.value();
     case AiLabReset():
       return actions.resetLocal();
+    case AiLabFlags(:final spec):
+      actions.setFlags(spec);
+      return Future<void>.value();
+    case AiLabHello():
+      // The bridge host answers `hello` by publishing metrics; nothing to do
+      // on the actions side.
+      return Future<void>.value();
+  }
+}
+
+/// Sends [event] (a plain JSON-like map) to the controller page that embeds
+/// this app (`window.parent`, origin `http://localhost:8090`). Does nothing when
+/// the app is not inside an iframe or off the web platform. Never throws.
+void postAiLabEvent(Map<String, Object?> event) {
+  try {
+    implementation.postAiLabEvent(event, aiLabControllerOrigin);
+  } catch (_) {
+    // Telemetry for the demo must never break the app.
   }
 }
 

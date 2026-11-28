@@ -46,7 +46,7 @@ import '../../features/sync/data/drift_sync_cursor_store.dart';
 import '../../features/sync/data/supabase_sync_gateway.dart';
 import '../../features/sync/domain/sync_gateway.dart';
 import '../../features/sync/domain/sync_models.dart';
-import '../config/ai_flag_profile.dart';
+import '../config/ai_flag_overrides.dart';
 import '../config/feature_flags.dart';
 import '../monitoring/ai_lab_store.dart';
 import '../monitoring/ai_telemetry.dart';
@@ -102,12 +102,38 @@ final authIdentitiesProvider = FutureProvider.autoDispose<List<UserIdentity>>((
   return service.getUserIdentities();
 });
 
+/// Flags as served by `app_feature_flags` (no AI Lab override applied).
+final serverFeatureFlagsProvider = FutureProvider<FeatureFlags>((ref) async {
+  final client = ref.watch(supabaseClientProvider);
+  final user = ref.watch(authUserProvider).value;
+  return RemoteConfigService(client).load(userId: user?.id);
+});
+
+/// The runtime AI flag override of this app instance (AI Lab, debug only).
+/// Replaceable in tests.
+final aiFlagOverridesProvider = Provider<AiFlagOverrides>(
+  (ref) => AiFlagOverrides.instance,
+);
+
+/// Mirrors `AiFlagOverrides.revision`: dependents are re-evaluated whenever the
+/// override changes.
+final aiFlagOverridesRevisionProvider = Provider<int>((ref) {
+  final overrides = ref.watch(aiFlagOverridesProvider);
+  void onChanged() => ref.invalidateSelf();
+  overrides.addListener(onChanged);
+  ref.onDispose(() => overrides.removeListener(onChanged));
+  return overrides.revision;
+});
+
 final featureFlagsProvider = FutureProvider<FeatureFlags>((ref) async {
   final client = ref.watch(supabaseClientProvider);
   final user = ref.watch(authUserProvider).value;
-  // Debug builds may pin the AI flags with --dart-define=AI_FLAG_PROFILE.
-  final flags = AiFlagProfile.active.apply(
-    await RemoteConfigService(client).load(userId: user?.id),
+  final overrides = ref.watch(aiFlagOverridesProvider);
+  ref.watch(aiFlagOverridesRevisionProvider);
+  // Debug builds may pin or toggle the AI flags (AI_FLAG_PROFILE / AI Lab);
+  // the product flags always come from the server.
+  final flags = overrides.apply(
+    await ref.watch(serverFeatureFlagsProvider.future),
   );
   // N3: tag telemetry with the active flag set (B0 = "none") and upload it
   // only when `ai.telemetry.upload` is ON for this user.
