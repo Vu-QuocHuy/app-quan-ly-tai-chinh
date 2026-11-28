@@ -19,6 +19,7 @@ import '../../../core/utils/money_formatter.dart';
 import '../../income/data/income_repository.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../ingestion/data/ai_extraction_client.dart';
+import '../../ai_lab/application/ai_lab_providers.dart';
 import '../../ai_lab/application/ai_lab_turn_mapper.dart';
 import '../../ai_lab/presentation/ai_lab_badge.dart';
 import '../domain/chat_models.dart';
@@ -162,6 +163,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           .clearAll(includeLegacy: true)
           .catchError((Object _) {}),
     );
+    if (kDebugMode) {
+      // A question may already be waiting when the screen opens.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _drainAiLabPrompt());
+    }
   }
 
   @override
@@ -222,6 +227,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     // Keep routing flags loaded while the user types, so _send reads them
     // synchronously instead of falling back to defaults.
     ref.watch(featureFlagsProvider);
+    if (kDebugMode) {
+      ref.listen<String?>(
+        aiLabPromptRequestProvider,
+        (_, next) => _drainAiLabPrompt(),
+      );
+    }
     final content = Column(
       children: [
         Padding(
@@ -774,7 +785,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     } finally {
       turn.end();
       _recordAiLabTurn();
+      _drainAiLabPrompt();
     }
+  }
+
+  /// AI Lab (debug): send the question requested by the control panel, batch
+  /// runner or bridge through the normal send path. While the screen is busy
+  /// the request stays pending and is retried when the turn ends.
+  void _drainAiLabPrompt() {
+    if (!kDebugMode || !mounted) return;
+    final prompt = ref.read(aiLabPromptRequestProvider);
+    if (prompt == null ||
+        _sending ||
+        _recording ||
+        _startingRecording ||
+        _transcribing ||
+        _cancellingVoice) {
+      return;
+    }
+    ref.read(aiLabPromptRequestProvider.notifier).state = null;
+    unawaited(_send(prompt));
   }
 
   /// AI Lab (debug): remember how the last assistant message was served.
@@ -787,6 +817,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final reply = _messages
         .where((message) => message.role == ChatMessageRole.assistant)
         .lastOrNull;
+    if (reply != null && mounted) {
+      ref.read(aiLabLastAnswerProvider.notifier).state = AiLabAnswer(
+        messageId: reply.id,
+        text: reply.text,
+      );
+    }
     if (event == null || reply == null) return;
     AiLabStore.instance.recordTurn(
       aiLabTurnFrom(messageId: reply.id, event: event, signals: signals),
