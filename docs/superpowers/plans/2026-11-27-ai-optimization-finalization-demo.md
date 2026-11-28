@@ -36,6 +36,23 @@ Năm tình huống spec ngụ ý nhưng không task nào của TV1–TV3 kiểm 
 
 ---
 
+## Tiến độ (cập nhật 28/11, nhánh `integration/ai-opt`)
+
+| Task | Trạng thái |
+|---|---|
+| T0.1 | Xong một phần: đã cài Deno 2.9.8; Supabase CLI dùng qua `npx` (3.4.0); `fvm` chưa cài. Còn **hỏi TV2/TV3 về migration đã deploy chưa** |
+| T1.1–T1.2, T1.4 | Xong: merge TV3 → TV2 → TV1, xung đột đã giải, `deno check` và 22 test Deno đạt |
+| T1.3 | Xong, kiểm trên Postgres 16 (4 kịch bản). Còn xác nhận với TV2/TV3 |
+| T1.5 | Xong: O2/O4/O5 sau cờ, test cả OFF (= main) lẫn ON |
+| T1.6 | Xong theo hướng nối (giữ `ChatMetricsRecorder` cho nhãn đường đi, thêm luồng sự kiện + H8 vào `AiTelemetry`) |
+| T1.7 | Xong: `AiFlagProfile`, header debug, script chạy B0/B1 |
+| T1.8 | **Đạt**: `flutter analyze` sạch, 585 test Flutter, 22 Deno, 63 Python. **Chưa làm**: Step 3 (5 ảnh OCR thật, cần deploy) và Step 4 (PR draft, cần bạn đồng ý đẩy nhánh) |
+| T1.9 | Chưa: cần quyền project và secrets (TV3) |
+| T2.1–T2.5 | Xong, đã nối dữ liệu thật (`_meta`, lượt chat, huy hiệu, banner với bộ cờ client). Còn mô hình chi phí (cần Bảng 6.6) |
+| T2.6–T2.8 | Chưa |
+| T3.1, T3.7 | T3.1 xong; T3.7 xong `summarize_chat.py` + `make_charts.py` (2 biểu đồ tĩnh) |
+| T5.1, T5.2 | Bản nháp xong (SQL chưa chạy thử trên DB thật; nợ phải nhập tay) |
+
 ## Bản đồ file
 
 | File | Việc | Task |
