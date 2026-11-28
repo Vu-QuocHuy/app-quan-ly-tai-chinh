@@ -227,6 +227,41 @@ void main() {
       expect(store.tamperExtractTotal, isFalse);
     });
 
+    test('failover của server được nhớ cho lượt chat hiện tại, đọc một lần', () {
+      store.recordCall(AiLabCall(
+        action: 'chat',
+        durationMs: 1,
+        provider: 'gemini',
+        failover: true,
+      ));
+
+      expect(store.takeTurnSignals().failoverProvider, 'gemini');
+      expect(store.takeTurnSignals().failoverProvider, isNull);
+    });
+
+    test('markDegraded được báo đúng một lần', () {
+      store.markDegraded();
+
+      expect(store.takeTurnSignals().degraded, isTrue);
+      expect(store.takeTurnSignals().degraded, isFalse);
+    });
+
+    test('reset xóa cả tín hiệu lượt đang chờ', () {
+      store.markDegraded();
+      store.recordCall(AiLabCall(
+        action: 'chat',
+        durationMs: 1,
+        provider: 'gemini',
+        failover: true,
+      ));
+
+      store.reset();
+
+      final signals = store.takeTurnSignals();
+      expect(signals.degraded, isFalse);
+      expect(signals.failoverProvider, isNull);
+    });
+
     test('fault chỉ nhận 429, 500, timeout hoặc null', () {
       expect(() => store.fault = '404', throwsArgumentError);
       store.fault = 'timeout';

@@ -4,8 +4,10 @@ import 'package:http/http.dart' as http;
 
 import '../config/ai_flag_profile.dart';
 import '../errors/app_exception.dart';
+import '../monitoring/ai_lab_store.dart';
 import '../monitoring/ai_telemetry.dart';
 import 'debug_headers.dart';
+import 'function_error.dart';
 
 /// Small adapter around Supabase Edge Functions.
 ///
@@ -19,11 +21,6 @@ class SupabaseFunctionClient {
 
   final SupabaseClient _client;
   final String functionName;
-
-  /// Debug-only fault to inject on every `ai-api` call (AI Lab control panel
-  /// sets this); `null` sends none. Ignored in release builds.
-  static String? Function() debugFault = _noFault;
-  static String? _noFault() => null;
 
   bool get isConfigured => _client.auth.currentSession != null;
 
@@ -40,6 +37,7 @@ class SupabaseFunctionClient {
     final action = body['action'];
     final stopwatch = Stopwatch()..start();
     var succeeded = false;
+    Object? meta;
     try {
       final response = await _client.functions.invoke(
         functionName,
@@ -48,7 +46,7 @@ class SupabaseFunctionClient {
             ? aiDebugHeaders(
                 profile: AiFlagProfile.active,
                 debug: kDebugMode,
-                fault: debugFault(),
+                fault: AiLabStore.instance.fault,
               )
             : null,
         abortSignal: abortSignal,
@@ -58,12 +56,17 @@ class SupabaseFunctionClient {
         throw const ExtractionException('Edge Function trả về dữ liệu rỗng.');
       }
       succeeded = true;
-      return Map<String, dynamic>.from(data);
+      final result = Map<String, dynamic>.from(data);
+      meta = result['_meta'];
+      return result;
     } on AppException {
       rethrow;
     } on http.RequestAbortedException {
       throw const RequestCancelledException();
     } on Object catch (error) {
+      if (kDebugMode && functionErrorCode(error) == 'AI_DEGRADED') {
+        AiLabStore.instance.markDegraded();
+      }
       throw NetworkException(errorMessage, cause: error);
     } finally {
       stopwatch.stop();
@@ -75,6 +78,16 @@ class SupabaseFunctionClient {
           succeeded: succeeded,
           payloadBytes: _approximatePayloadBytes(body),
         );
+        if (kDebugMode) {
+          // AI Lab: server `_meta` (tokens, provider, flag set) when exposed.
+          AiLabStore.instance.recordCall(
+            AiLabCall.fromMeta(
+              meta,
+              action: action,
+              durationMs: stopwatch.elapsedMilliseconds,
+            ),
+          );
+        }
       }
     }
   }

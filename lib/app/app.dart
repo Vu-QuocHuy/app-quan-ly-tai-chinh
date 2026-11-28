@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants/app_constants.dart';
 import '../core/localization/app_strings.dart';
+import '../core/providers/app_providers.dart' show featureFlagsProvider;
 import '../features/ai_lab/presentation/ai_lab_overlay.dart';
 import '../shared/widgets/finmi_responsive_theme.dart';
 import '../shared/widgets/finmi_web_frame.dart';
@@ -24,6 +25,8 @@ class HoaDonInsightApp extends ConsumerWidget {
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       builder: (context, child) => AiLabOverlay(
+        clientFlagSet:
+            ref.watch(featureFlagsProvider).value?.aiFlagSet ?? 'none',
         child: FinmiWebFrame(child: FinmiResponsiveTheme(child: child!)),
       ),
       theme: ref.watch(finmiAppearanceProvider).isDark

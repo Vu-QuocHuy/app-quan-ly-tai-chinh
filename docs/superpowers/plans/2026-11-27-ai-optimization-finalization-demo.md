@@ -596,8 +596,15 @@ Chỉ trình bày ở Chương 7 của báo cáo như hướng mở (API beta, c
 
 ## Quyết định (điền khi làm)
 
-- Migration TV2/TV3/TV1 đã deploy từ xa chưa: …
-- OCR đi qua `extract` đồng bộ hay job: … (T2.1 Step 5)
+- Migration TV2/TV3/TV1 đã deploy từ xa chưa: **chưa hỏi TV2/TV3 (còn mở)**. Migration mới `20261128100000_ai_flags_unify.sql` hội tụ về cùng trạng thái cuối trong cả hai trường hợp (đã kiểm trên Postgres 16: DB sạch, chạy hai lần, và TV3 deploy trước TV2).
+- **Lỗi thứ hai của migration (plan chưa biết):** TV2 chèn `ai.chat.local_router` và `ai.classify.local` với `enabled = true`, TV3 chèn lại bằng `on conflict do nothing` nên hai cờ vẫn BẬT → mặc định không còn là B0. Migration thống nhất ép cả 10 cờ về OFF.
+- OCR đi qua `extract` **đồng bộ** (`ImportCoordinator` → `AiExtractionClient.extractImage`); `AiExtractionJobClient` chỉ có provider, chưa được dùng. Hệ quả: `_meta` có trong response `extract` (T2.1 không cần sửa `extractionJobStatus`), và cờ `ai.extract.thinking_low` có hiệu lực đúng chỗ. `ai-worker` (đường job) có `generationConfig` riêng, **chưa gate bằng cờ**: ghi vào giới hạn nếu sau này dùng job.
+- Prompt `legacy` của TV2 giống `main` 24/24 dòng đầu; dòng cuối khác cách viết (`facts` so với `JSON.stringify(input.facts)`, cùng giá trị) → B0 đúng bằng `main`.
+- `generateGeminiJson` giữ hợp đồng TV3 (trả `JsonObject`); `usageMetadata` thô của Gemini đi qua `ctx.geminiUsageMetadata` để benchmark của TV1 vẫn đọc được `usageMetadata` trong response `extract`.
+- O1/O3: `thinking_low` bật thì thêm `maxOutputTokens` mặc định 4096 (ghi đè bằng `AI_EXTRACT_MAX_OUTPUT_TOKENS`). **Lưu ý:** số đo −30,8% của TV1 chạy với thinking low KHÔNG đặt trần 4096 (trần chỉ thử riêng); cần 1 lần đo lại trên bản tích hợp ở T1.8 Step 3 để chắc không lệch.
+- Từ chối `MAX_TOKENS` (`MODEL_OUTPUT_TRUNCATED`) áp vô điều kiện cho mọi lời gọi Gemini (kể cả chat khi failover). Câu bị cắt vốn đã lỗi JSON ở B0 nên chỉ khác mã lỗi.
+- **Rủi ro deploy (TV1):** `extractOnce` luôn gọi RPC `ocr_replay` (kể cả B0, thêm 2 lời gọi nhỏ) và **fail 503 `OCR_REPLAY_UNAVAILABLE` nếu migration `20261122000000` chưa áp**. Phải `db push` trước khi deploy `ai-api` (T1.9).
+- **Dữ liệu demo:** nợ (debt) chỉ lưu cục bộ (SharedPreferences), không có trong cloud → seed SQL không phủ được; Q04/Q33 cần nhập tay 3 khoản nợ giống nhau ở hai bản demo (xem `tool/demo/README.md` trên nhánh `feat/tv4-demo-seed`).
 - Model OCR được chọn (3.6 hay 3.8): … (T3.5)
 - Có áp `media_resolution` medium không: … (T3.6)
 - Giữ Flutter 3.47.1 hay nâng 3.47.8: … (T4.1)

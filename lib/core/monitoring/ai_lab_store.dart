@@ -107,6 +107,18 @@ final class AiLabTotals {
   final int savedLlmCalls;
 }
 
+/// What the server did while a chat turn was running.
+@immutable
+final class AiLabTurnSignals {
+  const AiLabTurnSignals({this.degraded = false, this.failoverProvider});
+
+  /// The server answered `AI_DEGRADED` (9Router and Gemini both failed).
+  final bool degraded;
+
+  /// Provider that took over after 9Router failed (for example `gemini`).
+  final String? failoverProvider;
+}
+
 /// State behind the AI Lab overlay. Only fed in debug builds.
 class AiLabStore extends ChangeNotifier {
   AiLabStore({this.capacity = 200});
@@ -125,6 +137,8 @@ class AiLabStore extends ChangeNotifier {
   String? _fault;
   String? _lastServerFlagSet;
   bool _tamperExtractTotal = false;
+  bool _degraded = false;
+  String? _failoverProvider;
 
   AiLabTotals get totals => _totals;
 
@@ -153,7 +167,22 @@ class AiLabStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The server returned `AI_DEGRADED` during the current chat turn.
+  void markDegraded() => _degraded = true;
+
+  /// Signals collected since the previous call; reading clears them.
+  AiLabTurnSignals takeTurnSignals() {
+    final signals = AiLabTurnSignals(
+      degraded: _degraded,
+      failoverProvider: _failoverProvider,
+    );
+    _degraded = false;
+    _failoverProvider = null;
+    return signals;
+  }
+
   void recordCall(AiLabCall call) {
+    if (call.failover) _failoverProvider = call.provider ?? 'gemini';
     _totals = AiLabTotals(
       llmCalls: _totals.llmCalls + call.llmCalls,
       tokens: _totals.tokens + (call.totalTokens ?? 0),
@@ -191,6 +220,8 @@ class AiLabStore extends ChangeNotifier {
     _lastServerFlagSet = null;
     _fault = null;
     _tamperExtractTotal = false;
+    _degraded = false;
+    _failoverProvider = null;
     notifyListeners();
   }
 }

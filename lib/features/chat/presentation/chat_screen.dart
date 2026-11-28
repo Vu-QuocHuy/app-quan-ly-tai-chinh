@@ -12,12 +12,15 @@ import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/config/feature_flags.dart';
+import '../../../core/monitoring/ai_lab_store.dart';
 import '../../../core/monitoring/ai_telemetry.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/utils/money_formatter.dart';
 import '../../income/data/income_repository.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../ingestion/data/ai_extraction_client.dart';
+import '../../ai_lab/application/ai_lab_turn_mapper.dart';
+import '../../ai_lab/presentation/ai_lab_badge.dart';
 import '../domain/chat_models.dart';
 import '../domain/chat_privacy_policy.dart';
 import '../domain/chat_routing_rules.dart';
@@ -770,7 +773,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       await _sendTurn(question);
     } finally {
       turn.end();
+      _recordAiLabTurn();
     }
+  }
+
+  /// AI Lab (debug): remember how the last assistant message was served.
+  void _recordAiLabTurn() {
+    if (!kDebugMode) return;
+    final signals = AiLabStore.instance.takeTurnSignals();
+    final event = AiTelemetry.instance.events
+        .where((item) => item.event == 'chat_turn')
+        .lastOrNull;
+    final reply = _messages
+        .where((message) => message.role == ChatMessageRole.assistant)
+        .lastOrNull;
+    if (event == null || reply == null) return;
+    AiLabStore.instance.recordTurn(
+      aiLabTurnFrom(messageId: reply.id, event: event, signals: signals),
+    );
   }
 
   Future<void> _sendTurn(String question) async {
@@ -1697,6 +1717,7 @@ class _MessageBubble extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (displayText.isNotEmpty) Text(displayText),
+                  if (!isUser) AiLabBadge(messageId: message.id),
                   if (accessory != null) ...[
                     const SizedBox(height: 10),
                     accessory!,
