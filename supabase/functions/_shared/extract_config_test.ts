@@ -1,8 +1,4 @@
-import {
-  buildExtractGenerationConfig,
-  DEFAULT_THINKING_LOW_MAX_OUTPUT_TOKENS,
-  parseMediaResolution,
-} from "./extract_config.ts";
+import {buildExtractGenerationConfig, parseMediaResolution} from "./extract_config.ts";
 
 function assertEquals(actual: unknown, expected: unknown, message = "") {
   const a = JSON.stringify(actual);
@@ -14,15 +10,13 @@ Deno.test("all optimisations off: no generationConfig additions (B0 = main)", ()
   assertEquals(buildExtractGenerationConfig({thinkingLow: false}), {});
 });
 
-Deno.test("thinkingLow: thinkingLevel low with the default output cap", () => {
+Deno.test("thinkingLow adds only thinkingLevel low (the configuration TV1 measured)", () => {
   assertEquals(buildExtractGenerationConfig({thinkingLow: true}), {
     thinkingConfig: {thinkingLevel: "low"},
-    maxOutputTokens: 4096,
   });
-  assertEquals(DEFAULT_THINKING_LOW_MAX_OUTPUT_TOKENS, 4096);
 });
 
-Deno.test("env cap overrides the default cap when thinkingLow is on", () => {
+Deno.test("env cap is added next to thinkingLow when configured", () => {
   assertEquals(buildExtractGenerationConfig({thinkingLow: true, maxOutputTokensEnv: 2048}), {
     thinkingConfig: {thinkingLevel: "low"},
     maxOutputTokens: 2048,
@@ -46,7 +40,6 @@ Deno.test("media resolution medium adds the Gemini enum, alone or with thinking 
   });
   assertEquals(buildExtractGenerationConfig({thinkingLow: true, mediaResolution: "low"}), {
     thinkingConfig: {thinkingLevel: "low"},
-    maxOutputTokens: 4096,
     mediaResolution: "MEDIA_RESOLUTION_LOW",
   });
 });
