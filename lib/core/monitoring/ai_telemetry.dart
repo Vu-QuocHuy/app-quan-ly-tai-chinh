@@ -162,6 +162,8 @@ final class AiTelemetry {
   final int uploadBatchSize;
 
   final List<AiTelemetryEvent> _events = [];
+  final StreamController<AiTelemetryEvent> _stream =
+      StreamController<AiTelemetryEvent>.broadcast();
   final List<AiTelemetryEvent> _pendingUpload = [];
   AiTelemetryUploader? _uploader;
   String _flagSet = 'none';
@@ -173,6 +175,9 @@ final class AiTelemetry {
   String get flagSet => _flagSet;
 
   List<AiTelemetryEvent> get events => List.unmodifiable(_events);
+
+  /// Every recorded event, as it happens (AI Lab overlay and batch runner).
+  Stream<AiTelemetryEvent> get stream => _stream.stream;
 
   /// Called whenever feature flags are (re)loaded.
   void configure({required String flagSet, AiTelemetryUploader? uploader}) {
@@ -245,6 +250,7 @@ final class AiTelemetry {
 
   void record(AiTelemetryEvent event) {
     _events.add(event);
+    if (_stream.hasListener) _stream.add(event);
     if (_events.length > capacity) {
       _events.removeRange(0, _events.length - capacity);
     }

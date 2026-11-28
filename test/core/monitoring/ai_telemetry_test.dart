@@ -19,6 +19,36 @@ void main() {
     expect(subject.events.single.flagSet, 'ai.chat.local_router');
   });
 
+  test('stream emits every recorded event, including the chat turn', () async {
+    final subject = telemetry();
+    final received = <AiTelemetryEvent>[];
+    final subscription = subject.stream.listen(received.add);
+
+    subject.recordLocal('classify');
+    subject.beginTurn('chat').end();
+    await Future<void>.delayed(Duration.zero);
+    await subscription.cancel();
+
+    expect(received.map((event) => event.event), ['local_answer', 'chat_turn']);
+    expect(received.last.route, 'local');
+  });
+
+  test('stream supports several listeners', () async {
+    final subject = telemetry();
+    final first = <String>[];
+    final second = <String>[];
+    final a = subject.stream.listen((event) => first.add(event.event));
+    final b = subject.stream.listen((event) => second.add(event.event));
+
+    subject.recordDuplicateBlocked(payloadBytes: 10);
+    await Future<void>.delayed(Duration.zero);
+    await a.cancel();
+    await b.cancel();
+
+    expect(first, ['dedup_blocked']);
+    expect(second, ['dedup_blocked']);
+  });
+
   test('remote calls are attributed to the current turn', () {
     final subject = telemetry();
     final turn = subject.beginTurn('chat');
