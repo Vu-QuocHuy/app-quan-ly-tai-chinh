@@ -1,22 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/monitoring/ai_lab_cost.dart';
 import '../../../core/monitoring/ai_lab_store.dart';
 
-/// Chi phí đã quy đổi, do nơi gọi cung cấp khi đã có bảng giá thật. Overlay
-/// không tự bịa giá: không truyền thì không hiện dòng chi phí.
-@immutable
-final class AiLabCostSummary {
-  const AiLabCostSummary({
-    required this.usd,
-    required this.savedUsd,
-    required this.vndPerUsd,
-  });
-
-  final double usd;
-  final double savedUsd;
-  final double vndPerUsd;
-}
+export '../../../core/monitoring/ai_lab_cost.dart' show AiLabCostSummary;
 
 /// `1234567` -> `1.234.567`.
 String formatVnd(num value) {
@@ -46,7 +34,7 @@ class AiLabCounters extends StatelessWidget {
       listenable: store,
       builder: (context, _) {
         final totals = store.totals;
-        final cost = this.cost;
+        final cost = this.cost ?? store.costSummary;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,

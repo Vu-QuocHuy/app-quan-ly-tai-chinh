@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'ai_lab_cost.dart';
+
 /// One `ai-api` call as seen by the AI Lab overlay (debug builds only).
 ///
 /// Built from the optional `_meta` object that the server returns when
@@ -98,6 +100,9 @@ final class AiLabTotals {
     this.llmCalls = 0,
     this.tokens = 0,
     this.savedLlmCalls = 0,
+    this.costUsd = 0,
+    this.savedUsd = 0,
+    this.savedOcrCalls = 0,
   });
 
   final int llmCalls;
@@ -105,6 +110,32 @@ final class AiLabTotals {
 
   /// LLM calls avoided versus the B0 chat flow (3 calls per lookup question).
   final int savedLlmCalls;
+
+  /// Money spent so far (0 until a cost model with prices is set).
+  final double costUsd;
+
+  /// Money not spent versus B0 (cheaper OCR calls, blocked duplicates, chat
+  /// calls avoided); never negative.
+  final double savedUsd;
+
+  /// Receipts answered without a model call because they were duplicates.
+  final int savedOcrCalls;
+
+  AiLabTotals copyWith({
+    int? llmCalls,
+    int? tokens,
+    int? savedLlmCalls,
+    double? costUsd,
+    double? savedUsd,
+    int? savedOcrCalls,
+  }) => AiLabTotals(
+    llmCalls: llmCalls ?? this.llmCalls,
+    tokens: tokens ?? this.tokens,
+    savedLlmCalls: savedLlmCalls ?? this.savedLlmCalls,
+    costUsd: costUsd ?? this.costUsd,
+    savedUsd: savedUsd ?? this.savedUsd,
+    savedOcrCalls: savedOcrCalls ?? this.savedOcrCalls,
+  );
 }
 
 /// What the server did while a chat turn was running.
@@ -141,6 +172,18 @@ class AiLabStore extends ChangeNotifier {
   String? _failoverProvider;
 
   AiLabTotals get totals => _totals;
+
+  /// Prices and B0 baselines; `null` until `assets/ai_lab/pricing.json` is
+  /// loaded. Survives [reset].
+  AiLabCostModel? costModel;
+
+  /// Money line for the counters, or `null` without prices and a VND rate.
+  AiLabCostSummary? get costSummary {
+    final model = costModel;
+    return model == null
+        ? null
+        : AiLabCostSummary.fromTotals(_totals, model.pricing);
+  }
 
   /// Latest OCR call that reported token usage.
   AiLabCall? get lastExtract => _lastExtract;
@@ -183,16 +226,35 @@ class AiLabStore extends ChangeNotifier {
 
   void recordCall(AiLabCall call) {
     if (call.failover) _failoverProvider = call.provider ?? 'gemini';
-    _totals = AiLabTotals(
-      llmCalls: _totals.llmCalls + call.llmCalls,
-      tokens: _totals.tokens + (call.totalTokens ?? 0),
-      savedLlmCalls: _totals.savedLlmCalls,
-    );
     final serverFlagSet = call.serverFlagSet;
     if (serverFlagSet != null) _lastServerFlagSet = serverFlagSet;
+    final cost = costModel?.costUsd(call);
+    var saved = 0.0;
+    final baseline = costModel?.ocrBaselineUsd;
+    if (cost != null &&
+        baseline != null &&
+        _extractActions.contains(call.action) &&
+        baseline > cost) {
+      saved = baseline - cost;
+    }
+    _totals = _totals.copyWith(
+      llmCalls: _totals.llmCalls + call.llmCalls,
+      tokens: _totals.tokens + (call.totalTokens ?? 0),
+      costUsd: _totals.costUsd + (cost ?? 0),
+      savedUsd: _totals.savedUsd + saved,
+    );
     if (_extractActions.contains(call.action) && call.totalTokens != null) {
       _lastExtract = call;
     }
+    notifyListeners();
+  }
+
+  /// O4: a duplicate receipt was answered without calling the model.
+  void recordDuplicateBlocked() {
+    _totals = _totals.copyWith(
+      savedOcrCalls: _totals.savedOcrCalls + 1,
+      savedUsd: _totals.savedUsd + (costModel?.ocrBaselineUsd ?? 0),
+    );
     notifyListeners();
   }
 
@@ -203,10 +265,10 @@ class AiLabStore extends ChangeNotifier {
       _turns.remove(_turns.keys.first);
     }
     final saved = baselineChatLlmCalls - turn.llmCalls;
-    _totals = AiLabTotals(
-      llmCalls: _totals.llmCalls,
-      tokens: _totals.tokens,
-      savedLlmCalls: _totals.savedLlmCalls + (saved > 0 ? saved : 0),
+    final savedCalls = saved > 0 ? saved : 0;
+    _totals = _totals.copyWith(
+      savedLlmCalls: _totals.savedLlmCalls + savedCalls,
+      savedUsd: _totals.savedUsd + savedCalls * (costModel?.chatCallUsd ?? 0),
     );
     notifyListeners();
   }

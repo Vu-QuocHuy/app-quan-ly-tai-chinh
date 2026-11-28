@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "_comment": "Điền từ Bảng 6.6 của báo cáo. Để null thì AI Lab không hiện chi phí (không bịa giá). Giá tính USD cho 1 triệu token; token suy luận (thinking) tính theo giá output.",
+  "model": "gemini-3.6-flash",
+  "vnd_per_usd": null,
+  "usd_per_million_tokens": {
+    "input": null,
+    "output": null
+  },
+  "ocr_baseline_b0": {
+    "_source": "docs/TV1_OPTIMIZATION_REPORT.md, bảng 30/30 ảnh: tổng 3.305 = thinking 1.025 + output 186 + input (suy ra 2.094)",
+    "input_tokens": 2094,
+    "thinking_tokens": 1025,
+    "output_tokens": 186
+  },
+  "chat_baseline_b0": {
+    "_source": "chưa đo: điền sau T3.3 (token trung bình mỗi lượt gọi LLM ở B0, từ ai_request_benchmark)",
+    "input_tokens_per_call": null,
+    "output_tokens_per_call": null
+  }
+}
