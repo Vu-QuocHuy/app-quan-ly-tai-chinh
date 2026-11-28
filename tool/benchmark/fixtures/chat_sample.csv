@@ -1,0 +1,9 @@
+question_id,group,flag_profile,run,route,llm_calls,cloud_calls,duration_ms,contains_expected,misrouted_write
+Q01,lookup,b0,1,cloud,3,3,6200,true,false
+Q13,reasoning,b0,1,cloud,3,3,7100,,false
+Q21,write,b0,1,cloud,2,2,3500,,false
+Q02,lookup,b0,1,cloud,3,3,5900,true,false
+Q01,lookup,b1,1,local,0,0,40,true,false
+Q02,lookup,b1,1,local,0,0,35,true,false
+Q13,reasoning,b1,1,cloud,1,1,3100,,false
+Q21,write,b1,1,cloud,1,1,2000,,false
