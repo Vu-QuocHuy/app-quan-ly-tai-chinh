@@ -827,6 +827,7 @@ class _AppShellState extends ConsumerState<AppShell>
               fileName: item.fileName,
               imagePath: await _pendingImportStore.filePath(item),
               abortSignal: abortSignal,
+              requestId: item.id,
             )
           : await coordinator.importFile(
               bytes: bytes,

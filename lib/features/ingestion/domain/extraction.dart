@@ -10,6 +10,7 @@ class ExtractionInput {
     this.localPath,
     this.ocrText,
     this.abortSignal,
+    this.requestId,
   });
 
   final Uint8List bytes;
@@ -18,6 +19,7 @@ class ExtractionInput {
   final String? localPath;
   final String? ocrText;
   final Future<void>? abortSignal;
+  final String? requestId;
 }
 
 class ExtractionResult {

@@ -7,32 +7,40 @@ Future<OcrImagePayload> optimizeReceiptImageForOcr(
   Uint8List bytes, {
   required String mimeType,
 }) {
-  if (bytes.length <= 2 * 1024 * 1024) {
-    return Future.value((bytes: bytes, mimeType: mimeType));
-  }
   return compute(_resizeReceiptImage, (bytes, mimeType));
 }
 
 OcrImagePayload _resizeReceiptImage((Uint8List, String) input) {
   final (bytes, mimeType) = input;
-  final decoded = image.decodeImage(bytes);
+  image.Image? decoded;
+  try {
+    decoded = image.decodeImage(bytes);
+  } on Object {
+    return (bytes: bytes, mimeType: mimeType);
+  }
   if (decoded == null) return (bytes: bytes, mimeType: mimeType);
 
+  final needsOrientation =
+      decoded.exif.imageIfd.orientation != null &&
+      decoded.exif.imageIfd.orientation != 1;
   final oriented = image.bakeOrientation(decoded);
   final longestSide = oriented.width > oriented.height
       ? oriented.width
       : oriented.height;
-  if (longestSide <= 2048) return (bytes: bytes, mimeType: mimeType);
+  if (longestSide <= 1600 && !needsOrientation) {
+    return (bytes: bytes, mimeType: mimeType);
+  }
 
-  final scale = 2048 / longestSide;
-  final resized = image.copyResize(
-    oriented,
-    width: (oriented.width * scale).round(),
-    height: (oriented.height * scale).round(),
-    interpolation: image.Interpolation.linear,
-  );
+  final resized = longestSide > 1600
+      ? image.copyResize(
+          oriented,
+          width: (oriented.width * 1600 / longestSide).round(),
+          height: (oriented.height * 1600 / longestSide).round(),
+          interpolation: image.Interpolation.linear,
+        )
+      : oriented;
   return (
-    bytes: Uint8List.fromList(image.encodeJpg(resized, quality: 85)),
+    bytes: Uint8List.fromList(image.encodeJpg(resized, quality: 80)),
     mimeType: 'image/jpeg',
   );
 }
