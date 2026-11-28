@@ -26,3 +26,20 @@ void Function() startAiLabBridge(
     ]);
   };
 }
+
+/// Posts [event] to `window.parent` with [targetOrigin], only when the app runs
+/// inside an iframe (`window.parent != window`).
+void postAiLabEvent(Map<String, Object?> event, String targetOrigin) {
+  try {
+    final parent = _window['parent'];
+    if (parent == null || !parent.isA<JSObject>()) return;
+    final parentObject = parent as JSObject;
+    if (parentObject.strictEquals(_window).toDart) return;
+    parentObject.callMethodVarArgs('postMessage'.toJS, [
+      event.jsify(),
+      targetOrigin.toJS,
+    ]);
+  } catch (_) {
+    // Cross-origin or detached parent: ignore.
+  }
+}

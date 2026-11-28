@@ -282,5 +282,55 @@ void main() {
       store.reset();
       expect(store.lastServerFlagSet, isNull);
     });
+
+    test('recentCalls giữ tối đa 30 lời gọi gần nhất, cũ -> mới, reset xóa', () {
+      for (var i = 0; i < 35; i++) {
+        store.recordCall(AiLabCall(action: 'chat', durationMs: i));
+      }
+      final calls = store.recentCalls;
+      expect(calls, hasLength(30));
+      expect(calls.first.durationMs, 5);
+      expect(calls.last.durationMs, 34);
+      expect(() => calls.add(calls.first), throwsUnsupportedError);
+
+      store.reset();
+      expect(store.recentCalls, isEmpty);
+    });
+
+    test('recentTurns giữ tối đa 20 lượt gần nhất, cũ -> mới, reset xóa', () {
+      for (var i = 0; i < 25; i++) {
+        store.recordTurn(
+          AiLabTurn(
+            messageId: 'm$i',
+            route: AiLabRoute.local,
+            llmCalls: 0,
+            durationMs: i,
+          ),
+        );
+      }
+      final turns = store.recentTurns;
+      expect(turns, hasLength(20));
+      expect(turns.first.messageId, 'm5');
+      expect(turns.last.messageId, 'm24');
+      expect(() => turns.removeLast(), throwsUnsupportedError);
+
+      store.reset();
+      expect(store.recentTurns, isEmpty);
+    });
+
+    test('ghi lại cùng messageId thì cập nhật lượt, không nhân đôi', () {
+      for (final route in [AiLabRoute.cloud, AiLabRoute.local]) {
+        store.recordTurn(
+          AiLabTurn(
+            messageId: 'same',
+            route: route,
+            llmCalls: 1,
+            durationMs: 1,
+          ),
+        );
+      }
+      expect(store.recentTurns, hasLength(1));
+      expect(store.recentTurns.single.route, AiLabRoute.local);
+    });
   });
 }

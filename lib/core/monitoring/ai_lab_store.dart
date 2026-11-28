@@ -161,8 +161,13 @@ class AiLabStore extends ChangeNotifier {
   static const faults = {'429', '500', 'timeout'};
   static const _extractActions = {'extract', 'extract_status'};
 
+  /// Sizes of the `turns` / `calls` lists of the realtime metrics event.
+  static const recentTurnsLimit = 20;
+  static const recentCallsLimit = 30;
+
   final int capacity;
   final Map<String, AiLabTurn> _turns = {};
+  final List<AiLabCall> _calls = [];
   AiLabTotals _totals = const AiLabTotals();
   AiLabCall? _lastExtract;
   String? _fault;
@@ -172,6 +177,18 @@ class AiLabStore extends ChangeNotifier {
   String? _failoverProvider;
 
   AiLabTotals get totals => _totals;
+
+  /// Latest chat turns (at most [recentTurnsLimit]), oldest first.
+  List<AiLabTurn> get recentTurns {
+    final all = _turns.values;
+    final skip = all.length > recentTurnsLimit
+        ? all.length - recentTurnsLimit
+        : 0;
+    return List.unmodifiable(all.skip(skip));
+  }
+
+  /// Latest `ai-api` calls (at most [recentCallsLimit]), oldest first.
+  List<AiLabCall> get recentCalls => List.unmodifiable(_calls);
 
   /// Prices and B0 baselines; `null` until `assets/ai_lab/pricing.json` is
   /// loaded. Survives [reset].
@@ -225,6 +242,10 @@ class AiLabStore extends ChangeNotifier {
   }
 
   void recordCall(AiLabCall call) {
+    _calls.add(call);
+    if (_calls.length > recentCallsLimit) {
+      _calls.removeRange(0, _calls.length - recentCallsLimit);
+    }
     if (call.failover) _failoverProvider = call.provider ?? 'gemini';
     final serverFlagSet = call.serverFlagSet;
     if (serverFlagSet != null) _lastServerFlagSet = serverFlagSet;
@@ -277,6 +298,7 @@ class AiLabStore extends ChangeNotifier {
 
   void reset() {
     _turns.clear();
+    _calls.clear();
     _totals = const AiLabTotals();
     _lastExtract = null;
     _lastServerFlagSet = null;

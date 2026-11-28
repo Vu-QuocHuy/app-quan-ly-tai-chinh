@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 
-import '../config/ai_flag_profile.dart';
+import '../config/ai_flag_overrides.dart';
 import '../errors/app_exception.dart';
 import '../monitoring/ai_lab_store.dart';
 import '../monitoring/ai_telemetry.dart';
@@ -44,7 +44,7 @@ class SupabaseFunctionClient {
         body: body,
         headers: functionName == 'ai-api'
             ? aiDebugHeaders(
-                profile: AiFlagProfile.active,
+                flagsHeader: AiFlagOverrides.instance.headerValue,
                 debug: kDebugMode,
                 fault: AiLabStore.instance.fault,
               )

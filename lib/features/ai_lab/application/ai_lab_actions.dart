@@ -23,6 +23,11 @@ abstract interface class AiLabActions {
   /// Simulated OCR error: distort the extracted total before validation.
   void setTamperTotal(bool on);
 
+  /// Sets the AI optimisation flags of this app instance at runtime. [spec] is
+  /// `'b0'` (all off), `'b1'` (all on) or a `Map<String, bool>` keyed by flag
+  /// key (unknown keys ignored, absent keys unchanged).
+  void setFlags(Object spec);
+
   /// Clears AI Lab state, telemetry and the local chat history. Never deletes
   /// invoices or other user data.
   Future<void> resetLocal();
@@ -64,6 +69,21 @@ class DefaultAiLabActions implements AiLabActions {
 
   @override
   void setTamperTotal(bool on) => AiLabStore.instance.tamperExtractTotal = on;
+
+  @override
+  void setFlags(Object spec) {
+    final overrides = _ref.read(aiFlagOverridesProvider);
+    switch (spec) {
+      case 'b0':
+        overrides.setAll(false);
+      case 'b1':
+        overrides.setAll(true);
+      case Map<String, bool>():
+        overrides.applyMap(spec);
+      default:
+        throw ArgumentError.value(spec, 'spec', 'phải là b0, b1 hoặc Map');
+    }
+  }
 
   @override
   Future<void> resetLocal() async {

@@ -84,6 +84,12 @@ final class AiFlagProfile {
   /// `null` for the server profile.
   final Set<AiOptimizationFlag>? _enabled;
 
+  /// The enabled flags of this profile, or `null` for the server profile.
+  Set<AiOptimizationFlag>? get enabledFlags {
+    final enabled = _enabled;
+    return enabled == null ? null : Set.unmodifiable(enabled);
+  }
+
   /// Replaces the AI optimisation flags of [fromServer]; the product flags
   /// (`online_ai`, `cloud_sync`, `external_rates`) always stay as served.
   FeatureFlags apply(FeatureFlags fromServer) {
