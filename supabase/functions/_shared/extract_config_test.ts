@@ -1,6 +1,7 @@
 import {
   buildExtractGenerationConfig,
   DEFAULT_THINKING_LOW_MAX_OUTPUT_TOKENS,
+  parseMediaResolution,
 } from "./extract_config.ts";
 
 function assertEquals(actual: unknown, expected: unknown, message = "") {
@@ -37,4 +38,28 @@ Deno.test("env cap alone sets only maxOutputTokens (no thinkingConfig)", () => {
 Deno.test("an unset or zero env cap is ignored", () => {
   assertEquals(buildExtractGenerationConfig({thinkingLow: false, maxOutputTokensEnv: 0}), {});
   assertEquals(buildExtractGenerationConfig({thinkingLow: false, maxOutputTokensEnv: undefined}), {});
+});
+
+Deno.test("media resolution medium adds the Gemini enum, alone or with thinking low", () => {
+  assertEquals(buildExtractGenerationConfig({thinkingLow: false, mediaResolution: "medium"}), {
+    mediaResolution: "MEDIA_RESOLUTION_MEDIUM",
+  });
+  assertEquals(buildExtractGenerationConfig({thinkingLow: true, mediaResolution: "low"}), {
+    thinkingConfig: {thinkingLevel: "low"},
+    maxOutputTokens: 4096,
+    mediaResolution: "MEDIA_RESOLUTION_LOW",
+  });
+});
+
+Deno.test("no media resolution leaves the request as in main", () => {
+  assertEquals(buildExtractGenerationConfig({thinkingLow: false, mediaResolution: undefined}), {});
+});
+
+Deno.test("parseMediaResolution accepts low/medium/high in any case and ignores the rest", () => {
+  assertEquals(parseMediaResolution("medium"), "medium");
+  assertEquals(parseMediaResolution(" HIGH "), "high");
+  assertEquals(parseMediaResolution("Low"), "low");
+  assertEquals(parseMediaResolution("ultra"), undefined);
+  assertEquals(parseMediaResolution(""), undefined);
+  assertEquals(parseMediaResolution(undefined), undefined);
 });

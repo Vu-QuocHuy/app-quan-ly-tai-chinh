@@ -20,7 +20,7 @@ import {
   shouldRefundQuota,
   validateNinerRouterBaseUrl,
 } from "../_shared/ai_platform.ts";
-import {buildExtractGenerationConfig} from "../_shared/extract_config.ts";
+import {buildExtractGenerationConfig, parseMediaResolution} from "../_shared/extract_config.ts";
 import {buildChatPrompt, COMPACT_CHAT_MAX_TOKENS, type ChatPromptVersion} from "../_shared/chat_prompt.ts";
 
 type JsonObject = Record<string, unknown>;
@@ -145,7 +145,8 @@ const ninerRouterBaseUrl = (): string => {
 const ninerRouterAllowedHosts = parseAllowedHosts(Deno.env.get("NINER_ROUTER_ALLOWED_HOSTS"), "finmi.ddns.net");
 const ninerRouterModel = Deno.env.get("NINER_ROUTER_MODEL")?.trim() || "cx/gpt-5.6-luna[1m]";
 const geminiApiKey = () => Deno.env.get("GEMINI_API_KEY")?.trim();
-const geminiModel = "gemini-3.6-flash";
+// T3.5: GEMINI_MODEL lets the benchmark compare models (e.g. gemini-3.8-flash).
+const geminiModel = Deno.env.get("GEMINI_MODEL")?.trim() || "gemini-3.6-flash";
 // N5: circuit breaker around 9Router (per warm isolate).
 const ninerRouterBreaker = new CircuitBreaker(
   configuredInteger("NINER_ROUTER_BREAKER_THRESHOLD", 3, 1, 20),
@@ -231,6 +232,8 @@ class AiCallContext {
 }
 const extractThinkingLow = Deno.env.get("AI_EXTRACT_THINKING_LOW") === "true";
 const extractMaxOutputTokens = configuredInteger("AI_EXTRACT_MAX_OUTPUT_TOKENS", 0, 1024, 65536);
+// T3.6: unset = model default (same request as main).
+const extractMediaResolution = parseMediaResolution(Deno.env.get("AI_EXTRACT_MEDIA_RESOLUTION"));
 const transcriptionModel = Deno.env.get("GROQ_MODEL")?.trim() || "whisper-large-v3";
 const maxTextLength = 50_000;
 const maxImageBase64Length = 21_000_000;
@@ -782,6 +785,7 @@ async function extractInvoice(ctx: AiCallContext, request: ExtractionRequest) {
       // TV1 – O1/O3: server flag, with the env var kept as an override.
       thinkingLow: ctx.enabled("ai.extract.thinking_low") || extractThinkingLow,
       maxOutputTokensEnv: extractMaxOutputTokens,
+      mediaResolution: extractMediaResolution,
     }),
   });
   const usageMetadata = ctx.geminiUsageMetadata;
