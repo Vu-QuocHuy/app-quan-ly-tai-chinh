@@ -34,7 +34,7 @@ Làm theo thứ tự, tick từng ô. Nếu một ô không đạt, xử lý ở
 - [ ] Banner đầu màn hình đúng chữ: `B0 – GỐC` (đỏ) ở bản trái, `B1 – TỐI ƯU` (xanh) ở bản phải.
 - [ ] **Không** có cảnh báo vàng "LỆCH CỜ". Nếu có: Phần C, mục 4.
 - [ ] Radio lỗi giả lập đang ở **Không**; công tắc "Bóp méo tổng hóa đơn (lỗi mô phỏng)" đang **tắt**.
-- [ ] Ảnh mẫu `receipt_normal.jpg` và `receipt_repeat.jpg` có trong nút chọn hóa đơn mẫu; hai ảnh chưa nhập vào tài khoản nào.
+- [ ] Hai ảnh mẫu có sẵn trên bảng điều khiển: nút **Hóa đơn mẫu 1** = `receipt_normal.png`, nút **Hóa đơn mẫu 2** = `receipt_repeat.png` (ảnh tổng hợp, không có dữ liệu cá nhân); hai ảnh chưa nhập vào tài khoản nào (chạy Reset nếu đã nhập).
 
 **Dự phòng**
 
@@ -112,7 +112,7 @@ Chọn **Hủy** trên thẻ xác nhận (không ghi giao dịch vào tài kho�
 
 ### Cảnh 4. OCR hóa đơn: thanh token (60 s)
 
-**Thao tác:** bấm nút chọn hóa đơn mẫu, chọn `receipt_normal.jpg`, ở cả hai bản (B1 bấm ngay sau B0, hoặc đồng thời nếu hai người thao tác). Chỉ vào **thanh token** (cột chồng đầu vào / suy luận / đầu ra) và đồng hồ thời gian.
+**Thao tác:** bấm nút chọn hóa đơn mẫu, chọn `receipt_normal.png`, ở cả hai bản (B1 bấm ngay sau B0, hoặc đồng thời nếu hai người thao tác). Chỉ vào **thanh token** (cột chồng đầu vào / suy luận / đầu ra) và đồng hồ thời gian.
 
 | | B0 – GỐC | B1 – TỐI ƯU |
 |---|---|---|
@@ -136,7 +136,7 @@ Lưu ý khi nói: một ảnh đơn lẻ trên màn hình có thể nhanh/chậm
 
 ### Cảnh 5. Chọn lại đúng ảnh cũ (30 s)
 
-**Thao tác:** bấm lại nút chọn hóa đơn mẫu, chọn **lại `receipt_normal.jpg`** ở cả hai bản. (Tài khoản B0 và B1 tách riêng nên mỗi bên đã nhập ảnh này đúng một lần ở cảnh 4.)
+**Thao tác:** bấm lại nút chọn hóa đơn mẫu, chọn **lại `receipt_normal.png`** ở cả hai bản. (Tài khoản B0 và B1 tách riêng nên mỗi bên đã nhập ảnh này đúng một lần ở cảnh 4.)
 
 | | B0 – GỐC | B1 – TỐI ƯU |
 |---|---|---|
@@ -156,7 +156,7 @@ Lưu ý: cảnh này chạy được cả khi mạng yếu vì việc chặn tr�
 **Thao tác:**
 
 1. Bật công tắc **"Bóp méo tổng hóa đơn (lỗi mô phỏng)"** ở cả hai bản.
-2. Bấm nút chọn hóa đơn mẫu và chọn **ảnh chưa nhập trong buổi** (đề xuất `receipt_repeat.jpg`). Không dùng lại `receipt_normal.jpg`: ở B1 ảnh đó đã bị chặn trùng từ cảnh 4 nên sẽ không sinh kết quả OCR để bóp méo. ⚠ Cần xác nhận khi chạy T2.7; nếu chỉ có một ảnh thì bấm **reset** trước cảnh này.
+2. Bấm nút chọn hóa đơn mẫu và chọn **ảnh chưa nhập trong buổi** (đề xuất `receipt_repeat.png`). Không dùng lại `receipt_normal.png`: ở B1 ảnh đó đã bị chặn trùng từ cảnh 4 nên sẽ không sinh kết quả OCR để bóp méo. ⚠ Cần xác nhận khi chạy T2.7; nếu chỉ có một ảnh thì bấm **reset** trước cảnh này.
 3. Mở màn hình rà soát kết quả ở cả hai bản.
 4. Sau cảnh, **tắt** công tắc.
 
