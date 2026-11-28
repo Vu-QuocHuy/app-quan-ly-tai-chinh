@@ -19,6 +19,8 @@ start "Finmi - Controller [Port 8090]" /min python -m http.server 8090 --directo
 echo.
 echo Dang mo trang dieu khien tren trinh duyet...
 start http://localhost:8090/
+if /i "%~1"=="metrics" start http://localhost:8090/metrics.html
+echo Trang so lieu realtime: http://localhost:8090/metrics.html [chay "run_dual_instances.bat metrics" de tu mo]
 echo Du phong [2 tab rieng]: http://localhost:8080/ va http://localhost:8081/
 
 popd

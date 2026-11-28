@@ -3,165 +3,521 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Finmi – Trang điều khiển demo</title>
+<title>Finmi – Trang điều khiển AI Lab</title>
+<link rel="stylesheet" href="theme.css">
 <style>
-  :root {
-    --bg: #f4f5f7; --fg: #1d2127; --panel: #ffffff; --line: #d5d9e0;
-    --red: #c62828; --green: #1b7f3b; --accent: #1f4fd8; --muted: #5a6270;
+  .topbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+    padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #14171c; --fg: #e8eaee; --panel: #1e232b; --line: #343b46;
-      --red: #e05a5a; --green: #4cb86b; --accent: #7aa2ff; --muted: #9aa3b2;
-    }
+  .topbar h1 { font-size: 17px; }
+  .topbar .grow { flex: 1 1 200px; min-width: 0; }
+  #status { color: var(--muted); font-size: 13px; min-height: 1.4em; overflow-wrap: anywhere; }
+
+  .stage {
+    display: grid; gap: 14px; padding: 12px 16px 24px; align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(400px, 1.25fr) minmax(0, 1fr);
+    grid-template-areas: "b0 mid b1";
   }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
-  body {
-    background: var(--bg); color: var(--fg);
-    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    display: flex; flex-direction: column;
+  #col-b0 { grid-area: b0; } #col-b1 { grid-area: b1; } .mid { grid-area: mid; }
+  @media (max-width: 1099px) {
+    .stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "b0 b1" "mid mid"; }
   }
-  header.bar {
-    background: var(--panel); border-bottom: 1px solid var(--line);
-    padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 8px 20px;
-    align-items: center;
+  @media (max-width: 719px) {
+    .stage { grid-template-columns: minmax(0, 1fr); grid-template-areas: "mid" "b0" "b1"; padding: 8px; }
+    .topbar { padding: 8px; }
   }
-  header.bar h1 { font-size: 16px; margin: 0; width: 100%; }
-  fieldset {
-    border: 1px solid var(--line); border-radius: 8px; margin: 0;
-    padding: 6px 10px; display: flex; flex-wrap: wrap; gap: 6px 12px;
-    align-items: center; min-width: 0;
+
+  .phone-col { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+  .pane-head { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 10px; }
+  .pane-head h2 { font-size: 14px; color: var(--muted); width: 100%; text-align: center; font-weight: 600; }
+
+  .phone { --bz: 12px; --s: .8; position: relative;
+    width: calc((390px + 2 * var(--bz)) * var(--s)); height: calc((844px + 2 * var(--bz)) * var(--s)); }
+  .phone-inner {
+    width: calc(390px + 2 * var(--bz)); height: calc(844px + 2 * var(--bz));
+    padding: var(--bz); background: #0c0e12; border-radius: 46px; box-shadow: var(--shadow), 0 0 0 2px var(--line);
+    transform: scale(var(--s)); transform-origin: top left;
   }
-  legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
-  label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
-  button {
-    font: inherit; color: var(--fg); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 8px;
-    padding: 8px 12px; min-height: 40px; cursor: pointer;
-  }
-  button:hover { border-color: var(--accent); }
-  button.danger { border-color: var(--red); color: var(--red); }
-  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-  #status { font-size: 12px; color: var(--muted); width: 100%; min-height: 1.4em; }
-  main.frames {
-    flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr;
-    gap: 8px; padding: 8px;
-  }
-  section.pane {
-    display: flex; flex-direction: column; min-width: 0; min-height: 0;
-    border: 2px solid var(--line); border-radius: 8px; overflow: hidden;
-    background: var(--panel);
-  }
-  section.pane h2 { margin: 0; font-size: 15px; padding: 6px 12px; color: #fff; }
-  #pane-b0 { border-color: var(--red); }
-  #pane-b0 h2 { background: var(--red); }
-  #pane-b1 { border-color: var(--green); }
-  #pane-b1 h2 { background: var(--green); }
-  @media (prefers-color-scheme: dark) {
-    section.pane h2 { color: #111; }
-  }
-  iframe { flex: 1; width: 100%; min-height: 0; border: 0; background: #fff; }
-  @media (max-width: 760px) {
-    main.frames { grid-template-columns: 1fr; grid-auto-rows: 85vh; overflow-y: auto; }
-    header.bar { padding: 8px; }
-  }
+  .phone.b0 .phone-inner { box-shadow: 0 0 0 4px var(--pill-b0-bg); }
+  .phone.b1 .phone-inner { box-shadow: 0 0 0 4px var(--pill-b1-bg); }
+  .phone iframe { display: block; width: 390px; height: 844px; border: 0; border-radius: 34px; background: #fff; }
+
+  .kpis { width: 100%; max-width: 440px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; min-width: 0; }
+  .kpi dt { font-size: 11px; color: var(--muted); }
+  .kpi dd { margin: 0; font-weight: 800; font-size: 17px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .kpi dd .muted { font-weight: 400; font-size: 12px; }
+  .age { width: 100%; max-width: 440px; font-size: 12px; color: var(--muted); text-align: center; margin: 0; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; }
+  .mid .ctl { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 4px 8px; align-items: center; padding: 6px 0; }
+  .mid .ctl + .ctl { border-top: 1px solid var(--line); }
+  .mid .lg { font-size: 13px; font-weight: 700; color: var(--muted); }
+  .mid .row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; min-width: 0; }
+  @media (max-width: 480px) { .mid .ctl { grid-template-columns: minmax(0, 1fr); } }
+  label.opt { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; min-height: 30px; }
+  .asks { flex-direction: column; align-items: stretch !important; gap: 4px; }
+  .asks button { justify-content: flex-start; text-align: left; }
+  .feat-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; align-items: center; }
+
+  table.features caption { text-align: left; font-weight: 800; padding: 2px 0 6px; }
+  table.features th[scope="col"] { font-size: 13px; text-align: center; }
+  table.features th[scope="col"]:first-child { text-align: left; }
+  table.features td { text-align: center; width: 112px; }
+  table.features tr.grp th { background: var(--panel2); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  table.features tr.bulk td { padding: 4px; }
+  table.features tr.bulk td > div { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+  table.features tbody th[scope="row"] { font-weight: 500; }
+  table.features tr.diff th[scope="row"] { box-shadow: inset 4px 0 0 var(--warn-line); }
+  .diff-mark { font-size: 11px; font-weight: 800; color: var(--warn-fg); background: var(--warn-bg);
+    border: 1px solid var(--warn-line); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+  .sw { min-width: 96px; padding: 3px 8px; gap: 8px; justify-content: space-between; border-width: 2px; }
+  .sw .knob { width: 34px; height: 18px; border-radius: 999px; background: var(--off-bg); border: 2px solid var(--muted); position: relative; flex: none; }
+  .sw .knob::after { content: ""; position: absolute; top: 1px; left: 1px; width: 12px; height: 12px; border-radius: 50%; background: var(--muted); transition: left .12s; }
+  .sw[aria-checked="true"] { border-color: var(--on-bg); }
+  .sw[aria-checked="true"] .knob { background: var(--on-bg); border-color: var(--on-bg); }
+  .sw[aria-checked="true"] .knob::after { left: 17px; background: var(--on-fg); }
+  .sw .sw-text { font-weight: 800; font-size: 13px; min-width: 2.4em; text-align: right; }
+  .sw[data-pending="1"] { border-style: dashed; }
+  .note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  @media (prefers-reduced-motion: reduce) { .sw .knob::after { transition: none; } }
 </style>
 </head>
 <body>
-<header class="bar" role="region" aria-label="Thanh điều khiển">
-  <h1>Finmi – Điều khiển demo (một lệnh, hai bản)</h1>
-
-  <fieldset>
-    <legend>Gửi cho</legend>
-    <label><input type="radio" name="target" value="both" checked> Cả hai</label>
-    <label><input type="radio" name="target" value="b0"> Chỉ B0</label>
-    <label><input type="radio" name="target" value="b1"> Chỉ B1</label>
-  </fieldset>
-
-  <fieldset>
-    <legend>Câu hỏi mẫu</legend>
-    <button type="button" class="ask" data-question="Tháng này tôi chi bao nhiêu?">Tháng này tôi chi bao nhiêu?</button>
-    <button type="button" class="ask" data-question="Tại sao tháng này tôi chi nhiều?">Tại sao tháng này tôi chi nhiều?</button>
-    <button type="button" class="ask" data-question="Hôm nay ăn trưa hết 35k">Hôm nay ăn trưa hết 35k</button>
-  </fieldset>
-
-  <fieldset>
-    <legend>Lỗi giả lập</legend>
-    <label><input type="radio" name="fault" value="" checked> Không</label>
-    <label><input type="radio" name="fault" value="429"> 429</label>
-    <label><input type="radio" name="fault" value="500"> 500</label>
-    <label><input type="radio" name="fault" value="timeout"> timeout</label>
-  </fieldset>
-
-  <fieldset>
-    <legend>Hóa đơn</legend>
-    <label><input type="checkbox" id="tamper"> Bóp méo tổng hóa đơn (lỗi mô phỏng)</label>
-    <button type="button" class="asset" data-asset="assets/ai_lab/receipt_normal.png">Hóa đơn mẫu 1</button>
-    <button type="button" class="asset" data-asset="assets/ai_lab/receipt_repeat.png">Hóa đơn mẫu 2</button>
-  </fieldset>
-
-  <button type="button" id="reset" class="danger">Reset</button>
-  <div id="status" role="status" aria-live="polite"></div>
+<header class="topbar">
+  <h1>Finmi – Điều khiển AI Lab (một lệnh, hai bản)</h1>
+  <div class="grow"><div id="status" role="status" aria-live="polite">Đang chờ dữ liệu từ hai bản…</div></div>
+  <a class="btn primary" id="open-metrics" href="metrics.html" target="finmi-metrics">Mở trang số liệu ↗</a>
 </header>
 
-<main class="frames">
-  <section class="pane" id="pane-b0" aria-labelledby="t-b0">
-    <h2 id="t-b0">B0 – GỐC</h2>
-    <iframe id="frame-b0" title="B0 – GỐC" src="http://localhost:8080/"></iframe>
+<main class="stage">
+  <section class="phone-col" id="col-b0" aria-labelledby="h-b0">
+    <div class="pane-head">
+      <h2 id="h-b0">Bản B0 (cổng 8080)</h2>
+      <span class="pill big none" id="pill-b0">CHƯA CÓ DỮ LIỆU</span>
+      <span class="warn" id="warn-b0" hidden title="Server báo bộ cờ khác với bộ cờ của app (có thể server dev chưa bật AI_ALLOW_DEBUG_HEADERS)">⚠ LỆCH CỜ</span>
+    </div>
+    <div class="phone b0" id="phone-b0">
+      <div class="phone-inner"><iframe id="frame-b0" title="B0 – GỐC" src="http://localhost:8080/"></iframe></div>
+    </div>
+    <dl class="kpis" id="kpi-b0"></dl>
+    <p class="age" id="age-b0">Chưa nhận dữ liệu từ B0</p>
   </section>
-  <section class="pane" id="pane-b1" aria-labelledby="t-b1">
-    <h2 id="t-b1">B1 – TỐI ƯU</h2>
-    <iframe id="frame-b1" title="B1 – TỐI ƯU" src="http://localhost:8081/"></iframe>
+
+  <section class="mid" aria-label="Bảng điều khiển">
+    <div class="card" id="controls">
+      <div class="ctl" role="group" aria-label="Gửi cho"><span class="lg" aria-hidden="true">Gửi cho</span>
+        <div class="row">
+          <label class="opt"><input type="radio" name="target" value="both" checked> Cả hai</label>
+          <label class="opt"><input type="radio" name="target" value="b0"> Chỉ B0</label>
+          <label class="opt"><input type="radio" name="target" value="b1"> Chỉ B1</label>
+        </div>
+      </div>
+      <div class="ctl" role="group" aria-label="Câu hỏi mẫu"><span class="lg" aria-hidden="true">Câu hỏi mẫu</span>
+        <div class="row asks">
+          <button type="button" class="ask" data-question="Tháng này tôi chi bao nhiêu?">Tháng này tôi chi bao nhiêu?</button>
+          <button type="button" class="ask" data-question="Tại sao tháng này tôi chi nhiều?">Tại sao tháng này tôi chi nhiều?</button>
+          <button type="button" class="ask" data-question="Hôm nay ăn trưa hết 35k">Hôm nay ăn trưa hết 35k</button>
+        </div>
+      </div>
+      <div class="ctl" role="group" aria-label="Lỗi giả lập"><span class="lg" aria-hidden="true">Lỗi giả lập</span>
+        <div class="row">
+          <label class="opt"><input type="radio" name="fault" value="" checked> Không</label>
+          <label class="opt"><input type="radio" name="fault" value="429"> 429</label>
+          <label class="opt"><input type="radio" name="fault" value="500"> 500</label>
+          <label class="opt"><input type="radio" name="fault" value="timeout"> timeout</label>
+        </div>
+      </div>
+      <div class="ctl" role="group" aria-label="Hóa đơn"><span class="lg" aria-hidden="true">Hóa đơn</span>
+        <div class="row">
+          <label class="opt"><input type="checkbox" id="tamper"> Bóp méo tổng hóa đơn (lỗi mô phỏng)</label>
+          <button type="button" class="asset" data-asset="assets/ai_lab/receipt_normal.png">Hóa đơn mẫu 1</button>
+          <button type="button" class="asset" data-asset="assets/ai_lab/receipt_repeat.png">Hóa đơn mẫu 2</button>
+        </div>
+      </div>
+      <div class="ctl" role="group" aria-label="Đo lại"><span class="lg" aria-hidden="true">Đo lại</span>
+        <div class="row">
+          <button type="button" id="reset" class="danger">Reset số liệu</button>
+          <span class="muted" style="font-size:12px">Xóa số liệu AI Lab, telemetry và lịch sử chat cục bộ (theo mục “Gửi cho”).</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <table class="features" id="features">
+        <caption>Công tắc tối ưu – hiển thị đúng trạng thái do từng bản báo về</caption>
+        <thead>
+          <tr><th scope="col">Kỹ thuật tối ưu</th><th scope="col">B0</th><th scope="col">B1</th></tr>
+          <tr class="bulk">
+            <td style="text-align:left;width:auto"><span class="muted" style="font-size:12px">Cả cột</span></td>
+            <td><div>
+              <button type="button" class="small bulk-btn" data-pane="b0" data-value="b0">Tắt hết</button>
+              <button type="button" class="small bulk-btn" data-pane="b0" data-value="b1">Bật hết</button>
+            </div></td>
+            <td><div>
+              <button type="button" class="small bulk-btn" data-pane="b1" data-value="b0">Tắt hết</button>
+              <button type="button" class="small bulk-btn" data-pane="b1" data-value="b1">Bật hết</button>
+            </div></td>
+          </tr>
+        </thead>
+        <tbody id="feature-rows"></tbody>
+      </table>
+      <div class="feat-actions">
+        <button type="button" id="copy-b1-b0">Sao chép cấu hình B1 → B0</button>
+      </div>
+      <p class="note"><span class="where">máy</span> có hiệu lực ngay ở thao tác kế tiếp; <span class="where">server</span> đi qua header <code>x-finmi-flags</code> (cần <code>AI_ALLOW_DEBUG_HEADERS=true</code> ở server dev, nếu không sẽ báo LỆCH CỜ). Đổi cờ không xóa số liệu đã đo.</p>
+    </div>
+  </section>
+
+  <section class="phone-col" id="col-b1" aria-labelledby="h-b1">
+    <div class="pane-head">
+      <h2 id="h-b1">Bản B1 (cổng 8081)</h2>
+      <span class="pill big none" id="pill-b1">CHƯA CÓ DỮ LIỆU</span>
+      <span class="warn" id="warn-b1" hidden title="Server báo bộ cờ khác với bộ cờ của app (có thể server dev chưa bật AI_ALLOW_DEBUG_HEADERS)">⚠ LỆCH CỜ</span>
+    </div>
+    <div class="phone b1" id="phone-b1">
+      <div class="phone-inner"><iframe id="frame-b1" title="B1 – TỐI ƯU" src="http://localhost:8081/"></iframe></div>
+    </div>
+    <dl class="kpis" id="kpi-b1"></dl>
+    <p class="age" id="age-b1">Chưa nhận dữ liệu từ B1</p>
   </section>
 </main>
 
+<script src="lib.js"></script>
 <script>
 (function () {
   'use strict';
+  var L = window.FinmiLib;
+  var PANES = ['b0', 'b1'];
+  var NAMES = { b0: 'B0', b1: 'B1' };
+  // Origins the apps are served from (port decides the pane, see lib.js ORIGIN_PANES).
   var FRAMES = {
     b0: { el: document.getElementById('frame-b0'), origin: 'http://localhost:8080' },
     b1: { el: document.getElementById('frame-b1'), origin: 'http://localhost:8081' }
   };
   var statusEl = document.getElementById('status');
+  var state = { b0: null, b1: null };      // { m: normalised metrics, raw, at: epoch ms }
+  var lastSeen = { b0: 0, b1: 0 };
+  var mock = null;                         // set only with ?mock=1
+  var channel = null;
+  var renderQueued = false;
+
+  function setStatus(text) { statusEl.textContent = text; }
+
+  // ---------------------------------------------------------------- commands
+  // Protocol: {ailab: 1, cmd: 'ask'|'fault'|'importAsset'|'tamper'|'reset'|'flags'|'hello', value}
+  function sendPane(pane, cmd, value) {
+    var v = value === undefined ? null : value;
+    if (mock) { mockCommand(pane, cmd, v); return; }
+    var f = FRAMES[pane];
+    try {
+      f.el.contentWindow.postMessage({ ailab: 1, cmd: cmd, value: v }, f.origin);
+    } catch (e) { /* iframe not ready yet */ }
+  }
 
   function targets() {
     var v = document.querySelector('input[name="target"]:checked').value;
-    return v === 'both' ? ['b0', 'b1'] : [v];
+    return v === 'both' ? PANES.slice() : [v];
   }
 
-  // Protocol: {ailab: 1, cmd: 'ask'|'fault'|'importAsset'|'tamper'|'reset', value}
   function send(cmd, value) {
     var names = targets();
-    names.forEach(function (n) {
-      var f = FRAMES[n];
-      try {
-        f.el.contentWindow.postMessage(
-          { ailab: 1, cmd: cmd, value: value === undefined ? null : value },
-          f.origin
-        );
-      } catch (e) { /* iframe not ready */ }
-    });
+    names.forEach(function (n) { sendPane(n, cmd, value); });
     var shown = value === undefined || value === null ? '' : ' ' + JSON.stringify(value);
-    statusEl.textContent = 'Đã gửi ' + cmd + shown + ' → ' +
-      names.map(function (n) { return n.toUpperCase(); }).join(' + ');
+    setStatus('Đã gửi ' + cmd + shown + ' → ' + names.map(function (n) { return NAMES[n]; }).join(' + '));
   }
 
-  Array.prototype.forEach.call(document.querySelectorAll('button.ask'), function (b) {
-    b.addEventListener('click', function () { send('ask', b.dataset.question); });
+  function hello(pane) { sendPane(pane, 'hello'); }
+
+  // ------------------------------------------------------------- incoming data
+  function handleMetrics(pane, raw) {
+    var m = L.normalizeMetrics(raw);
+    if (!m) return;
+    var now = Date.now();
+    state[pane] = { m: m, raw: raw, at: now };
+    lastSeen[pane] = now;
+    relay(pane, raw, now);
+    scheduleRender();
+  }
+
+  window.addEventListener('message', function (ev) {
+    var pane = L.paneFromOrigin(ev.origin);
+    if (!pane) return;                                   // only the two app origins
+    if (ev.source !== FRAMES[pane].el.contentWindow) return;
+    if (!L.isMetricsMessage(ev.data)) return;
+    handleMetrics(pane, ev.data);
   });
-  Array.prototype.forEach.call(document.querySelectorAll('button.asset'), function (b) {
-    b.addEventListener('click', function () { send('importAsset', b.dataset.asset); });
-  });
-  Array.prototype.forEach.call(document.querySelectorAll('input[name="fault"]'), function (r) {
-    r.addEventListener('change', function () { send('fault', r.value === '' ? null : r.value); });
-  });
-  document.getElementById('tamper').addEventListener('change', function (e) {
-    send('tamper', e.target.checked);
-  });
-  document.getElementById('reset').addEventListener('click', function () {
-    send('reset');
-  });
+
+  // ---------------------------------------------------------------- relay
+  function openChannel() {
+    if (mock || typeof BroadcastChannel === 'undefined') return;
+    try {
+      channel = new BroadcastChannel(L.CHANNEL_NAME);
+      channel.onmessage = function (ev) {
+        var d = ev.data;
+        if (d && d.ailab === 1 && d.request === 'snapshot') {
+          PANES.forEach(function (p) { if (state[p]) relay(p, state[p].raw, state[p].at); });
+        }
+      };
+    } catch (e) { channel = null; }
+  }
+
+  function relay(pane, raw, at) {
+    if (!channel) return;
+    try { channel.postMessage({ ailab: 1, pane: pane, metrics: raw, receivedAt: at }); } catch (e) { /* ignore */ }
+  }
+
+  // ---------------------------------------------------------------- rendering
+  function scheduleRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(function () { renderQueued = false; render(); });
+  }
+
+  function text(el, s) { if (el.textContent !== s) el.textContent = s; }
+
+  function renderKpis(pane) {
+    var dl = document.getElementById('kpi-' + pane);
+    var m = state[pane] ? state[pane].m : null;
+    var last = m && m.turns.length ? m.turns[m.turns.length - 1] : null;
+    var html = '';
+    html += kpi('Lượt gọi LLM', m ? L.formatInt(m.totals.llmCalls) : L.DASH);
+    html += kpi('Token', m ? L.formatInt(m.totals.tokens) : L.DASH);
+    var chat = L.DASH;
+    if (last) {
+      var r = last.route;
+      var cls = L.ROUTES[r] ? r : 'other';
+      chat = '<span class="route-badge ' + cls + '"><i aria-hidden="true">' + L.routeShort(r) + '</i>' +
+        esc(L.routeLabel(r)) + '</span><br><span class="muted">' + esc(L.formatMs(last.durationMs)) + '</span>';
+    }
+    html += kpi('Chat gần nhất', chat, true);
+    if (dl.dataset.html !== html) { dl.dataset.html = html; dl.innerHTML = html; }
+  }
+
+  function kpi(label, value, raw) {
+    return '<div class="kpi"><dt>' + esc(label) + '</dt><dd>' + (raw ? value : esc(value)) + '</dd></div>';
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function render() {
+    PANES.forEach(function (pane) {
+      var m = state[pane] ? state[pane].m : null;
+      var pill = document.getElementById('pill-' + pane);
+      pill.className = 'pill big ' + L.profileTone(m);
+      text(pill, L.profileLabel(m));
+      document.getElementById('warn-' + pane).hidden = !L.flagMismatch(m);
+      renderKpis(pane);
+    });
+    renderSwitches();
+    renderAges();
+  }
+
+  function renderAges() {
+    var now = Date.now();
+    PANES.forEach(function (pane) {
+      var el = document.getElementById('age-' + pane);
+      if (!state[pane]) { text(el, 'Chưa nhận dữ liệu từ ' + NAMES[pane]); return; }
+      text(el, 'Cập nhật: ' + L.ageLabel(now - state[pane].at));
+    });
+  }
+
+  // -------------------------------------------------------- feature table
+  function buildFeatureRows() {
+    var tbody = document.getElementById('feature-rows');
+    var group = null;
+    L.FLAGS.forEach(function (f) {
+      if (f.group !== group) {
+        group = f.group;
+        var g = document.createElement('tr');
+        g.className = 'grp';
+        g.innerHTML = '<th scope="colgroup" colspan="3">' + esc(group) + '</th>';
+        tbody.appendChild(g);
+      }
+      var tr = document.createElement('tr');
+      tr.dataset.key = f.key;
+      var th = document.createElement('th');
+      th.scope = 'row';
+      th.innerHTML = esc(f.name) + '<span class="where" title="' +
+        (f.where === 'máy' ? 'Phía app: có hiệu lực ngay' : 'Phía server: qua header x-finmi-flags') + '">' + esc(f.where) + '</span>' +
+        '<span class="diff-mark" hidden>KHÁC</span>';
+      tr.appendChild(th);
+      PANES.forEach(function (pane) {
+        var td = document.createElement('td');
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'sw';
+        b.setAttribute('role', 'switch');
+        b.setAttribute('aria-checked', 'false');
+        b.setAttribute('aria-label', NAMES[pane] + ': ' + f.name);
+        b.dataset.pane = pane;
+        b.dataset.key = f.key;
+        b.disabled = true;
+        b.innerHTML = '<span class="knob" aria-hidden="true"></span><span class="sw-text">—</span>';
+        td.appendChild(b);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    tbody.addEventListener('click', function (e) {
+      var b = e.target.closest('button.sw');
+      if (!b || b.disabled) return;
+      var pane = b.dataset.pane, key = b.dataset.key;
+      var cur = state[pane] ? state[pane].m.flags[key] : null;
+      if (cur === null) return;
+      var change = {};
+      change[key] = !cur;
+      // The switch keeps showing the REPORTED state until the app answers.
+      b.dataset.pending = '1';
+      b.setAttribute('aria-busy', 'true');
+      setTimeout(function () { b.removeAttribute('data-pending'); b.removeAttribute('aria-busy'); }, 2500);
+      sendPane(pane, 'flags', change);
+      setStatus('Đã gửi flags ' + JSON.stringify(change) + ' → ' + NAMES[pane]);
+    });
+  }
+
+  function renderSwitches() {
+    var m0 = state.b0 ? state.b0.m : null;
+    var m1 = state.b1 ? state.b1.m : null;
+    var diff = L.flagsDiff(m0, m1);
+    var rows = document.querySelectorAll('#feature-rows tr[data-key]');
+    Array.prototype.forEach.call(rows, function (tr) {
+      var key = tr.dataset.key;
+      var isDiff = diff.indexOf(key) >= 0;
+      tr.classList.toggle('diff', isDiff);
+      tr.querySelector('.diff-mark').hidden = !isDiff;
+      PANES.forEach(function (pane) {
+        var b = tr.querySelector('button[data-pane="' + pane + '"]');
+        var m = state[pane] ? state[pane].m : null;
+        var v = m ? m.flags[key] : null;
+        var label = v === true ? 'BẬT' : v === false ? 'TẮT' : '—';
+        b.disabled = v === null;
+        var checked = v === true ? 'true' : 'false';
+        if (b.getAttribute('aria-checked') !== checked) {
+          b.setAttribute('aria-checked', checked);
+          b.removeAttribute('data-pending'); b.removeAttribute('aria-busy');
+        }
+        text(b.querySelector('.sw-text'), label);
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.bulk-btn'), function (b) {
+      b.disabled = !state[b.dataset.pane];
+    });
+    document.getElementById('copy-b1-b0').disabled = !state.b1;
+  }
+
+  // -------------------------------------------------------------- wiring
+  function bindControls() {
+    Array.prototype.forEach.call(document.querySelectorAll('button.ask'), function (b) {
+      b.addEventListener('click', function () { send('ask', b.dataset.question); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('button.asset'), function (b) {
+      b.addEventListener('click', function () { send('importAsset', b.dataset.asset); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="fault"]'), function (r) {
+      r.addEventListener('change', function () { send('fault', r.value === '' ? null : r.value); });
+    });
+    document.getElementById('tamper').addEventListener('change', function (e) {
+      send('tamper', e.target.checked);
+    });
+    document.getElementById('reset').addEventListener('click', function () {
+      send('reset');
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.bulk-btn'), function (b) {
+      b.addEventListener('click', function () {
+        sendPane(b.dataset.pane, 'flags', b.dataset.value);
+        setStatus((b.dataset.value === 'b0' ? 'Tắt hết' : 'Bật hết') + ' → ' + NAMES[b.dataset.pane]);
+      });
+    });
+    document.getElementById('copy-b1-b0').addEventListener('click', function () {
+      if (!state.b1) return;
+      var copy = {};
+      L.FLAG_KEYS.forEach(function (k) {
+        if (state.b1.m.flags[k] !== null) copy[k] = state.b1.m.flags[k];
+      });
+      sendPane('b0', 'flags', copy);
+      setStatus('Đã sao chép cấu hình B1 → B0');
+    });
+    PANES.forEach(function (pane) {
+      FRAMES[pane].el.addEventListener('load', function () { hello(pane); });
+    });
+  }
+
+  // ------------------------------------------------------------ phone scaling
+  function fit() {
+    var wide = window.innerWidth >= 1100;
+    var col = document.getElementById('col-b0');
+    var full = 390 + 24, fullH = 844 + 24;
+    var s = Math.min(1, (col.clientWidth - 6) / full);
+    if (wide) {
+      var chrome = document.querySelector('.stage').getBoundingClientRect().top + window.scrollY +
+        document.querySelector('#col-b0 .pane-head').offsetHeight +
+        document.getElementById('kpi-b0').offsetHeight +
+        document.getElementById('age-b0').offsetHeight + 8 * 3 + 36;
+      s = Math.min(s, (window.innerHeight - chrome) / fullH);
+    }
+    s = Math.max(0.42, s);
+    PANES.forEach(function (p) {
+      document.getElementById('phone-' + p).style.setProperty('--s', s.toFixed(3));
+    });
+  }
+
+  // ----------------------------------------------------------------- mock
+  function mockCommand(pane, cmd, value) {
+    if (cmd === 'flags') mock.setFlags(pane, value);
+    else if (cmd === 'reset') mock.reset(pane);
+    if (cmd === 'flags' || cmd === 'reset' || cmd === 'hello') handleMetrics(pane, mock.snapshot(pane));
+  }
+
+  function startMock() {
+    var s = document.createElement('script');
+    s.src = 'mock.js';
+    s.onload = function () {
+      var M = window.FinmiMock;
+      M.showBanner();
+      mock = M.create({ mismatch: M.isMismatchRequested(location.search) });
+      PANES.forEach(function (p) {
+        var f = FRAMES[p].el;
+        f.removeAttribute('src');
+        f.srcdoc = '<!doctype html><meta charset="utf-8"><body style="font:16px system-ui;display:grid;place-items:center;height:100vh;margin:0;background:#eef;color:#223;text-align:center;padding:16px">' +
+          '<div>Khung ' + NAMES[p] + ' (giả lập)<br><small>Không tải ứng dụng thật</small></div>';
+        handleMetrics(p, mock.snapshot(p));
+      });
+      setInterval(function () {
+        PANES.forEach(function (p) { mock.step(p); handleMetrics(p, mock.snapshot(p)); });
+      }, 2000);
+    };
+    document.head.appendChild(s);
+  }
+
+  // ----------------------------------------------------------------- boot
+  buildFeatureRows();
+  bindControls();
+  render();
+  fit();
+  window.addEventListener('resize', fit);
+
+  if (/[?&]mock=1(&|$)/.test(location.search)) {
+    startMock();
+  } else {
+    openChannel();
+    PANES.forEach(hello);
+  }
+
+  var lastHello = { b0: 0, b1: 0 };
+  setInterval(function () {
+    renderAges();
+    if (mock) return;
+    var now = Date.now();                      // resync when an app has been silent for 5 s
+    PANES.forEach(function (p) {
+      if (now - Math.max(lastSeen[p], lastHello[p]) >= 5000) { lastHello[p] = now; hello(p); }
+    });
+  }, 1000);
 })();
 </script>
 </body>

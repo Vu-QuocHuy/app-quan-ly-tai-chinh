@@ -1,4 +1,6 @@
 # Finmi Dual Web Instance Launcher
+# -Metrics : also open the realtime metrics page (http://localhost:8090/metrics.html)
+param([switch]$Metrics)
 Write-Host "====================================================================" -ForegroundColor Cyan
 Write-Host "  KHOI CHAY 2 INSTANCE FINMI (PORT 8080 & PORT 8081) + TRANG DIEU KHIEN (PORT 8090)" -ForegroundColor Green
 Write-Host "  Port 8080 = B0 (GOC, moi toi uu TAT) | Port 8081 = B1 (TOI UU, bat het)" -ForegroundColor Yellow
@@ -22,7 +24,9 @@ Write-Host "`nDang doi web server khoi dong truoc khi mo trinh duyet..." -Foregr
 Start-Sleep -Seconds 5
 
 Start-Process "http://localhost:8090/"
+if ($Metrics) { Start-Process "http://localhost:8090/metrics.html" }
 
 Write-Host "`nDa mo trang dieu khien: http://localhost:8090/ (1 nut -> ca 2 ban)" -ForegroundColor Green
+Write-Host "Trang so lieu realtime: http://localhost:8090/metrics.html (them -Metrics de tu mo, hoac bam nut 'Mo trang so lieu')" -ForegroundColor Green
 Write-Host "Du phong (2 tab rieng): http://localhost:8080/ va http://localhost:8081/" -ForegroundColor Yellow
 Write-Host "Meo: Nhan Win + Mui ten Trai / Win + Mui ten Phai de xep 2 tab nam canh nhau!`n" -ForegroundColor Yellow
