@@ -14,6 +14,7 @@ import '../../core/config/feature_flags.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/providers/app_providers.dart';
+import '../../features/ai_lab/application/ai_lab_import_hook.dart';
 import '../../features/ingestion/application/import_coordinator.dart';
 import '../../features/ingestion/application/import_queue.dart';
 import '../../features/ingestion/data/pending_import_store.dart';
@@ -255,6 +256,16 @@ class _AppShellState extends ConsumerState<AppShell>
 
   @override
   Widget build(BuildContext context) {
+    if (kDebugMode) {
+      // AI Lab sample receipts go through the same path as a picked image.
+      ref.listen<XFile?>(aiLabImportRequestProvider, (_, image) {
+        if (image == null) return;
+        ref.read(aiLabImportRequestProvider.notifier).state = null;
+        unawaited(
+          _importImageFile(image, abortSignal: Completer<void>().future),
+        );
+      });
+    }
     final signedInUser = ref.watch(authUserProvider).valueOrNull;
     final userId =
         signedInUser?.id ??

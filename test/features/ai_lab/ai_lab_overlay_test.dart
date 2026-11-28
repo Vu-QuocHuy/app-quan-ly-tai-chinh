@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/core/monitoring/ai_lab_store.dart';
 import 'package:hoadon_insight/features/ai_lab/ai_lab_config.dart';
 import 'package:hoadon_insight/features/ai_lab/presentation/ai_lab_banner.dart';
+import 'package:hoadon_insight/features/ai_lab/presentation/ai_lab_control_panel.dart';
 import 'package:hoadon_insight/features/ai_lab/presentation/ai_lab_overlay.dart';
 
 Widget _app({required bool enabled, required VoidCallback onTap}) =>
-    MaterialApp(
-      builder: (context, child) =>
-          AiLabOverlay(enabled: enabled, child: child!),
-      home: Scaffold(
-        body: Center(
-          child: ElevatedButton(onPressed: onTap, child: const Text('Nút app')),
+    ProviderScope(
+      child: MaterialApp(
+        builder: (context, child) =>
+            AiLabOverlay(enabled: enabled, child: child!),
+        home: Scaffold(
+          body: Center(
+            child: ElevatedButton(
+              onPressed: onTap,
+              child: const Text('Nút app'),
+            ),
+          ),
         ),
       ),
     );
@@ -70,6 +77,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('ai-lab-panel-toggle')));
     await tester.pump();
     expect(find.byKey(const ValueKey('ai-lab-panel-body')), findsOneWidget);
+    expect(find.byType(AiLabControlPanel), findsOneWidget);
     expect(find.text('Lượt gọi LLM: 0'), findsOneWidget);
     expect(find.text('—'), findsOneWidget); // chưa có OCR nào
 
@@ -95,13 +103,15 @@ void main() {
       const AiLabCall(action: 'chat', durationMs: 1, serverFlagSet: 'none'),
     );
     await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => AiLabOverlay(
-          enabled: true,
-          clientFlagSet: 'ai.chat.local_router',
-          child: child!,
+      ProviderScope(
+        child: MaterialApp(
+          builder: (context, child) => AiLabOverlay(
+            enabled: true,
+            clientFlagSet: 'ai.chat.local_router',
+            child: child!,
+          ),
+          home: const Scaffold(),
         ),
-        home: const Scaffold(),
       ),
     );
     expect(find.text('LỆCH CỜ'), findsOneWidget);

@@ -4,6 +4,7 @@ import '../../../app/theme/app_tokens.dart';
 import '../../../core/monitoring/ai_lab_store.dart';
 import '../ai_lab_config.dart';
 import 'ai_lab_banner.dart';
+import 'ai_lab_control_panel.dart';
 import 'ai_lab_counters.dart';
 import 'ai_lab_token_bar.dart';
 
@@ -79,11 +80,14 @@ class _AiLabPanelState extends State<_AiLabPanel> {
       children: [
         if (_expanded)
           ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 260),
+            constraints: BoxConstraints(
+              maxWidth: 320,
+              maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+            ),
             child: Card(
               key: const ValueKey('ai-lab-panel-body'),
               margin: const EdgeInsets.only(bottom: AppSpacing.xs),
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: ListenableBuilder(
                   listenable: AiLabStore.instance,
@@ -99,6 +103,8 @@ class _AiLabPanelState extends State<_AiLabPanel> {
                       AiLabTokenBar(call: AiLabStore.instance.lastExtract),
                       const SizedBox(height: AppSpacing.md),
                       const AiLabCounters(),
+                      const Divider(height: AppSpacing.xl),
+                      const AiLabControlPanel(),
                     ],
                   ),
                 ),

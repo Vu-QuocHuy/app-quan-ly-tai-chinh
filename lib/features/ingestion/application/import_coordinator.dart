@@ -1,9 +1,10 @@
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/errors/app_exception.dart';
+import '../../../core/monitoring/ai_lab_store.dart';
+import '../../ai_lab/application/ai_lab_tamper.dart';
 import '../../invoices/domain/invoice_models.dart';
 import '../../invoices/domain/invoice_repository.dart';
 import '../data/ai_extraction_client.dart';
@@ -162,11 +163,16 @@ class ImportCoordinator {
       );
     }
     final extracted = await _aiExtractor.extractImage(input);
+    // AI Lab scene 6 (debug only): simulate an OCR error on the total before
+    // the validator runs, so B1 flags it and B0 does not.
+    final invoice = kDebugMode && AiLabStore.instance.tamperExtractTotal
+        ? tamperInvoiceTotal(extracted.invoice)
+        : extracted.invoice;
     final outcome = await _complete(
       ExtractionResult(
         invoice: _validatorEnabled
-            ? const InvoiceValidator().applyRuleConfidence(extracted.invoice)
-            : extracted.invoice,
+            ? const InvoiceValidator().applyRuleConfidence(invoice)
+            : invoice,
         adapterName: extracted.adapterName,
         adapterVersion: extracted.adapterVersion,
         warnings: extracted.warnings,

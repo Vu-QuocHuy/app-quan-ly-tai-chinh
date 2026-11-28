@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/core/config/feature_flags.dart';
 import 'package:hoadon_insight/core/providers/app_providers.dart';
+import 'package:hoadon_insight/features/ai_lab/application/ai_lab_providers.dart';
 import 'package:hoadon_insight/features/chat/application/chat_metrics.dart';
 import 'package:hoadon_insight/features/chat/data/ai_chat_client.dart';
 import 'package:hoadon_insight/features/chat/data/chat_history_store.dart';
@@ -340,6 +341,96 @@ void main() {
     expect(metrics.events.single['route'], 'local');
     expect(metrics.events.single['llm_calls'], 0);
     expect(metrics.events.single['local_intent'], 'incomeTotal');
+  });
+  testWidgets('AI Lab: a prompt request is sent, answered and published', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          featureFlagsProvider.overrideWith((ref) async => _chatOptimized),
+          localChatAssistantProvider.overrideWithValue(
+            LocalChatAssistant(_InvoiceRepository(), _IncomeRepository()),
+          ),
+          chatHistoryStoreProvider.overrideWithValue(const ChatHistoryStore()),
+        ],
+        child: const MaterialApp(
+          locale: Locale('vi'),
+          supportedLocales: [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ChatScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatScreen)),
+    );
+
+    // The quick-prompt chip already shows this text once.
+    expect(find.text('Tháng này tôi đã thu bao nhiêu?'), findsOneWidget);
+    container.read(aiLabPromptRequestProvider.notifier).state =
+        'Tháng này tôi đã thu bao nhiêu?';
+    await tester.pumpAndSettle();
+
+    expect(container.read(aiLabPromptRequestProvider), isNull);
+    // Chip + the user's bubble.
+    expect(find.text('Tháng này tôi đã thu bao nhiêu?'), findsNWidgets(2));
+    expect(find.textContaining('tổng thu 250.000'), findsOneWidget);
+    final answer = container.read(aiLabLastAnswerProvider);
+    expect(answer, isNotNull);
+    expect(answer!.text, contains('tổng thu 250.000'));
+  });
+  testWidgets('AI Lab: a prompt request waits while a turn is running', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final aiClient = _PendingAiChatClient();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          featureFlagsProvider.overrideWith((ref) async => _chatOptimized),
+          aiChatClientProvider.overrideWithValue(aiClient),
+          localChatAssistantProvider.overrideWithValue(
+            _PendingLocalChatAssistant(),
+          ),
+          chatHistoryStoreProvider.overrideWithValue(const ChatHistoryStore()),
+        ],
+        child: const MaterialApp(
+          locale: Locale('vi'),
+          supportedLocales: [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ChatScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatScreen)),
+    );
+    await tester.enterText(find.byType(TextField), 'Tổng chi tháng này?');
+    await tester.pump();
+    await tester.tap(find.byTooltip('Gửi câu hỏi'));
+    await tester.pump();
+    expect(find.text('Đang suy nghĩ ...'), findsOneWidget);
+
+    container.read(aiLabPromptRequestProvider.notifier).state =
+        'Câu hỏi đang chờ';
+    await tester.pump();
+    expect(container.read(aiLabPromptRequestProvider), 'Câu hỏi đang chờ');
+    expect(find.text('Câu hỏi đang chờ'), findsNothing);
+
+    await tester.pump(const Duration(seconds: 3));
+    aiClient.complete();
+    await tester.pump();
+    await tester.pump();
+
+    expect(container.read(aiLabPromptRequestProvider), isNull);
+    expect(find.text('Câu hỏi đang chờ'), findsOneWidget);
+    // Let the second turn finish (local router timeout, then the LLM client).
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
   });
   testWidgets('B0: with all AI flags off the LLM selects a tool (2 calls)', (
     tester,

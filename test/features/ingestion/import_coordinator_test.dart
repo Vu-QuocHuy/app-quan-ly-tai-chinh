@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hoadon_insight/core/database/app_database.dart';
 import 'package:hoadon_insight/core/errors/app_exception.dart';
+import 'package:hoadon_insight/core/monitoring/ai_lab_store.dart';
 import 'package:hoadon_insight/features/ingestion/application/import_coordinator.dart';
 import 'package:hoadon_insight/features/ingestion/data/ai_extraction_client.dart';
 import 'package:hoadon_insight/features/ingestion/data/heuristic_text_extractor.dart';
@@ -24,7 +25,10 @@ void main() {
     repository = DriftInvoiceRepository(database);
   });
 
-  tearDown(() => database.close());
+  tearDown(() {
+    AiLabStore.instance.tamperExtractTotal = false;
+    return database.close();
+  });
 
   test('runs XML extraction through repository completion', () async {
     final coordinator = _buildCoordinator(repository);
@@ -191,6 +195,58 @@ void main() {
     );
 
     expect(_totalConfidence(outcome), 0.5);
+  });
+
+  test('AI Lab tamper ON + validator ON: total is raised and confidence 0.50', () async {
+    AiLabStore.instance.tamperExtractTotal = true;
+    final coordinator = _buildCoordinator(
+      repository,
+      aiExtractor: _FakeAiExtractor(withEvidence: true),
+      validatorEnabled: true,
+    );
+
+    final outcome = await coordinator.importImage(
+      bytes: Uint8List.fromList([9, 9, 3]),
+      fileName: 'receipt.jpg',
+      imagePath: '/tmp/receipt.jpg',
+    );
+
+    expect(outcome.result.invoice.totalMinor, 137500);
+    expect(_totalConfidence(outcome), 0.5);
+  });
+
+  test('AI Lab tamper ON + validator OFF (B0): confidence is unchanged', () async {
+    AiLabStore.instance.tamperExtractTotal = true;
+    final coordinator = _buildCoordinator(
+      repository,
+      aiExtractor: _FakeAiExtractor(withEvidence: true),
+    );
+
+    final outcome = await coordinator.importImage(
+      bytes: Uint8List.fromList([9, 9, 4]),
+      fileName: 'receipt.jpg',
+      imagePath: '/tmp/receipt.jpg',
+    );
+
+    expect(outcome.result.invoice.totalMinor, 137500);
+    expect(_totalConfidence(outcome), 0.75);
+  });
+
+  test('AI Lab tamper OFF: the extracted total is untouched', () async {
+    final coordinator = _buildCoordinator(
+      repository,
+      aiExtractor: _FakeAiExtractor(withEvidence: true),
+      validatorEnabled: true,
+    );
+
+    final outcome = await coordinator.importImage(
+      bytes: Uint8List.fromList([9, 9, 5]),
+      fileName: 'receipt.jpg',
+      imagePath: '/tmp/receipt.jpg',
+    );
+
+    expect(outcome.result.invoice.totalMinor, 125000);
+    expect(_totalConfidence(outcome), 0.75);
   });
 
   test('O5 ON: a consistent total keeps confidence 0.75', () async {
