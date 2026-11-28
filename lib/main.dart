@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,8 +8,11 @@ import 'app/app.dart';
 import 'app/router/app_router.dart';
 import 'core/background/background_task_scheduler.dart';
 import 'core/database/local_database_scope.dart';
+import 'core/monitoring/ai_lab_cost.dart';
+import 'core/monitoring/ai_lab_store.dart';
 import 'core/monitoring/app_error_reporter.dart';
 import 'core/security/supabase_bootstrap.dart';
+import 'features/ai_lab/ai_lab_config.dart';
 import 'features/notifications/data/budget_notification_service.dart';
 
 Future<void> main() {
@@ -38,6 +42,12 @@ Future<void> _bootstrap() async {
   final launchPayload = await BudgetNotificationService.instance.initialize(
     onTap: _handleNotificationTap,
   );
+  if (AiLabConfig.enabled) {
+    // AI Lab (debug): price calls with assets/ai_lab/pricing.json when filled.
+    AiLabStore.instance.costModel = AiLabCostModel(
+      await loadAiLabPricing(rootBundle),
+    );
+  }
   runApp(const ProviderScope(child: HoaDonInsightApp()));
   if (launchPayload != null) {
     WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -1,6 +1,7 @@
 import '../localization/app_strings.dart';
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -47,6 +48,7 @@ import '../../features/sync/domain/sync_gateway.dart';
 import '../../features/sync/domain/sync_models.dart';
 import '../config/ai_flag_profile.dart';
 import '../config/feature_flags.dart';
+import '../monitoring/ai_lab_store.dart';
 import '../monitoring/ai_telemetry.dart';
 import '../database/app_database.dart';
 import '../database/local_database_scope.dart';
@@ -338,8 +340,10 @@ final importCoordinatorProvider = Provider<ImportCoordinator>((ref) {
     onLocalMerchantClassification: metrics.recordLocalClassification,
     precheckDedup: flags.isAiEnabled(AiOptimizationFlag.extractPrecheckDedup),
     validatorEnabled: flags.isAiEnabled(AiOptimizationFlag.extractValidator),
-    onDuplicateBlocked: (payloadBytes) => AiTelemetry.instance
-        .recordDuplicateBlocked(payloadBytes: payloadBytes),
+    onDuplicateBlocked: (payloadBytes) {
+      AiTelemetry.instance.recordDuplicateBlocked(payloadBytes: payloadBytes);
+      if (kDebugMode) AiLabStore.instance.recordDuplicateBlocked();
+    },
   );
 });
 
