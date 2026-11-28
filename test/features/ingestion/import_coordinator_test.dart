@@ -108,11 +108,60 @@ void main() {
     expect(outcome.result.invoice.categoryId, 'food');
     expect(outcome.result.invoice.lines.single.categoryId, 'food');
   });
+
+  test(
+    'H8: classifies the merchant on device without calling classify',
+    () async {
+      final aiExtractor = _FakeAiExtractor(
+        extractedCategoryId: 'other',
+        merchantCategoryId: 'shopping',
+        sellerName: 'Highlands Coffee Quận 1',
+      );
+      final matches = <bool>[];
+      final coordinator = _buildCoordinator(
+        repository,
+        aiExtractor: aiExtractor,
+        classifyMerchantLocally: true,
+        onLocalMerchantClassification: ({required matched}) =>
+            matches.add(matched),
+      );
+
+      final outcome = await coordinator.importImage(
+        bytes: Uint8List.fromList([4, 5, 6]),
+        fileName: 'receipt.jpg',
+        imagePath: '/tmp/receipt.jpg',
+      );
+
+      expect(outcome.result.invoice.categoryId, 'food');
+      expect(aiExtractor.classifyCalls, 0);
+      expect(matches, [true]);
+    },
+  );
+
+  test('B0: still calls classify when local classification is off', () async {
+    final aiExtractor = _FakeAiExtractor(
+      extractedCategoryId: 'other',
+      merchantCategoryId: 'shopping',
+      sellerName: 'Highlands Coffee Quận 1',
+    );
+    final coordinator = _buildCoordinator(repository, aiExtractor: aiExtractor);
+
+    final outcome = await coordinator.importImage(
+      bytes: Uint8List.fromList([4, 5, 7]),
+      fileName: 'receipt.jpg',
+      imagePath: '/tmp/receipt.jpg',
+    );
+
+    expect(outcome.result.invoice.categoryId, 'shopping');
+    expect(aiExtractor.classifyCalls, 1);
+  });
 }
 
 ImportCoordinator _buildCoordinator(
   DriftInvoiceRepository repository, {
   AiExtractionClient? aiExtractor,
+  bool classifyMerchantLocally = false,
+  void Function({required bool matched})? onLocalMerchantClassification,
 }) {
   return ImportCoordinator(
     repository: repository,
@@ -120,6 +169,8 @@ ImportCoordinator _buildCoordinator(
     pdfTextService: const PdfTextService(),
     aiExtractor: aiExtractor ?? AiExtractionClient(enabled: false),
     heuristicExtractor: HeuristicTextExtractor(),
+    classifyMerchantLocally: classifyMerchantLocally,
+    onLocalMerchantClassification: onLocalMerchantClassification,
   );
 }
 
@@ -128,9 +179,12 @@ class _FakeAiExtractor extends AiExtractionClient {
     this.extractedCategoryId = 'food',
     this.lineCategoryIds = const [],
     this.merchantCategoryId,
+    this.sellerName = 'Siêu thị Demo',
   }) : super(enabled: false);
 
   final String extractedCategoryId;
+  final String sellerName;
+  int classifyCalls = 0;
   final List<String> lineCategoryIds;
   final String? merchantCategoryId;
 
@@ -165,7 +219,7 @@ class _FakeAiExtractor extends AiExtractionClient {
       adapterVersion: 'test',
       invoice: InvoiceEntity(
         id: 'ai-invoice',
-        sellerName: 'Siêu thị Demo',
+        sellerName: sellerName,
         currencyCode: 'VND',
         subtotalMinor: 125000,
         taxMinor: 0,
@@ -189,5 +243,8 @@ class _FakeAiExtractor extends AiExtractionClient {
   }
 
   @override
-  Future<String?> classifyMerchant(String merchant) async => merchantCategoryId;
+  Future<String?> classifyMerchant(String merchant) async {
+    classifyCalls++;
+    return merchantCategoryId;
+  }
 }

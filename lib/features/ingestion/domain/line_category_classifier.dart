@@ -19,31 +19,46 @@ class LineCategoryClassifier {
         .toList(growable: false);
   }
 
+  // Single-syllable keywords (ca, mi, cu, qua, vo, but) matched inside
+  // unrelated words ("cafe", "mì"→"mi" in "khuyến mi", "quà", "vớ"...), so
+  // they were replaced by multi-syllable phrases. Matching is whole-word.
+  static const _rules = <String, List<String>>{
+    'food': [
+      'thit',
+      'rau',
+      'gao',
+      'sua',
+      'banh',
+      'do uong',
+      'thuc pham',
+      'gia vi',
+      'ca hoi',
+      'ca thu',
+      'ca basa',
+      'ca phe',
+      'hai san',
+      'hoa qua',
+      'trai cay',
+      'mi tom',
+      'mi goi',
+      'cu cai',
+      'khoai',
+      'trung ga',
+      'trung vit',
+      'nuoc ngot',
+    ],
+    'utilities': ['giay', 'nuoc rua', 'bot giat', 'dau goi', 'tieu dung'],
+    'health': ['thuoc', 'vitamin', 'duoc', 'y te', 'khau trang'],
+    'transport': ['xang', 'nhien lieu', 'gui xe', 've xe'],
+    'education': ['sach', 'tap vo', 'vo viet', 'but bi', 'but chi', 'hoc phi'],
+    'entertainment': ['phim', 'game', 've xem', 'giai tri'],
+  };
+
   String? _categoryFor(String description, Set<String> available) {
-    final text = _normalize(description);
-    const rules = <String, List<String>>{
-      'food': [
-        'thit',
-        'ca',
-        'rau',
-        'cu',
-        'qua',
-        'gao',
-        'mi',
-        'sua',
-        'banh',
-        'do uong',
-        'thuc pham',
-        'gia vi',
-      ],
-      'utilities': ['giay', 'nuoc rua', 'bot giat', 'dau goi', 'tieu dung'],
-      'health': ['thuoc', 'vitamin', 'duoc', 'y te', 'khau trang'],
-      'transport': ['xang', 'nhien lieu', 'gui xe', 've xe'],
-      'education': ['sach', 'vo', 'but', 'hoc phi'],
-      'entertainment': ['phim', 'game', 've xem', 'giai tri'],
-    };
-    for (final entry in rules.entries) {
-      if (available.contains(entry.key) && entry.value.any(text.contains)) {
+    final text = ' ${_normalize(description)} ';
+    for (final entry in _rules.entries) {
+      if (available.contains(entry.key) &&
+          entry.value.any((keyword) => text.contains(' $keyword '))) {
         return entry.key;
       }
     }
@@ -59,6 +74,8 @@ class LineCategoryClassifier {
         .replaceAll(RegExp(r'[òóọỏõôồốộổỗơờớợởỡ]'), 'o')
         .replaceAll(RegExp(r'[ùúụủũưừứựửữ]'), 'u')
         .replaceAll(RegExp(r'[ỳýỵỷỹ]'), 'y')
-        .replaceAll('đ', 'd');
+        .replaceAll('đ', 'd')
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim();
   }
 }

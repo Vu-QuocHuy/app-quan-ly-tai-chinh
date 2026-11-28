@@ -258,15 +258,13 @@ grant select on public.ai_request_benchmark to service_role;
 alter table public.app_feature_flags
   drop constraint if exists app_feature_flags_key_check;
 
+-- Integration: use the pattern constraint (same as 20261107100000) instead of
+-- a fixed whitelist. A whitelist fails `ADD CONSTRAINT` as soon as another
+-- migration has inserted a key it does not list, and forces every new flag to
+-- rewrite the constraint. The catalogue itself is fixed by 20261128100000.
 alter table public.app_feature_flags
   add constraint app_feature_flags_key_check
-  check (key in (
-    'online_ai', 'cloud_sync', 'external_rates',
-    'ai.extract.thinking_low', 'ai.extract.image_1600',
-    'ai.extract.precheck_dedup', 'ai.extract.validator',
-    'ai.chat.local_router', 'ai.chat.merge_calls', 'ai.chat.prompt_v2',
-    'ai.classify.local', 'ai.router.failover', 'ai.telemetry.upload'
-  ));
+  check (key ~ '^[a-z][a-z0-9_.]{1,63}$');
 
 insert into public.app_feature_flags (environment, key, enabled, rollout_percentage)
 select environment, key, false, 100

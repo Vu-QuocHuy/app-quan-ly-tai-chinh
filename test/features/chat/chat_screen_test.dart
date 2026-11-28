@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hoadon_insight/core/config/feature_flags.dart';
 import 'package:hoadon_insight/core/providers/app_providers.dart';
+import 'package:hoadon_insight/features/chat/application/chat_metrics.dart';
 import 'package:hoadon_insight/features/chat/data/ai_chat_client.dart';
 import 'package:hoadon_insight/features/chat/data/chat_history_store.dart';
 import 'package:hoadon_insight/features/chat/domain/chat_models.dart';
@@ -18,6 +20,15 @@ import 'package:hoadon_insight/features/invoices/domain/invoice_repository.dart'
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hoadon_insight/shared/widgets/finmi_assistant_button.dart';
 import 'package:hoadon_insight/app/theme/app_theme.dart';
+
+/// B1 chat flags: local router + merged calls (+ on-device classification).
+const _chatOptimized = FeatureFlags(
+  aiOptimizations: {
+    AiOptimizationFlag.chatLocalRouter,
+    AiOptimizationFlag.chatMergeCalls,
+    AiOptimizationFlag.classifyLocal,
+  },
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +58,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          featureFlagsProvider.overrideWith((ref) async => _chatOptimized),
           chatHistoryStoreProvider.overrideWithValue(history),
           localChatAssistantProvider.overrideWithValue(
             LocalChatAssistant(_InvoiceRepository(), _IncomeRepository()),
@@ -95,6 +107,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            featureFlagsProvider.overrideWith((ref) async => _chatOptimized),
             chatHistoryStoreProvider.overrideWithValue(
               const ChatHistoryStore(),
             ),
@@ -138,6 +151,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          featureFlagsProvider.overrideWith((ref) async => _chatOptimized),
           localChatAssistantProvider.overrideWithValue(
             LocalChatAssistant(_InvoiceRepository(), _IncomeRepository()),
           ),
@@ -172,6 +186,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          featureFlagsProvider.overrideWith((ref) async => _chatOptimized),
           aiChatClientProvider.overrideWithValue(aiClient),
           localChatAssistantProvider.overrideWithValue(
             _PendingLocalChatAssistant(),
@@ -209,6 +224,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          featureFlagsProvider.overrideWith((ref) async => _chatOptimized),
           aiChatClientProvider.overrideWithValue(aiClient),
           localChatAssistantProvider.overrideWithValue(
             _PendingLocalChatAssistant(),
@@ -229,11 +245,103 @@ void main() {
     await tester.tap(find.byTooltip('Gửi câu hỏi'));
     await tester.pump();
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Đang suy nghĩ ...'), findsOneWidget);
+    // The H3 local router gives up after its 2 s timeout, then asks the LLM.
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('Đang suy nghĩ ...'), findsOneWidget);
     aiClient.complete();
     await tester.pumpAndSettle();
+    expect(find.text('Câu trả lời sau khi suy nghĩ'), findsOneWidget);
   });
-  testWidgets('LLM can select one local read-only tool before answering', (
+  testWidgets('H4: prefetched local FACTS answer in a single LLM call', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final aiClient = _ToolSelectingAiChatClient();
+    final metrics = ChatMetricsRecorder(log: false);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          featureFlagsProvider.overrideWith((ref) async => _chatOptimized),
+          aiChatClientProvider.overrideWithValue(aiClient),
+          localChatAssistantProvider.overrideWithValue(
+            _ToolExecutingLocalChatAssistant(),
+          ),
+          chatHistoryStoreProvider.overrideWithValue(const ChatHistoryStore()),
+          chatMetricsRecorderProvider.overrideWithValue(metrics),
+        ],
+        child: const MaterialApp(
+          locale: Locale('vi'),
+          supportedLocales: [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ChatScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextField),
+      'Chênh lệch thu chi tháng này?',
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('Gửi câu hỏi'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(aiClient.calls, 1);
+    expect(aiClient.toolCallsAllowed, isFalse);
+    expect(
+      aiClient.receivedFacts,
+      contains(const ChatFact('total_minor_vnd', '4424997')),
+    );
+    expect(find.text('Chênh lệch là 1.575.003 đồng.'), findsOneWidget);
+    expect(metrics.events.single['route'], 'llm');
+    expect(metrics.events.single['llm_calls'], 1);
+    expect(metrics.events.single['prefetched_tools'], ['get_cashflow_summary']);
+  });
+  testWidgets('H3: standard lookups are answered locally with 0 LLM calls', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final aiClient = _ToolSelectingAiChatClient();
+    final metrics = ChatMetricsRecorder(log: false);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          featureFlagsProvider.overrideWith((ref) async => _chatOptimized),
+          aiChatClientProvider.overrideWithValue(aiClient),
+          localChatAssistantProvider.overrideWithValue(
+            LocalChatAssistant(_InvoiceRepository(), _IncomeRepository()),
+          ),
+          chatHistoryStoreProvider.overrideWithValue(const ChatHistoryStore()),
+          chatMetricsRecorderProvider.overrideWithValue(metrics),
+        ],
+        child: const MaterialApp(
+          locale: Locale('vi'),
+          supportedLocales: [Locale('vi'), Locale('en')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          home: ChatScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextField),
+      'Tháng này tôi đã thu bao nhiêu?',
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('Gửi câu hỏi'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('tổng thu 250.000'), findsOneWidget);
+    expect(aiClient.calls, 0);
+    expect(metrics.events.single['route'], 'local');
+    expect(metrics.events.single['llm_calls'], 0);
+    expect(metrics.events.single['local_intent'], 'incomeTotal');
+  });
+  testWidgets('B0: with all AI flags off the LLM selects a tool (2 calls)', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -241,6 +349,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          featureFlagsProvider.overrideWith(
+            (ref) async => const FeatureFlags(),
+          ),
           aiChatClientProvider.overrideWithValue(aiClient),
           localChatAssistantProvider.overrideWithValue(
             _ToolExecutingLocalChatAssistant(),
@@ -286,6 +397,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          featureFlagsProvider.overrideWith((ref) async => _chatOptimized),
           localChatAssistantProvider.overrideWithValue(
             LocalChatAssistant(_InvoiceRepository(), _IncomeRepository()),
           ),
@@ -327,6 +439,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          featureFlagsProvider.overrideWith((ref) async => _chatOptimized),
           aiExtractionClientProvider.overrideWithValue(
             _DraftingAiClient(
               const TransactionDraftResult(
@@ -443,6 +556,7 @@ class _PendingAiChatClient extends Fake implements AiChatClient {
 class _ToolSelectingAiChatClient extends Fake implements AiChatClient {
   int calls = 0;
   List<ChatFact>? receivedFacts;
+  bool? toolCallsAllowed;
 
   @override
   Future<ChatReply> answer(
@@ -451,6 +565,7 @@ class _ToolSelectingAiChatClient extends Fake implements AiChatClient {
     bool allowToolCalls = false,
   }) async {
     calls++;
+    toolCallsAllowed = allowToolCalls;
     if (allowToolCalls) {
       return const ChatReply(
         text: 'Đang kiểm tra dữ liệu.',

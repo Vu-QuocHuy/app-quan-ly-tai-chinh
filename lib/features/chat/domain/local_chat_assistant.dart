@@ -706,11 +706,11 @@ class LocalChatAssistant {
       value.contains('lon nhat') ||
       value.contains('top');
 
+  // "Tháng trước tôi chi bao nhiêu?" is a total for last month, not a
+  // comparison; only explicit comparisons or up/down wording qualify.
   bool _isComparisonQuestion(String value) =>
       value.contains('so sanh') ||
-      value.contains('thang truoc') ||
-      value.contains('tang') ||
-      value.contains('giam');
+      RegExp(r'\b(tang|giam|hon|chenh)\b').hasMatch(value);
 
   bool _isRecentInvoiceQuestion(String value) =>
       value.contains('hoa don') &&

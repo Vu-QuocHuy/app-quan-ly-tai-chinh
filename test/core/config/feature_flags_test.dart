@@ -40,6 +40,12 @@ void main() {
     expect(flags.externalRates, isTrue);
   });
 
+  test('AI optimisation flags default OFF so the default build is B0', () {
+    expect(FeatureFlags.defaults.aiOptimizations, isEmpty);
+    expect(FeatureFlags.defaults.aiFlagSet, 'none');
+    expect(FeatureFlags.defaults.onlineAi, isTrue);
+  });
+
   test('ignores expired cached flags', () async {
     final now = DateTime.utc(2026, 9, 17, 8);
     final cache = _MemoryCache(
