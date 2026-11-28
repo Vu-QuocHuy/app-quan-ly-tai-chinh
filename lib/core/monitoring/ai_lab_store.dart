@@ -123,12 +123,16 @@ class AiLabStore extends ChangeNotifier {
   AiLabTotals _totals = const AiLabTotals();
   AiLabCall? _lastExtract;
   String? _fault;
+  String? _lastServerFlagSet;
   bool _tamperExtractTotal = false;
 
   AiLabTotals get totals => _totals;
 
   /// Latest OCR call that reported token usage.
   AiLabCall? get lastExtract => _lastExtract;
+
+  /// Latest `flag_set` label reported by the server, or `null` if unknown.
+  String? get lastServerFlagSet => _lastServerFlagSet;
 
   /// `x-finmi-fault` value sent with every `ai-api` call, or `null`.
   String? get fault => _fault;
@@ -155,6 +159,8 @@ class AiLabStore extends ChangeNotifier {
       tokens: _totals.tokens + (call.totalTokens ?? 0),
       savedLlmCalls: _totals.savedLlmCalls,
     );
+    final serverFlagSet = call.serverFlagSet;
+    if (serverFlagSet != null) _lastServerFlagSet = serverFlagSet;
     if (_extractActions.contains(call.action) && call.totalTokens != null) {
       _lastExtract = call;
     }
@@ -182,6 +188,7 @@ class AiLabStore extends ChangeNotifier {
     _turns.clear();
     _totals = const AiLabTotals();
     _lastExtract = null;
+    _lastServerFlagSet = null;
     _fault = null;
     _tamperExtractTotal = false;
     notifyListeners();
