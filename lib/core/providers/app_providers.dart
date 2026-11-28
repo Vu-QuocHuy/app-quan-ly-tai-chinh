@@ -45,6 +45,7 @@ import '../../features/sync/data/drift_sync_cursor_store.dart';
 import '../../features/sync/data/supabase_sync_gateway.dart';
 import '../../features/sync/domain/sync_gateway.dart';
 import '../../features/sync/domain/sync_models.dart';
+import '../config/ai_flag_profile.dart';
 import '../config/feature_flags.dart';
 import '../monitoring/ai_telemetry.dart';
 import '../database/app_database.dart';
@@ -102,7 +103,10 @@ final authIdentitiesProvider = FutureProvider.autoDispose<List<UserIdentity>>((
 final featureFlagsProvider = FutureProvider<FeatureFlags>((ref) async {
   final client = ref.watch(supabaseClientProvider);
   final user = ref.watch(authUserProvider).value;
-  final flags = await RemoteConfigService(client).load(userId: user?.id);
+  // Debug builds may pin the AI flags with --dart-define=AI_FLAG_PROFILE.
+  final flags = AiFlagProfile.active.apply(
+    await RemoteConfigService(client).load(userId: user?.id),
+  );
   // N3: tag telemetry with the active flag set (B0 = "none") and upload it
   // only when `ai.telemetry.upload` is ON for this user.
   final telemetry = AiTelemetry.instance;

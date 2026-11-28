@@ -3,8 +3,8 @@
   "private": true,
   "scripts": {
     "supabase": "supabase",
-    "start-8080": "flutter run -d web-server --web-port=8080 --web-hostname=localhost --dart-define=APP_ENV=dev --dart-define-from-file=config/supabase.local.json",
-    "start-8081": "flutter run -d web-server --web-port=8081 --web-hostname=localhost --dart-define=APP_ENV=dev --dart-define-from-file=config/supabase.local.json",
+    "start-8080": "flutter run -d web-server --web-port=8080 --web-hostname=localhost --dart-define=APP_ENV=dev --dart-define=AI_FLAG_PROFILE=b0 --dart-define=AI_LAB=true --dart-define-from-file=config/supabase.local.json",
+    "start-8081": "flutter run -d web-server --web-port=8081 --web-hostname=localhost --dart-define=APP_ENV=dev --dart-define=AI_FLAG_PROFILE=b1 --dart-define=AI_LAB=true --dart-define-from-file=config/supabase.local.json",
     "start-dual": "tool\\run_dual_instances.bat",
     "start-dual-ps": "powershell -ExecutionPolicy Bypass -File tool\\run_dual_instances.ps1"
   },

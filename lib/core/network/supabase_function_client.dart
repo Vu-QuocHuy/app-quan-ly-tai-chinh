@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 
+import '../config/ai_flag_profile.dart';
 import '../errors/app_exception.dart';
 import '../monitoring/ai_telemetry.dart';
+import 'debug_headers.dart';
 
 /// Small adapter around Supabase Edge Functions.
 ///
@@ -16,6 +19,11 @@ class SupabaseFunctionClient {
 
   final SupabaseClient _client;
   final String functionName;
+
+  /// Debug-only fault to inject on every `ai-api` call (AI Lab control panel
+  /// sets this); `null` sends none. Ignored in release builds.
+  static String? Function() debugFault = _noFault;
+  static String? _noFault() => null;
 
   bool get isConfigured => _client.auth.currentSession != null;
 
@@ -36,6 +44,13 @@ class SupabaseFunctionClient {
       final response = await _client.functions.invoke(
         functionName,
         body: body,
+        headers: functionName == 'ai-api'
+            ? aiDebugHeaders(
+                profile: AiFlagProfile.active,
+                debug: kDebugMode,
+                fault: debugFault(),
+              )
+            : null,
         abortSignal: abortSignal,
       );
       final data = response.data;
